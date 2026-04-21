@@ -41,7 +41,7 @@ def _mock_get(response):
 
 def test_returns_matching_english_offers_within_days():
     with patch("retriever.sources.remotive_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
-        results = RemotiveSource().fetch("python", days=3)
+        results = RemotiveSource().fetch("python", hours=72)
 
     assert len(results) == 1
     assert results[0].title == "Senior Python Developer"
@@ -50,4 +50,4 @@ def test_returns_matching_english_offers_within_days():
 
 def test_returns_empty_on_error():
     with patch("retriever.sources.remotive_source.requests.get", side_effect=Exception("timeout")):
-        assert RemotiveSource().fetch("python", days=3) == []
+        assert RemotiveSource().fetch("python", hours=72) == []

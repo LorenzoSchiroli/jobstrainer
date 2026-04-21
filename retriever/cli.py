@@ -33,7 +33,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Fetch recent job offers matching a query.")
     parser.add_argument("query", help="Search query, e.g. 'machine learning engineer'")
-    parser.add_argument("--days", type=int, default=3, help="How many days back to search (default: 3)")
+    parser.add_argument("--hours", type=int, default=72, help="How many hours back to search (default: 72)")
     parser.add_argument(
         "--sources",
         default=",".join(_ALL_SOURCES),
@@ -48,11 +48,11 @@ def main() -> None:
 
     sources = [_ALL_SOURCES[name]() for name in source_names]
 
-    print(f"Searching for '{args.query}' (last {args.days} days) across: {', '.join(source_names)}...\n")
+    print(f"Searching for '{args.query}' (last {args.hours}h) across: {', '.join(source_names)}...\n")
 
     all_offers: list[JobOffer] = []
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        futures = {pool.submit(src.fetch, args.query, args.days): src.__class__.__name__ for src in sources}
+        futures = {pool.submit(src.fetch, args.query, args.hours): src.__class__.__name__ for src in sources}
         for future in as_completed(futures):
             all_offers.extend(future.result())
 

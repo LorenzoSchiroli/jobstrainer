@@ -40,7 +40,7 @@ def _mock_get(response):
 
 def test_returns_matching_english_offers_within_days():
     with patch("retriever.sources.arbeitnow_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
-        results = ArbeitnowSource().fetch("python", days=3)
+        results = ArbeitnowSource().fetch("python", hours=72)
 
     assert len(results) == 1
     assert results[0].title == "Python Developer"
@@ -50,4 +50,4 @@ def test_returns_matching_english_offers_within_days():
 
 def test_returns_empty_on_network_error():
     with patch("retriever.sources.arbeitnow_source.requests.get", side_effect=Exception("timeout")):
-        assert ArbeitnowSource().fetch("python", days=3) == []
+        assert ArbeitnowSource().fetch("python", hours=72) == []

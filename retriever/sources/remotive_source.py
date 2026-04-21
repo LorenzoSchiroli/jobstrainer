@@ -11,7 +11,7 @@ _API_URL = "https://remotive.com/api/remote-jobs"
 
 
 class RemotiveSource(Source):
-    def fetch(self, query: str, days: int) -> list[JobOffer]:
+    def fetch(self, query: str, hours: int) -> list[JobOffer]:
         try:
             resp = requests.get(_API_URL, params={"search": query, "limit": 100}, timeout=10)
             resp.raise_for_status()
@@ -20,7 +20,7 @@ class RemotiveSource(Source):
             logger.warning("Remotive fetch failed: %s", e)
             return []
 
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = datetime.now() - timedelta(hours=hours)
         results = []
 
         for item in jobs:

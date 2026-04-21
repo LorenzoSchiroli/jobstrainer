@@ -10,12 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class JobspySource(Source):
-    def fetch(self, query: str, days: int) -> list[JobOffer]:
+    def fetch(self, query: str, hours: int) -> list[JobOffer]:
         try:
             df = scrape_jobs(
                 site_name=["linkedin", "indeed"],
                 search_term=query,
-                hours_old=days * 24,
+                hours_old=hours,
                 results_wanted=50,
                 country_indeed="UK",
             )

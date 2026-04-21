@@ -13,7 +13,7 @@ _COUNTRIES = ["gb", "de", "fr", "nl", "es", "it", "at", "be"]
 
 
 class AdzunaSource(Source):
-    def fetch(self, query: str, days: int) -> list[JobOffer]:
+    def fetch(self, query: str, hours: int) -> list[JobOffer]:
         app_id = os.getenv("ADZUNA_APP_ID")
         app_key = os.getenv("ADZUNA_APP_KEY")
         if not app_id or not app_key:
@@ -30,7 +30,7 @@ class AdzunaSource(Source):
                         "app_key": app_key,
                         "results_per_page": 50,
                         "what": query,
-                        "max_days_old": days,
+                        "max_days_old": max(1, hours // 24),
                     },
                     timeout=10,
                 )

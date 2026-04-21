@@ -35,7 +35,7 @@ def _mock_df():
 
 def test_returns_english_offers():
     with patch("retriever.sources.jobspy_source.scrape_jobs", return_value=_mock_df()):
-        results = JobspySource().fetch("python", days=3)
+        results = JobspySource().fetch("python", hours=72)
 
     assert len(results) == 1
     assert results[0].title == "Python Engineer"
@@ -44,4 +44,4 @@ def test_returns_english_offers():
 
 def test_returns_empty_on_scrape_error():
     with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=Exception("blocked")):
-        assert JobspySource().fetch("python", days=3) == []
+        assert JobspySource().fetch("python", hours=72) == []

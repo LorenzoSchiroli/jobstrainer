@@ -12,7 +12,7 @@ _API_URL = "https://arbeitnow.com/api/job-board-api"
 
 
 class ArbeitnowSource(Source):
-    def fetch(self, query: str, days: int) -> list[JobOffer]:
+    def fetch(self, query: str, hours: int) -> list[JobOffer]:
         try:
             resp = requests.get(_API_URL, timeout=10)
             resp.raise_for_status()
@@ -21,7 +21,7 @@ class ArbeitnowSource(Source):
             logger.warning("Arbeitnow fetch failed: %s", e)
             return []
 
-        cutoff = time.time() - days * 24 * 3600
+        cutoff = time.time() - hours * 3600
         query_lower = query.lower()
         results = []
 
