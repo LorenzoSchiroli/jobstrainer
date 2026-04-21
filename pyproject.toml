@@ -7,10 +7,14 @@ requires-python = ">=3.13"
 dependencies = [
     "groq>=1.2.0",
     "pyperclip>=1.11.0",
-    "pytest>=9.0.3",
     "python-docx>=1.2.0",
     "python-dotenv>=1.2.2",
     "python-jobspy>=1.1.82",
     "requests>=2.33.1",
     "tabulate>=0.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
 ]
