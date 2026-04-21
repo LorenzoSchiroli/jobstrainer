@@ -26,7 +26,7 @@ MOCK_RESPONSE = {
             "company_name": "OldRemote",
             "url": "https://remotive.com/remote-jobs/py-789",
             "candidate_required_location": "Worldwide",
-            "publication_date": _old,  # too old
+            "publication_date": _old,  # too old — should be filtered out
         },
     ]
 }
@@ -39,7 +39,7 @@ def _mock_get(response):
     return mock
 
 
-def test_returns_matching_english_offers_within_days():
+def test_returns_matching_english_offers_within_hours():
     with patch("retriever.sources.remotive_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
         results = RemotiveSource().fetch("python", hours=72)
 

@@ -29,7 +29,8 @@ class ArbeitnowSource(Source):
             if item.get("created_at", 0) < cutoff:
                 continue
             title = item.get("title", "")
-            if query_lower not in title.lower():
+            tags = " ".join(item.get("tags", []))
+            if query_lower not in title.lower() and query_lower not in tags.lower():
                 continue
             if not is_english(title):
                 continue
