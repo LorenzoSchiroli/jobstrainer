@@ -54,6 +54,36 @@ def _scrape_linkedin(query: str, hours: int) -> list[JobOffer]:
         return []
 
 
+def _scrape_glassdoor(query: str, hours: int) -> list[JobOffer]:
+    try:
+        df = scrape_jobs(
+            site_name=["glassdoor"],
+            search_term=query,
+            location="Europe",
+            hours_old=hours,
+            results_wanted=50,
+        )
+        return _df_to_offers(df)
+    except Exception as e:
+        logger.warning("jobspy Glassdoor fetch failed: %s", e)
+        return []
+
+
+def _scrape_google(query: str, hours: int) -> list[JobOffer]:
+    try:
+        df = scrape_jobs(
+            site_name=["google"],
+            search_term=query,
+            location="Europe",
+            hours_old=hours,
+            results_wanted=50,
+        )
+        return _df_to_offers(df)
+    except Exception as e:
+        logger.warning("jobspy Google Jobs fetch failed: %s", e)
+        return []
+
+
 def _scrape_indeed(query: str, hours: int, country: str) -> list[JobOffer]:
     try:
         df = scrape_jobs(
@@ -73,7 +103,11 @@ class JobspySource(Source):
     def fetch(self, query: str, hours: int) -> list[JobOffer]:
         results: list[JobOffer] = []
 
-        tasks = [(_scrape_linkedin, (query, hours))] + [
+        tasks = [
+            (_scrape_linkedin, (query, hours)),
+            (_scrape_glassdoor, (query, hours)),
+            (_scrape_google, (query, hours)),
+        ] + [
             (_scrape_indeed, (query, hours, country)) for country in _INDEED_COUNTRIES
         ]
 
