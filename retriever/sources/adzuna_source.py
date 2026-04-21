@@ -31,7 +31,6 @@ class AdzunaSource(Source):
                         "results_per_page": 50,
                         "what": query,
                         "max_days_old": days,
-                        "content-type": "application/json",
                     },
                     timeout=10,
                 )
