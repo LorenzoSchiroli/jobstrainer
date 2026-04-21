@@ -4,7 +4,7 @@ import pandas as pd
 from retriever.sources.jobspy_source import JobspySource
 
 
-def _mock_df():
+def _linkedin_df():
     return pd.DataFrame([
         {
             "title": "Python Engineer",
@@ -22,26 +22,53 @@ def _mock_df():
             "date_posted": pd.Timestamp("2026-04-19"),
             "site": "linkedin",
         },
+    ])
+
+
+def _indeed_df():
+    return pd.DataFrame([
         {
             "title": None,  # missing title — should be discarded
             "company": "NullCo",
             "location": "Berlin",
-            "job_url": "https://linkedin.com/jobs/view/789",
+            "job_url": "https://indeed.com/jobs/789",
             "date_posted": None,
             "site": "indeed",
         },
     ])
 
 
-def test_returns_english_offers():
-    with patch("retriever.sources.jobspy_source.scrape_jobs", return_value=_mock_df()):
+def test_returns_english_offers_from_all_calls():
+    def side_effect(**kwargs):
+        if "linkedin" in kwargs.get("site_name", []):
+            return _linkedin_df()
+        return _indeed_df()
+
+    with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
         results = JobspySource().fetch("python", hours=72)
 
-    assert len(results) == 1
-    assert results[0].title == "Python Engineer"
-    assert results[0].source == "jobspy:linkedin"
+    titles = [r.title for r in results]
+    assert "Python Engineer" in titles
+    assert "Ingénieur Python" not in titles
+    assert all(r.source.startswith("jobspy:") for r in results)
 
 
-def test_returns_empty_on_scrape_error():
+def test_linkedin_failure_does_not_block_indeed():
+    call_count = 0
+
+    def side_effect(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if "linkedin" in kwargs.get("site_name", []):
+            raise Exception("blocked")
+        return _indeed_df()
+
+    with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
+        results = JobspySource().fetch("python", hours=72)
+
+    assert results == []  # indeed df has no valid titles
+
+
+def test_returns_empty_when_all_fail():
     with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=Exception("blocked")):
         assert JobspySource().fetch("python", hours=72) == []
