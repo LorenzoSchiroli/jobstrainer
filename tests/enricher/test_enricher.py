@@ -1,0 +1,59 @@
+from unittest.mock import MagicMock, patch
+
+from enricher.enricher import enrich
+from enricher.models import CompanyProfile
+
+
+def _make_client():
+    return MagicMock()
+
+
+def test_enrich_returns_company_profile():
+    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+        with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
+            with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE", "founded_year": 2010}):
+                with patch("enricher.enricher.extract_with_llm", return_value={"industry": "Software", "company_type": "saas"}):
+                    result = enrich("Acme", "Berlin", _make_client())
+
+    assert isinstance(result, CompanyProfile)
+    assert result.name == "Acme"
+    assert result.country == "DE"
+    assert result.founded_year == 2010
+    assert result.industry == "Software"
+    assert result.company_type == "saas"
+
+
+def test_enrich_jsonld_fields_not_overwritten_by_llm():
+    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+        with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
+            with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE"}):
+                with patch("enricher.enricher.extract_with_llm", return_value={"country": "France"}):
+                    result = enrich("Acme", "Berlin", _make_client())
+
+    assert result.country == "DE"
+
+
+def test_enrich_handles_fetch_failure_gracefully():
+    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+        with patch("enricher.enricher.fetch_html", return_value=None):
+            result = enrich("Acme", "Berlin", _make_client())
+
+    assert isinstance(result, CompanyProfile)
+    assert result.name == "Acme"
+    assert result.country is None
+
+
+def test_enrich_skips_llm_when_all_fields_present():
+    full_data = {
+        "website": "https://acme.com", "country": "DE", "founded_year": 2010,
+        "employee_count": "51-200", "industry": "Software", "company_type": "saas",
+        "review_score": 4.2, "review_count": 312, "description": "Acme makes things.",
+    }
+    mock_client = _make_client()
+
+    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+        with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
+            with patch("enricher.enricher.extract_jsonld", return_value=full_data):
+                enrich("Acme", "Berlin", mock_client)
+
+    mock_client.chat.completions.create.assert_not_called()
