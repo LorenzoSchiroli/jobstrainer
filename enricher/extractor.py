@@ -42,10 +42,12 @@ def extract_jsonld(html: str) -> dict:
                 except (KeyError, ValueError):
                     pass
             if address := data.get("address"):
-                result["country"] = address.get("addressCountry")
+                if country := address.get("addressCountry"):
+                    result["country"] = country
             if employees := data.get("numberOfEmployees"):
-                val = employees.get("value", employees) if isinstance(employees, dict) else employees
-                result["employee_count"] = str(val)
+                val = employees.get("value") if isinstance(employees, dict) else employees
+                if val is not None:
+                    result["employee_count"] = str(val)
             if founded := data.get("foundingDate"):
                 try:
                     result["founded_year"] = int(str(founded)[:4])
