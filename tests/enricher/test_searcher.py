@@ -10,6 +10,7 @@ def test_search_returns_website_and_glassdoor():
     with patch("enricher.searcher.DDGS") as mock_ddgs:
         instance = MagicMock()
         mock_ddgs.return_value.__enter__.return_value = instance
+        # order matches _QUERIES insertion order: website, glassdoor
         instance.text.side_effect = [website_hit, glassdoor_hit]
 
         result = search_company_urls("Acme", "Berlin")
@@ -29,12 +30,27 @@ def test_search_omits_missing_sources():
     assert result == {}
 
 
+def test_search_handles_ddg_exception_gracefully():
+    glassdoor_hit = [{"href": "https://www.glassdoor.com/Overview/acme", "title": "Acme Glassdoor"}]
+
+    with patch("enricher.searcher.DDGS") as mock_ddgs:
+        instance = MagicMock()
+        mock_ddgs.return_value.__enter__.return_value = instance
+        instance.text.side_effect = [Exception("rate limited"), glassdoor_hit]
+
+        result = search_company_urls("Acme", "Berlin")
+
+    assert "website" not in result
+    assert result["glassdoor"] == "https://www.glassdoor.com/Overview/acme"
+
+
 def test_search_returns_partial_when_one_source_missing():
     website_hit = [{"href": "https://acme.com", "title": "Acme"}]
 
     with patch("enricher.searcher.DDGS") as mock_ddgs:
         instance = MagicMock()
         mock_ddgs.return_value.__enter__.return_value = instance
+        # order matches _QUERIES insertion order: website, glassdoor
         instance.text.side_effect = [website_hit, []]
 
         result = search_company_urls("Acme", "Berlin")
