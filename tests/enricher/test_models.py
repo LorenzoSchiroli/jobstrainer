@@ -32,5 +32,13 @@ def test_company_profile_accepts_all_fields():
         review_count=312,
         description="Acme makes things.",
     )
-    assert p.review_score == 4.2
+    assert p.name == "Acme"
+    assert p.website == "https://acme.com"
+    assert p.country == "DE"
     assert p.founded_year == 2010
+    assert p.employee_count == "51-200"
+    assert p.industry == "Software"
+    assert p.company_type == "saas"
+    assert p.review_score == 4.2
+    assert p.review_count == 312
+    assert p.description == "Acme makes things."
