@@ -79,7 +79,14 @@ def test_extract_with_llm_strips_markdown_code_block():
     mock_client.chat.completions.create.return_value.choices[0].message.content = (
         "```json\n{\"country\": \"Germany\"}\n```"
     )
-
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
+    assert result["country"] == "Germany"
 
+
+def test_extract_with_llm_strips_markdown_code_block_uppercase():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = (
+        "```JSON\n{\"country\": \"Germany\"}\n```"
+    )
+    result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
     assert result["country"] == "Germany"

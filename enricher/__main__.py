@@ -14,7 +14,11 @@ def main():
         sys.exit(1)
     name = sys.argv[1]
     location = sys.argv[2]
-    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        print("Error: GROQ_API_KEY is not set. Add it to your .env file.", file=sys.stderr)
+        sys.exit(1)
+    client = Groq(api_key=api_key)
     profile = enrich(name, location, client)
     for field in vars(profile):
         value = getattr(profile, field)

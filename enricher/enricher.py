@@ -8,6 +8,12 @@ from enricher.searcher import search_company_urls
 
 logger = logging.getLogger(__name__)
 
+_COERCE: dict[str, type] = {
+    "founded_year": int,
+    "review_score": float,
+    "review_count": int,
+}
+
 _ALL_FIELDS = [
     "website", "country", "founded_year", "employee_count",
     "industry", "company_type", "review_score", "review_count", "description",
@@ -33,6 +39,8 @@ def enrich(name: str, location: str, client: Groq) -> CompanyProfile:
             if k not in merged and v is not None:
                 merged[k] = v
 
+    # LLM fallback only runs against the official website HTML; if we only
+    # have a Glassdoor URL, skip LLM to avoid extracting Glassdoor's own data.
     if _missing(merged) and website_html:
         for k, v in extract_with_llm(website_html, name, location, client).items():
             if k not in merged and v is not None:
@@ -40,6 +48,10 @@ def enrich(name: str, location: str, client: Groq) -> CompanyProfile:
 
     profile = CompanyProfile(name=name)
     for field, value in merged.items():
-        if hasattr(profile, field):
-            setattr(profile, field, value)
+        if hasattr(profile, field) and value is not None:
+            coerce = _COERCE.get(field)
+            try:
+                setattr(profile, field, coerce(value) if coerce else value)
+            except (ValueError, TypeError):
+                pass
     return profile

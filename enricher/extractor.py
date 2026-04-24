@@ -76,7 +76,9 @@ def extract_with_llm(html: str, name: str, location: str, client: Groq) -> dict:
 
         if raw.startswith("```"):
             parts = raw.split("```")
-            raw = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
+            if len(parts) > 1:
+                lines = parts[1].splitlines()
+                raw = "\n".join(lines[1:]).strip()
 
         return json.loads(raw)
     except Exception as e:
