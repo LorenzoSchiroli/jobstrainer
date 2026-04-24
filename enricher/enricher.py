@@ -15,7 +15,7 @@ _ALL_FIELDS = [
 
 
 def _missing(data: dict) -> list[str]:
-    return [f for f in _ALL_FIELDS if not data.get(f)]
+    return [f for f in _ALL_FIELDS if data.get(f) is None]
 
 
 def enrich(name: str, location: str, client: Groq) -> CompanyProfile:

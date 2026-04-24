@@ -49,11 +49,11 @@ def test_enrich_skips_llm_when_all_fields_present():
         "employee_count": "51-200", "industry": "Software", "company_type": "saas",
         "review_score": 4.2, "review_count": 312, "description": "Acme makes things.",
     }
-    mock_client = _make_client()
 
     with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value=full_data):
-                enrich("Acme", "Berlin", mock_client)
+                with patch("enricher.enricher.extract_with_llm") as mock_llm:
+                    enrich("Acme", "Berlin", _make_client())
 
-    mock_client.chat.completions.create.assert_not_called()
+    mock_llm.assert_not_called()
