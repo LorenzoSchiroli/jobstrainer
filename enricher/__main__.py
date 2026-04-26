@@ -1,5 +1,7 @@
+import logging
 import os
 import sys
+import time
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -7,22 +9,36 @@ from enricher.enricher import enrich
 
 load_dotenv()
 
-
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python -m enricher \"<company name>\" \"<location>\"")
+    debug = "--debug" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--debug"]
+
+    logging.basicConfig(level=logging.DEBUG if debug else logging.WARNING)
+    for _noisy in ("httpx", "httpcore", "ddgs"):
+        logging.getLogger(_noisy).setLevel(logging.ERROR)
+
+    if not args:
+        print("Usage: python -m enricher \"<company name>\" [location] [--debug]")
         sys.exit(1)
-    name = sys.argv[1]
-    location = sys.argv[2]
+    name = args[0]
+    location = args[1] if len(args) > 1 else ""
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         print("Error: GROQ_API_KEY is not set. Add it to your .env file.", file=sys.stderr)
         sys.exit(1)
     client = Groq(api_key=api_key)
-    profile = enrich(name, location, client)
+    t0 = time.perf_counter()
+    profile, timings = enrich(name, location, client)
+    elapsed = time.perf_counter() - t0
+
     for field in vars(profile):
-        value = getattr(profile, field)
-        print(f"{field}: {value}")
+        print(f"{field}: {getattr(profile, field)}")
+
+    print()
+    print("timing")
+    for label, secs in timings:
+        print(f"  {label:<30} {secs:.2f}s")
+    print(f"  {'total':<30} {elapsed:.2f}s")
 
 
 if __name__ == "__main__":
