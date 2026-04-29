@@ -74,14 +74,15 @@ def _search(query: str, max_results: int) -> list[dict]:
     return _search_ddgs(query, max_results)
 
 
-def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[str]]:
+def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[str], list[str]]:
     suffix = f" {location}" if location else ""
     queries = {
         "website": (f'"{name}"{suffix} company', 5),
         "reviews": (f'"{name}"{suffix} glassdoor stars', 5),
+        "financial": (f'"{name}"{suffix} company financial health', 3),
     }
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {
             executor.submit(_search, q, n): source
             for source, (q, n) in queries.items()
@@ -104,11 +105,17 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
     review_hits = [h for h in results.get("reviews", []) if "glassdoor." in h.get("href", "")]
     snippets = [h.get("body", "") for h in review_hits if h.get("body")]
 
+    financial_hits = results.get("financial", [])
+    financial_snippets = [h.get("body", "") for h in financial_hits if h.get("body")]
+    if financial_hits:
+        urls["financial"] = financial_hits[0]["href"]
+
     all_website_hits = results.get("website", [])
     all_review_hits = results.get("reviews", [])
     engine = "Serper" if os.environ.get("SERPERDEV_API_KEY") else "DDG"
     print(f"{engine} website:  {', '.join(h['href'] for h in all_website_hits) or '(none)'} → selected: {urls.get('website', '(none)')}")
     print(f"{engine} reviews (raw):  {', '.join(h['href'] for h in all_review_hits) or '(none)'}")
     print(f"{engine} reviews (glassdoor): {', '.join(h['href'] for h in review_hits) or '(none)'}")
+    print(f"{engine} financial:  {', '.join(h['href'] for h in financial_hits) or '(none)'} → selected: {urls.get('financial', '(none)')}")
 
-    return urls, snippets
+    return urls, snippets, financial_snippets

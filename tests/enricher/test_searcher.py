@@ -15,7 +15,7 @@ def test_search_returns_website_and_glassdoor_snippets():
         return website_hits
 
     with patch("enricher.searcher._search", side_effect=mock_search):
-        urls, snippets = search_company_urls("Acme", "Berlin")
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
     assert urls["website"] == "https://acme.com"
     assert "glassdoor" not in urls
@@ -24,10 +24,11 @@ def test_search_returns_website_and_glassdoor_snippets():
 
 def test_search_omits_missing_sources():
     with patch("enricher.searcher._search", return_value=[]):
-        urls, snippets = search_company_urls("Unknown Corp", "Nowhere")
+        urls, snippets, financial_snippets = search_company_urls("Unknown Corp", "Nowhere")
 
     assert urls == {}
     assert snippets == []
+    assert financial_snippets == []
 
 
 def test_search_handles_search_exception_gracefully():
@@ -41,7 +42,7 @@ def test_search_handles_search_exception_gracefully():
         raise Exception("rate limited")
 
     with patch("enricher.searcher._search", side_effect=mock_search):
-        urls, snippets = search_company_urls("Acme", "Berlin")
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
     assert "website" not in urls
     assert any("4.1" in s for s in snippets)
@@ -53,10 +54,45 @@ def test_search_returns_partial_when_glassdoor_empty():
     def mock_search(query, max_results):
         if "glassdoor" in query:
             return []
+        if "financial health" in query:
+            return []
         return website_hits
 
     with patch("enricher.searcher._search", side_effect=mock_search):
-        urls, snippets = search_company_urls("Acme", "Berlin")
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
     assert urls == {"website": "https://acme.com"}
     assert snippets == []
+
+
+def test_search_returns_financial_url_and_snippets():
+    website_hits = [{"href": "https://acme.com", "title": "Acme", "body": ""}]
+    financial_hits = [
+        {"href": "https://stockanalysis.com/stocks/acme", "title": "Acme Financials", "body": "Revenue grew 12% YoY. Strong cash position."},
+    ]
+
+    def mock_search(query, max_results):
+        if "financial health" in query:
+            return financial_hits
+        if "glassdoor" in query:
+            return []
+        return website_hits
+
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, glassdoor_snippets, financial_snippets = search_company_urls("Acme", "Berlin")
+
+    assert urls["website"] == "https://acme.com"
+    assert urls["financial"] == "https://stockanalysis.com/stocks/acme"
+    assert any("12%" in s for s in financial_snippets)
+    assert glassdoor_snippets == []
+
+
+def test_search_omits_financial_key_when_no_results():
+    def mock_search(query, max_results):
+        return []
+
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, _, financial_snippets = search_company_urls("Acme", "Berlin")
+
+    assert "financial" not in urls
+    assert financial_snippets == []
