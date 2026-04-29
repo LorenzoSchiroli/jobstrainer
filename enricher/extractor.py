@@ -30,6 +30,27 @@ _LLM_PROMPT = (
 
 _SNIPPETS_SECTION = "Review snippets (from search results):\n{snippets}\n\n"
 
+_FINANCIAL_PROMPT = (
+    "You are a financial analyst. Assess the financial health of the company below "
+    "based on the provided sources.\n\n"
+    "Return ONLY valid JSON with exactly these fields:\n"
+    '{{"score": int, "rationale": str}}\n\n'
+    "Score the company 1–5 using these anchors:\n"
+    "1 = critical risk (bankruptcy, insolvency, severe losses)\n"
+    "2 = financially stressed (significant debt, declining revenue)\n"
+    "3 = neutral (stable but no strong signals either way)\n"
+    "4 = financially healthy (profitable, growing, solid balance sheet)\n"
+    "5 = very healthy (strong profitability, cash-rich, market leader)\n\n"
+    "IMPORTANT: Write the rationale in English, 1–3 sentences, citing specific signals "
+    "from the sources (e.g. revenue trend, debt level, profitability). "
+    "If signals are too weak to assess confidently, use score 3 and explain the lack of data.\n\n"
+    "Company name: {name}\n\n"
+    "{snippets_section}"
+    "Financial page text:\n{text}"
+)
+
+_FINANCIAL_SNIPPETS_SECTION = "Search result snippets:\n{snippets}\n\n"
+
 
 def _strip_markdown_json(text: str) -> str:
     stripped = re.sub(r"^```(?:json)?\s*\n?", "", text.strip(), flags=re.IGNORECASE)
@@ -120,3 +141,35 @@ def extract_with_llm(
     except Exception as e:
         logger.warning("LLM extraction failed: %s", e)
         return CompanyExtraction()
+
+
+def assess_financial_health(
+    html: str | None,
+    snippets: list[str],
+    name: str,
+    client: Groq,
+) -> "FinancialHealth | None":
+    from enricher.models import FinancialHealth
+
+    if not html and not snippets:
+        return None
+
+    text = _html_to_text(html)[:6000] if html else ""
+    snippets_section = (
+        _FINANCIAL_SNIPPETS_SECTION.format(snippets="\n".join(f"- {s}" for s in snippets))
+        if snippets
+        else ""
+    )
+    prompt = _FINANCIAL_PROMPT.format(name=name, snippets_section=snippets_section, text=text)
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+        content = _strip_markdown_json(response.choices[0].message.content)
+        return FinancialHealth.model_validate_json(content)
+    except Exception as e:
+        logger.warning("Financial health assessment failed: %s", e)
+        return None
