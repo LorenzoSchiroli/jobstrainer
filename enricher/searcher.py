@@ -25,6 +25,11 @@ _BLOCKED_DOMAINS = {
     "yellowpages.com", "yelp.com", "manta.com", "hoovers.com",
 }
 
+_FINANCIAL_SKIP_DOMAINS = {
+    "linkedin.com", "facebook.com", "twitter.com", "instagram.com",
+    "crunchbase.com", "pitchbook.com", "zoominfo.com",
+}
+
 
 def _is_blocked(url: str) -> bool:
     netloc = urlparse(url).netloc.lower()
@@ -105,17 +110,22 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
     review_hits = [h for h in results.get("reviews", []) if "glassdoor." in h.get("href", "")]
     snippets = [h.get("body", "") for h in review_hits if h.get("body")]
 
-    financial_hits = results.get("financial", [])
+    financial_hits = [
+        h for h in results.get("financial", [])
+        if not any(d in urlparse(h.get("href", "")).netloc.lower() for d in _FINANCIAL_SKIP_DOMAINS)
+    ]
     financial_snippets = [h.get("body", "") for h in financial_hits if h.get("body")]
     if financial_hits:
         urls["financial"] = financial_hits[0]["href"]
 
-    all_website_hits = results.get("website", [])
-    all_review_hits = results.get("reviews", [])
     engine = "Serper" if os.environ.get("SERPERDEV_API_KEY") else "DDG"
-    print(f"{engine} website:  {', '.join(h['href'] for h in all_website_hits) or '(none)'} → selected: {urls.get('website', '(none)')}")
-    print(f"{engine} reviews (raw):  {', '.join(h['href'] for h in all_review_hits) or '(none)'}")
-    print(f"{engine} reviews (glassdoor): {', '.join(h['href'] for h in review_hits) or '(none)'}")
-    print(f"{engine} financial:  {', '.join(h['href'] for h in financial_hits) or '(none)'} → selected: {urls.get('financial', '(none)')}")
+    logger.debug("%s website: %s → selected: %s", engine,
+                 ", ".join(h["href"] for h in results.get("website", [])) or "(none)",
+                 urls.get("website", "(none)"))
+    logger.debug("%s reviews (glassdoor): %s", engine,
+                 ", ".join(h["href"] for h in review_hits) or "(none)")
+    logger.debug("%s financial: %s → selected: %s", engine,
+                 ", ".join(h["href"] for h in financial_hits) or "(none)",
+                 urls.get("financial", "(none)"))
 
     return urls, snippets, financial_snippets

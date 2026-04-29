@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FinancialHealth(BaseModel):
-    score: int
+    score: int = Field(..., ge=1, le=5)
     rationale: str
 
 
