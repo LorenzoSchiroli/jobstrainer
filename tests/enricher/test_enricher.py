@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from enricher.enricher import enrich
-from enricher.models import CompanyProfile
+from enricher.models import CompanyExtraction, CompanyProfile
 
 
 def _make_client():
@@ -9,34 +9,40 @@ def _make_client():
 
 
 def test_enrich_returns_company_profile():
-    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+    extraction = CompanyExtraction(industry="Software", is_consulting=False)
+
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE", "founded_year": 2010}):
-                with patch("enricher.enricher.extract_with_llm", return_value={"industry": "Software", "company_type": "saas"}):
-                    result = enrich("Acme", "Berlin", _make_client())
+                with patch("enricher.enricher.find_relevant_links", return_value=[]):
+                    with patch("enricher.enricher.extract_with_llm", return_value=extraction):
+                        result, _ = enrich("Acme", "Berlin", _make_client())
 
     assert isinstance(result, CompanyProfile)
     assert result.name == "Acme"
     assert result.country == "DE"
     assert result.founded_year == 2010
     assert result.industry == "Software"
-    assert result.company_type == "saas"
+    assert result.is_consulting is False
 
 
 def test_enrich_jsonld_fields_not_overwritten_by_llm():
-    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+    extraction = CompanyExtraction(country="France")
+
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE"}):
-                with patch("enricher.enricher.extract_with_llm", return_value={"country": "France"}):
-                    result = enrich("Acme", "Berlin", _make_client())
+                with patch("enricher.enricher.find_relevant_links", return_value=[]):
+                    with patch("enricher.enricher.extract_with_llm", return_value=extraction):
+                        result, _ = enrich("Acme", "Berlin", _make_client())
 
     assert result.country == "DE"
 
 
 def test_enrich_handles_fetch_failure_gracefully():
-    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
         with patch("enricher.enricher.fetch_html", return_value=None):
-            result = enrich("Acme", "Berlin", _make_client())
+            result, _ = enrich("Acme", "Berlin", _make_client())
 
     assert isinstance(result, CompanyProfile)
     assert result.name == "Acme"
@@ -46,11 +52,11 @@ def test_enrich_handles_fetch_failure_gracefully():
 def test_enrich_skips_llm_when_all_fields_present():
     full_data = {
         "website": "https://acme.com", "country": "DE", "founded_year": 2010,
-        "employee_count": "51-200", "industry": "Software", "company_type": "saas",
+        "employee_count": "51-200", "industry": "Software", "is_consulting": False,
         "review_score": 4.2, "review_count": 312, "description": "Acme makes things.",
     }
 
-    with patch("enricher.enricher.search_company_urls", return_value={"website": "https://acme.com"}):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value=full_data):
                 with patch("enricher.enricher.extract_with_llm") as mock_llm:
