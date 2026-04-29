@@ -1,5 +1,10 @@
-from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class FinancialHealth(BaseModel):
+    score: int = Field(..., ge=1, le=5)
+    rationale: str
+
 
 class CompanyExtraction(BaseModel):
     website: str | None = None
@@ -8,6 +13,7 @@ class CompanyExtraction(BaseModel):
     employee_count: str | None = None
     industry: str | None = None
     is_consulting: bool | None = None
+    is_startup: bool | None = None
     review_score: float | None = None
     review_count: int | None = None
     description: str | None = None
@@ -15,3 +21,4 @@ class CompanyExtraction(BaseModel):
 
 class CompanyProfile(CompanyExtraction):
     name: str
+    financial_health: FinancialHealth | None = None

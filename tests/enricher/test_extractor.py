@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock
 
 from enricher.extractor import extract_jsonld, extract_with_llm
+from enricher.models import CompanyExtraction
 
 _HTML_WITH_JSONLD = """<html><head>
 <script type="application/ld+json">
@@ -52,7 +53,8 @@ def test_extract_with_llm_returns_parsed_fields():
         "founded_year": 2010,
         "employee_count": "51-200",
         "industry": "Software",
-        "company_type": "saas",
+        "is_consulting": False,
+        "is_startup": True,
         "review_score": 4.2,
         "review_count": 312,
         "description": "Acme makes things.",
@@ -60,9 +62,10 @@ def test_extract_with_llm_returns_parsed_fields():
 
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
 
-    assert result["country"] == "Germany"
-    assert result["company_type"] == "saas"
-    assert result["founded_year"] == 2010
+    assert result.country == "Germany"
+    assert result.is_consulting is False
+    assert result.is_startup is True
+    assert result.founded_year == 2010
 
 
 def test_extract_with_llm_handles_invalid_json():
@@ -71,22 +74,87 @@ def test_extract_with_llm_handles_invalid_json():
 
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
 
-    assert result == {}
+    assert result.country is None
+    assert result.founded_year is None
 
 
 def test_extract_with_llm_strips_markdown_code_block():
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value.choices[0].message.content = (
-        "```json\n{\"country\": \"Germany\"}\n```"
+        '```json\n{"country": "Germany"}\n```'
     )
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
-    assert result["country"] == "Germany"
+    assert result.country == "Germany"
 
 
 def test_extract_with_llm_strips_markdown_code_block_uppercase():
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value.choices[0].message.content = (
-        "```JSON\n{\"country\": \"Germany\"}\n```"
+        '```JSON\n{"country": "Germany"}\n```'
     )
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
-    assert result["country"] == "Germany"
+    assert result.country == "Germany"
+
+
+from enricher.extractor import assess_financial_health
+from enricher.models import FinancialHealth
+
+
+def test_assess_financial_health_returns_score_and_rationale():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+        "score": 4,
+        "rationale": "Revenue grew 12% YoY with a strong cash position and no debt concerns.",
+    })
+
+    result = assess_financial_health(
+        html="<html><body>Revenue grew 12% YoY.</body></html>",
+        snippets=["Strong cash position, no debt."],
+        name="Acme",
+        client=mock_client,
+    )
+
+    assert isinstance(result, FinancialHealth)
+    assert result.score == 4
+    assert "Revenue" in result.rationale
+
+
+def test_assess_financial_health_returns_none_when_no_input():
+    mock_client = MagicMock()
+
+    result = assess_financial_health(html=None, snippets=[], name="Acme", client=mock_client)
+
+    assert result is None
+    mock_client.chat.completions.create.assert_not_called()
+
+
+def test_assess_financial_health_returns_none_on_llm_failure():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = Exception("API error")
+
+    result = assess_financial_health(
+        html="<html><body>Some financial data.</body></html>",
+        snippets=[],
+        name="Acme",
+        client=mock_client,
+    )
+
+    assert result is None
+
+
+def test_assess_financial_health_uses_snippets_when_no_html():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+        "score": 2,
+        "rationale": "Snippets indicate significant debt and declining revenue.",
+    })
+
+    result = assess_financial_health(
+        html=None,
+        snippets=["Significant debt load. Revenue down 20%."],
+        name="Acme",
+        client=mock_client,
+    )
+
+    assert isinstance(result, FinancialHealth)
+    assert result.score == 2

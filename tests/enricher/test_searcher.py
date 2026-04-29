@@ -1,58 +1,98 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from enricher.searcher import search_company_urls
 
 
-def test_search_returns_website_and_glassdoor():
-    website_hit = [{"href": "https://acme.com", "title": "Acme Corp"}]
-    glassdoor_hit = [{"href": "https://www.glassdoor.com/Overview/acme", "title": "Acme Glassdoor"}]
+def test_search_returns_website_and_glassdoor_snippets():
+    website_hits = [{"href": "https://acme.com", "title": "Acme Corp", "body": ""}]
+    glassdoor_hits = [
+        {"href": "https://www.glassdoor.com/Overview/acme", "title": "Acme", "body": "Great culture. 4.2 stars based on 35 reviews."},
+    ]
 
-    with patch("enricher.searcher.DDGS") as mock_ddgs:
-        instance = MagicMock()
-        mock_ddgs.return_value.__enter__.return_value = instance
-        # order matches _QUERIES insertion order: website, glassdoor
-        instance.text.side_effect = [website_hit, glassdoor_hit]
+    def mock_search(query, max_results):
+        if "glassdoor" in query:
+            return glassdoor_hits
+        return website_hits
 
-        result = search_company_urls("Acme", "Berlin")
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
-    assert result["website"] == "https://acme.com"
-    assert result["glassdoor"] == "https://www.glassdoor.com/Overview/acme"
+    assert urls["website"] == "https://acme.com"
+    assert "glassdoor" not in urls
+    assert any("4.2" in s for s in snippets)
 
 
 def test_search_omits_missing_sources():
-    with patch("enricher.searcher.DDGS") as mock_ddgs:
-        instance = MagicMock()
-        mock_ddgs.return_value.__enter__.return_value = instance
-        instance.text.return_value = []
+    with patch("enricher.searcher._search", return_value=[]):
+        urls, snippets, financial_snippets = search_company_urls("Unknown Corp", "Nowhere")
 
-        result = search_company_urls("Unknown Corp", "Nowhere")
-
-    assert result == {}
+    assert urls == {}
+    assert snippets == []
+    assert financial_snippets == []
 
 
-def test_search_handles_ddg_exception_gracefully():
-    glassdoor_hit = [{"href": "https://www.glassdoor.com/Overview/acme", "title": "Acme Glassdoor"}]
+def test_search_handles_search_exception_gracefully():
+    glassdoor_hits = [
+        {"href": "https://www.glassdoor.com/Overview/acme", "title": "Acme", "body": "Nice culture. 4.1 stars."},
+    ]
 
-    with patch("enricher.searcher.DDGS") as mock_ddgs:
-        instance = MagicMock()
-        mock_ddgs.return_value.__enter__.return_value = instance
-        instance.text.side_effect = [Exception("rate limited"), glassdoor_hit]
+    def mock_search(query, max_results):
+        if "glassdoor" in query:
+            return glassdoor_hits
+        raise Exception("rate limited")
 
-        result = search_company_urls("Acme", "Berlin")
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
-    assert "website" not in result
-    assert result["glassdoor"] == "https://www.glassdoor.com/Overview/acme"
+    assert "website" not in urls
+    assert any("4.1" in s for s in snippets)
 
 
-def test_search_returns_partial_when_one_source_missing():
-    website_hit = [{"href": "https://acme.com", "title": "Acme"}]
+def test_search_returns_partial_when_glassdoor_empty():
+    website_hits = [{"href": "https://acme.com", "title": "Acme", "body": ""}]
 
-    with patch("enricher.searcher.DDGS") as mock_ddgs:
-        instance = MagicMock()
-        mock_ddgs.return_value.__enter__.return_value = instance
-        # order matches _QUERIES insertion order: website, glassdoor
-        instance.text.side_effect = [website_hit, []]
+    def mock_search(query, max_results):
+        if "glassdoor" in query:
+            return []
+        if "financial health" in query:
+            return []
+        return website_hits
 
-        result = search_company_urls("Acme", "Berlin")
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, snippets, financial_snippets = search_company_urls("Acme", "Berlin")
 
-    assert result == {"website": "https://acme.com"}
+    assert urls == {"website": "https://acme.com"}
+    assert snippets == []
+
+
+def test_search_returns_financial_url_and_snippets():
+    website_hits = [{"href": "https://acme.com", "title": "Acme", "body": ""}]
+    financial_hits = [
+        {"href": "https://stockanalysis.com/stocks/acme", "title": "Acme Financials", "body": "Revenue grew 12% YoY. Strong cash position."},
+    ]
+
+    def mock_search(query, max_results):
+        if "financial health" in query:
+            return financial_hits
+        if "glassdoor" in query:
+            return []
+        return website_hits
+
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, glassdoor_snippets, financial_snippets = search_company_urls("Acme", "Berlin")
+
+    assert urls["website"] == "https://acme.com"
+    assert urls["financial"] == "https://stockanalysis.com/stocks/acme"
+    assert any("12%" in s for s in financial_snippets)
+    assert glassdoor_snippets == []
+
+
+def test_search_omits_financial_key_when_no_results():
+    def mock_search(query, max_results):
+        return []
+
+    with patch("enricher.searcher._search", side_effect=mock_search):
+        urls, _, financial_snippets = search_company_urls("Acme", "Berlin")
+
+    assert "financial" not in urls
+    assert financial_snippets == []
