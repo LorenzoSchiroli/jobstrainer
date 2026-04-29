@@ -1,5 +1,6 @@
 import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
@@ -16,20 +17,60 @@ _HEADERS = {
 
 _RELEVANT_PATHS = {
     # English
-    "about", "team", "company", "story", "mission", "people", "who", "culture",
+    "about", "about-us", "company", "team", "story", "our-story", "mission",
+    "people", "who-we-are", "who-we", "culture", "overview", "history",
     # German
-    "uber-uns", "ueber-uns", "unternehmen", "geschichte", "wir",
+    "uber-uns", "ueber-uns", "unternehmen", "das-unternehmen", "firma",
+    "konzern", "geschichte", "wer-wir-sind", "wir", "team",
     # French
-    "a-propos", "apropos", "qui-sommes-nous", "entreprise", "equipe", "societe",
-    # Spanish
-    "quienes-somos", "sobre-nosotros", "nosotros", "empresa", "equipo",
+    "a-propos", "apropos", "qui-sommes-nous", "notre-histoire",
+    "entreprise", "notre-entreprise", "equipe", "societe",
     # Italian
-    "chi-siamo", "azienda", "squadra",
+    "chi-siamo", "azienda", "la-nostra-storia", "squadra", "team",
+    # Spanish
+    "quienes-somos", "sobre-nosotros", "nosotros", "empresa",
+    "nuestra-historia", "equipo",
     # Portuguese
-    "quem-somos", "sobre-nos",
+    "quem-somos", "sobre-nos", "a-empresa", "nossa-historia",
     # Dutch
-    "over-ons", "bedrijf",
+    "over-ons", "wie-zijn-wij", "ons-verhaal", "bedrijf", "organisatie",
+    # Danish
+    "om-os", "virksomhed", "om-virksomheden", "hvem-er-vi", "hold",
+    # Swedish
+    "om-oss", "om-foretaget", "foretaget", "vara-tjanster", "vilka-vi-ar",
+    # Norwegian
+    "om-oss", "om-bedriften", "selskapet", "hvem-er-vi",
+    # Finnish
+    "meista", "yritys", "tietoa-meista", "keita-olemme",
 }
+
+
+_PROBE_PATHS = [
+    # English
+    "/about", "/about-us", "/company", "/team", "/our-story",
+    "/who-we-are", "/mission", "/culture", "/overview",
+    # German
+    "/uber-uns", "/ueber-uns", "/unternehmen", "/das-unternehmen",
+    "/firma", "/wer-wir-sind",
+    # French
+    "/a-propos", "/qui-sommes-nous", "/notre-entreprise", "/equipe",
+    # Italian
+    "/chi-siamo", "/azienda",
+    # Spanish
+    "/quienes-somos", "/sobre-nosotros", "/nosotros",
+    # Portuguese
+    "/quem-somos", "/sobre-nos",
+    # Dutch
+    "/over-ons", "/wie-zijn-wij", "/bedrijf",
+    # Danish
+    "/om-os", "/virksomhed", "/hvem-er-vi",
+    # Swedish
+    "/om-oss", "/om-foretaget", "/vilka-vi-ar",
+    # Norwegian (shares /om-oss with Swedish)
+    "/om-bedriften", "/selskapet",
+    # Finnish
+    "/meista", "/yritys", "/tietoa-meista",
+]
 
 
 def find_relevant_links(html: str, base_url: str, max_links: int = 3) -> list[str]:
@@ -46,6 +87,28 @@ def find_relevant_links(html: str, base_url: str, max_links: int = 3) -> list[st
             links.append(url)
             if len(links) >= max_links:
                 break
+
+    if len(links) < max_links:
+        parsed_base = urlparse(base_url)
+        root = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        candidates = [root + p for p in _PROBE_PATHS if root + p not in seen]
+
+        def _head_ok(url: str) -> str | None:
+            try:
+                r = requests.head(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+                return url if r.status_code == 200 else None
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(max_workers=10) as ex:
+            for url in ex.map(_head_ok, candidates):
+                if url and url not in seen:
+                    seen.add(url)
+                    links.append(url)
+                    logger.debug("probed %s → 200", url)
+                    if len(links) >= max_links:
+                        break
+
     return links
 
 

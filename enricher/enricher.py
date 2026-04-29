@@ -45,6 +45,8 @@ def enrich(name: str, location: str, client: Groq) -> tuple[CompanyProfile, list
 
     if _missing(merged) and website_html:
         extra_urls = find_relevant_links(website_html, urls.get("website", ""))
+        t = tick("find links", t)
+
         if extra_urls:
             with ThreadPoolExecutor(max_workers=3) as ex:
                 extra_htmls = [h for h in ex.map(fetch_html, extra_urls) if h]
