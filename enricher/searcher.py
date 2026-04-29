@@ -86,7 +86,14 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
             executor.submit(_search, q, n): source
             for source, (q, n) in queries.items()
         }
-        results = {futures[f]: f.result() for f in as_completed(futures)}
+        results = {}
+        for f in as_completed(futures):
+            source = futures[f]
+            try:
+                results[source] = f.result()
+            except Exception as e:
+                logger.warning("Search failed for %r: %s", source, e)
+                results[source] = []
 
     urls: dict[str, str] = {}
     candidates = [h for h in results.get("website", []) if not _is_blocked(h["href"])]
