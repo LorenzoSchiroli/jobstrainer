@@ -1,4 +1,4 @@
-from enricher.models import CompanyProfile
+from enricher.models import CompanyProfile, FinancialHealth
 
 
 def test_company_profile_requires_name():
@@ -42,9 +42,6 @@ def test_company_profile_accepts_all_fields():
     assert p.review_score == 4.2
     assert p.review_count == 312
     assert p.description == "Acme makes things."
-
-
-from enricher.models import FinancialHealth
 
 
 def test_financial_health_requires_score_and_rationale():
