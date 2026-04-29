@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from bs4 import BeautifulSoup
 from groq import Groq
 
@@ -28,6 +29,11 @@ _LLM_PROMPT = (
 )
 
 _SNIPPETS_SECTION = "Review snippets (from search results):\n{snippets}\n\n"
+
+
+def _strip_markdown_json(text: str) -> str:
+    stripped = re.sub(r"^```(?:json)?\s*\n?", "", text.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\n?```\s*$", "", stripped).strip()
 
 
 def extract_jsonld(html: str) -> dict:
@@ -109,7 +115,8 @@ def extract_with_llm(
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
-        return CompanyExtraction.model_validate_json(response.choices[0].message.content)
+        content = _strip_markdown_json(response.choices[0].message.content)
+        return CompanyExtraction.model_validate_json(content)
     except Exception as e:
         logger.warning("LLM extraction failed: %s", e)
         return CompanyExtraction()
