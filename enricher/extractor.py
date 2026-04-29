@@ -149,10 +149,10 @@ def assess_financial_health(
     name: str,
     client: Groq,
 ) -> "FinancialHealth | None":
-    from enricher.models import FinancialHealth
-
-    if not html and not snippets:
+    if html is None and not snippets:
         return None
+
+    from enricher.models import FinancialHealth
 
     text = _html_to_text(html)[:6000] if html else ""
     snippets_section = (
