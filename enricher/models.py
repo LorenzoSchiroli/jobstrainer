@@ -13,6 +13,7 @@ class CompanyExtraction(BaseModel):
     employee_count: str | None = None
     industry: str | None = None
     is_consulting: bool | None = None
+    is_startup: bool | None = None
     review_score: float | None = None
     review_count: int | None = None
     description: str | None = None

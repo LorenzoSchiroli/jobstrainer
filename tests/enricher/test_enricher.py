@@ -9,7 +9,7 @@ def _make_client():
 
 
 def test_enrich_returns_company_profile():
-    extraction = CompanyExtraction(industry="Software", is_consulting=False)
+    extraction = CompanyExtraction(industry="Software", is_consulting=False, is_startup=True)
 
     with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
@@ -24,6 +24,7 @@ def test_enrich_returns_company_profile():
     assert result.founded_year == 2010
     assert result.industry == "Software"
     assert result.is_consulting is False
+    assert result.is_startup is True
 
 
 def test_enrich_jsonld_fields_not_overwritten_by_llm():
@@ -52,7 +53,7 @@ def test_enrich_handles_fetch_failure_gracefully():
 def test_enrich_skips_llm_when_all_fields_present():
     full_data = {
         "website": "https://acme.com", "country": "DE", "founded_year": 2010,
-        "employee_count": "51-200", "industry": "Software", "is_consulting": False,
+        "employee_count": "51-200", "industry": "Software", "is_consulting": False, "is_startup": False,
         "review_score": 4.2, "review_count": 312, "description": "Acme makes things.",
     }
 

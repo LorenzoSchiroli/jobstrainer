@@ -14,7 +14,7 @@ _LLM_PROMPT = (
     "Extract company information from the sources below. "
     "Return ONLY valid JSON with exactly these fields (use null if unknown):\n"
     '{{"website": str, "country": str, "founded_year": int, "employee_count": str, '
-    '"industry": str, "is_consulting": bool, '
+    '"industry": str, "is_consulting": bool, "is_startup": bool, '
     '"review_score": float, "review_count": int, "description": str}}\n\n'
     "IMPORTANT: review_score and review_count refer to Glassdoor EMPLOYEE ratings only "
     "(e.g. '4.1 out of 5 stars based on 35 reviews'). "
@@ -22,6 +22,9 @@ _LLM_PROMPT = (
     "If review snippets are provided, use them as the authoritative source for review fields.\n"
     "IMPORTANT: All text fields (description, industry) must be written in English, "
     "even if the source content is in another language.\n\n"
+    "IMPORTANT: For is_startup, use conservative inference from available evidence "
+    "(company self-description, funding stage, age/size signals). "
+    "If evidence is weak or conflicting, return null.\n\n"
     "Company name: {name}\n"
     "Location hint: {location}\n\n"
     "{snippets_section}"

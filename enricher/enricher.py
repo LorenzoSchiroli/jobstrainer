@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 _ALL_FIELDS = [
     "website", "country", "founded_year", "employee_count",
-    "industry", "is_consulting", "review_score", "review_count", "description",
+    "industry", "is_consulting", "is_startup", "review_score", "review_count", "description",
 ]
 
 

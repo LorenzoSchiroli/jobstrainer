@@ -54,6 +54,7 @@ def test_extract_with_llm_returns_parsed_fields():
         "employee_count": "51-200",
         "industry": "Software",
         "is_consulting": False,
+        "is_startup": True,
         "review_score": 4.2,
         "review_count": 312,
         "description": "Acme makes things.",
@@ -63,6 +64,7 @@ def test_extract_with_llm_returns_parsed_fields():
 
     assert result.country == "Germany"
     assert result.is_consulting is False
+    assert result.is_startup is True
     assert result.founded_year == 2010
 
 
