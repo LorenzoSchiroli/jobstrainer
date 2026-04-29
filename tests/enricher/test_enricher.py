@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from enricher.enricher import enrich
-from enricher.models import CompanyExtraction, CompanyProfile
+from enricher.models import CompanyExtraction, CompanyProfile, FinancialHealth
 
 
 def _make_client():
@@ -63,9 +63,6 @@ def test_enrich_skips_llm_when_all_fields_present():
                     enrich("Acme", "Berlin", _make_client())
 
     mock_llm.assert_not_called()
-
-
-from enricher.models import FinancialHealth
 
 
 def test_enrich_attaches_financial_health():
