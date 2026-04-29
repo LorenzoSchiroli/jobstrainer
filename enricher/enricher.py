@@ -58,6 +58,6 @@ def enrich(name: str, location: str, client: Groq) -> tuple[CompanyProfile, list
         for k, v in extraction.model_dump(exclude_none=True).items():
             if k not in merged:
                 merged[k] = v
-        tick("llm", t)
+        t = tick("llm", t)
 
     return CompanyProfile.model_validate({"name": name, **merged}), timings
