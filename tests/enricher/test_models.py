@@ -42,3 +42,24 @@ def test_company_profile_accepts_all_fields():
     assert p.review_score == 4.2
     assert p.review_count == 312
     assert p.description == "Acme makes things."
+
+
+from enricher.models import FinancialHealth
+
+
+def test_financial_health_requires_score_and_rationale():
+    fh = FinancialHealth(score=3, rationale="Stable company, no major signals.")
+    assert fh.score == 3
+    assert fh.rationale == "Stable company, no major signals."
+
+
+def test_company_profile_accepts_financial_health():
+    fh = FinancialHealth(score=4, rationale="Growing revenue.")
+    p = CompanyProfile(name="Acme", financial_health=fh)
+    assert p.financial_health.score == 4
+    assert p.financial_health.rationale == "Growing revenue."
+
+
+def test_company_profile_financial_health_defaults_to_none():
+    p = CompanyProfile(name="Acme")
+    assert p.financial_health is None
