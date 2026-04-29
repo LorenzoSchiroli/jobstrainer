@@ -11,7 +11,7 @@ def _make_client():
 def test_enrich_returns_company_profile():
     extraction = CompanyExtraction(industry="Software", is_consulting=False)
 
-    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE", "founded_year": 2010}):
                 with patch("enricher.enricher.find_relevant_links", return_value=[]):
@@ -29,7 +29,7 @@ def test_enrich_returns_company_profile():
 def test_enrich_jsonld_fields_not_overwritten_by_llm():
     extraction = CompanyExtraction(country="France")
 
-    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={"country": "DE"}):
                 with patch("enricher.enricher.find_relevant_links", return_value=[]):
@@ -40,7 +40,7 @@ def test_enrich_jsonld_fields_not_overwritten_by_llm():
 
 
 def test_enrich_handles_fetch_failure_gracefully():
-    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
         with patch("enricher.enricher.fetch_html", return_value=None):
             result, _ = enrich("Acme", "Berlin", _make_client())
 
@@ -56,7 +56,7 @@ def test_enrich_skips_llm_when_all_fields_present():
         "review_score": 4.2, "review_count": 312, "description": "Acme makes things.",
     }
 
-    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [])):
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value=full_data):
                 with patch("enricher.enricher.extract_with_llm") as mock_llm:

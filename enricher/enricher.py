@@ -28,7 +28,7 @@ def enrich(name: str, location: str, client: Groq) -> tuple[CompanyProfile, list
         return time.perf_counter()
 
     t = time.perf_counter()
-    urls, snippets = search_company_urls(name, location)
+    urls, snippets, financial_snippets = search_company_urls(name, location)
     t = tick("search", t)
 
     merged: dict = {}
