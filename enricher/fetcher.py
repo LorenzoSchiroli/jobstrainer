@@ -1,6 +1,6 @@
 import logging
 import requests
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
@@ -95,18 +95,22 @@ def find_relevant_links(html: str, base_url: str, max_links: int = 3) -> list[st
 
         def _head_ok(url: str) -> str | None:
             try:
-                r = requests.head(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+                r = requests.head(url, headers=_HEADERS, timeout=2, allow_redirects=True)
                 return url if r.status_code == 200 else None
             except Exception:
                 return None
 
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            for url in ex.map(_head_ok, candidates):
+        with ThreadPoolExecutor(max_workers=len(candidates)) as ex:
+            futures = {ex.submit(_head_ok, url): url for url in candidates}
+            for fut in as_completed(futures):
+                url = fut.result()
                 if url and url not in seen:
                     seen.add(url)
                     links.append(url)
                     logger.debug("probed %s → 200", url)
                     if len(links) >= max_links:
+                        for f in futures:
+                            f.cancel()
                         break
 
     return links
@@ -119,12 +123,19 @@ def _is_challenge(html: str) -> bool:
     return any(marker in html for marker in _CHALLENGE_MARKERS)
 
 
+def _has_text(html: str) -> bool:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer"]):
+        tag.decompose()
+    return bool(soup.get_text(strip=True))
+
+
 def fetch_html(url: str) -> str | None:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=10)
-        if resp.status_code == 200 and not _is_challenge(resp.text):
+        if resp.status_code == 200 and not _is_challenge(resp.text) and _has_text(resp.text):
             return resp.text
-        logger.debug("requests got %s or challenge for %s, falling back to Playwright", resp.status_code, url)
+        logger.debug("requests got %s or empty/challenge for %s, falling back to Playwright", resp.status_code, url)
     except Exception as e:
         logger.debug("requests failed for %s: %s", url, e)
     return _fetch_with_playwright(url)
