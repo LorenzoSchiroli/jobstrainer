@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from enricher.enricher import enrich
-from enricher.models import CompanyExtraction, CompanyProfile, FinancialHealth
+from enricher.models import CompanyExtraction, CompanyProfile
 
 
 def _make_client():
@@ -66,38 +66,79 @@ def test_enrich_skips_llm_when_all_fields_present():
     mock_llm.assert_not_called()
 
 
-def test_enrich_attaches_financial_health():
-    financial_health = FinancialHealth(score=4, rationale="Strong revenue growth.")
+def test_enrich_attaches_financial_health_from_llm():
+    extraction = CompanyExtraction(
+        financial_health_score=4,
+        financial_health_rationale="Strong revenue growth.",
+    )
 
     with patch("enricher.enricher.search_company_urls", return_value=(
-        {"website": "https://acme.com", "financial": "https://stockanalysis.com/acme"},
+        {"website": "https://acme.com"},
         [],
         ["Revenue grew 12% YoY."],
     )):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={}):
                 with patch("enricher.enricher.find_relevant_links", return_value=[]):
-                    with patch("enricher.enricher.extract_with_llm", return_value=CompanyExtraction()):
-                        with patch("enricher.enricher.assess_financial_health", return_value=financial_health):
+                    with patch("enricher.enricher.extract_with_llm", return_value=extraction):
+                        result, _ = enrich("Acme", "Berlin", _make_client())
+
+    assert result.financial_health_score == 4
+    assert result.financial_health_rationale == "Strong revenue growth."
+
+
+def test_enrich_triggers_targeted_financial_search_when_registration_numbers_found():
+    first_extraction = CompanyExtraction(
+        registration_numbers={"VAT": "DE123456789"},
+        financial_health_score=3,
+        financial_health_rationale="Insufficient data.",
+    )
+    second_extraction = CompanyExtraction(
+        financial_health_score=4,
+        financial_health_rationale="Strong balance sheet per annual report.",
+    )
+
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
+        with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
+            with patch("enricher.enricher.extract_jsonld", return_value={}):
+                with patch("enricher.enricher.find_relevant_links", return_value=[]):
+                    with patch("enricher.enricher.extract_with_llm", side_effect=[first_extraction, second_extraction]):
+                        with patch("enricher.enricher.search_financial", return_value=("https://bundesanzeiger.de/acme", ["Revenue €50M."])):
                             result, _ = enrich("Acme", "Berlin", _make_client())
 
-    assert result.financial_health is not None
-    assert result.financial_health.score == 4
-    assert result.financial_health.rationale == "Strong revenue growth."
+    assert result.financial_health_score == 4
+    assert result.financial_health_rationale == "Strong balance sheet per annual report."
 
 
-def test_enrich_financial_health_is_none_when_no_financial_data():
+def test_enrich_skips_targeted_financial_search_when_score_is_confident():
+    extraction = CompanyExtraction(
+        registration_numbers={"VAT": "DE123456789"},
+        financial_health_score=4,
+        financial_health_rationale="Profitable.",
+    )
+
+    with patch("enricher.enricher.search_company_urls", return_value=({"website": "https://acme.com"}, [], [])):
+        with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
+            with patch("enricher.enricher.extract_jsonld", return_value={}):
+                with patch("enricher.enricher.find_relevant_links", return_value=[]):
+                    with patch("enricher.enricher.extract_with_llm", return_value=extraction):
+                        with patch("enricher.enricher.search_financial") as mock_sf:
+                            enrich("Acme", "Berlin", _make_client())
+
+    mock_sf.assert_not_called()
+
+
+def test_enrich_financial_snippets_passed_to_llm():
     with patch("enricher.enricher.search_company_urls", return_value=(
         {"website": "https://acme.com"},
         [],
-        [],
+        ["Revenue grew 12% YoY."],
     )):
         with patch("enricher.enricher.fetch_html", return_value="<html></html>"):
             with patch("enricher.enricher.extract_jsonld", return_value={}):
                 with patch("enricher.enricher.find_relevant_links", return_value=[]):
-                    with patch("enricher.enricher.extract_with_llm", return_value=CompanyExtraction()):
-                        with patch("enricher.enricher.assess_financial_health", return_value=None) as mock_assess:
-                            result, _ = enrich("Acme", "Berlin", _make_client())
+                    with patch("enricher.enricher.extract_with_llm", return_value=CompanyExtraction()) as mock_llm:
+                        enrich("Acme", "Berlin", _make_client())
 
-    assert result.financial_health is None
-    mock_assess.assert_called_once()
+    _, kwargs = mock_llm.call_args
+    assert kwargs.get("financial_snippets") == ["Revenue grew 12% YoY."]
