@@ -79,19 +79,53 @@ def _search(query: str, max_results: int) -> list[dict]:
     return _search_ddgs(query, max_results)
 
 
+def _normalize_linkedin_url(href: str) -> str | None:
+    parsed = urlparse(href)
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(parts) >= 2 and parts[0] == "company":
+        return f"https://www.linkedin.com/company/{parts[1]}"
+    return None
+
+
+def _financial_query(name: str, suffix: str, registration_numbers: dict[str, str] | None) -> str:
+    if registration_numbers:
+        reg_id = next(iter(registration_numbers.values()))
+        return f'{reg_id} financial'
+    return f'{name}{suffix} company financial health'
+
+
+def search_financial(
+    name: str,
+    location: str,
+    registration_numbers: dict[str, str] | None = None,
+) -> tuple[str | None, list[str]]:
+    suffix = f" {location}" if location else ""
+    query = _financial_query(name, suffix, registration_numbers)
+    hits = _search(query, 3)
+    hits = [
+        h for h in hits
+        if not any(d in urlparse(h.get("href", "")).netloc.lower() for d in _FINANCIAL_SKIP_DOMAINS)
+    ]
+    url = hits[0]["href"] if hits else None
+    snippets = [h.get("body", "") for h in hits if h.get("body")]
+    return url, snippets
+
+
 def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[str], list[str]]:
     suffix = f" {location}" if location else ""
     queries = {
-        "website": (f'"{name}"{suffix} company', 5),
-        "reviews": (f'"{name}"{suffix} glassdoor stars', 5),
-        "financial": (f'"{name}"{suffix} company financial health', 3),
+        "website": (f'{name}{suffix} company', 5),
+        "reviews": (f'{name}{suffix} glassdoor review', 5),
+        "financial": (_financial_query(name, suffix, None), 3),
     }
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
             executor.submit(_search, q, n): source
             for source, (q, n) in queries.items()
         }
+        # LinkedIn uses DDGS only to avoid consuming Serper credits
+        futures[executor.submit(_search_ddgs, f'site:linkedin.com/company "{name}"{suffix}', 3)] = "linkedin"
         results = {}
         for f in as_completed(futures):
             source = futures[f]
@@ -118,6 +152,12 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
     if financial_hits:
         urls["financial"] = financial_hits[0]["href"]
 
+    for hit in results.get("linkedin", []):
+        normalized = _normalize_linkedin_url(hit.get("href", ""))
+        if normalized:
+            urls["linkedin"] = normalized
+            break
+
     engine = "Serper" if os.environ.get("SERPERDEV_API_KEY") else "DDG"
     logger.debug("%s website: %s → selected: %s", engine,
                  ", ".join(h["href"] for h in results.get("website", [])) or "(none)",
@@ -127,5 +167,7 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
     logger.debug("%s financial: %s → selected: %s", engine,
                  ", ".join(h["href"] for h in financial_hits) or "(none)",
                  urls.get("financial", "(none)"))
+    logger.debug("DDG linkedin: %s",
+                 ", ".join(h["href"] for h in results.get("linkedin", [])) or "(none)")
 
     return urls, snippets, financial_snippets
