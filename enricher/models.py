@@ -1,11 +1,6 @@
 from pydantic import BaseModel, Field
 
 
-class FinancialHealth(BaseModel):
-    score: int = Field(..., ge=1, le=5)
-    rationale: str
-
-
 class CompanyExtraction(BaseModel):
     website: str | None = None
     country: str | None = None
@@ -17,8 +12,10 @@ class CompanyExtraction(BaseModel):
     review_score: float | None = None
     review_count: int | None = None
     description: str | None = None
+    financial_health_score: int | None = Field(None, ge=1, le=5)
+    financial_health_rationale: str | None = None
+    registration_numbers: dict[str, str] | None = None
 
 
 class CompanyProfile(CompanyExtraction):
     name: str
-    financial_health: FinancialHealth | None = None

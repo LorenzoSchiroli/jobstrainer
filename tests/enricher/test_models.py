@@ -1,4 +1,4 @@
-from enricher.models import CompanyProfile, FinancialHealth
+from enricher.models import CompanyProfile
 
 
 def test_company_profile_requires_name():
@@ -18,6 +18,9 @@ def test_company_profile_all_fields_default_to_none():
     assert p.review_score is None
     assert p.review_count is None
     assert p.description is None
+    assert p.financial_health_score is None
+    assert p.financial_health_rationale is None
+    assert p.registration_numbers is None
 
 
 def test_company_profile_accepts_all_fields():
@@ -33,6 +36,9 @@ def test_company_profile_accepts_all_fields():
         review_score=4.2,
         review_count=312,
         description="Acme makes things.",
+        financial_health_score=4,
+        financial_health_rationale="Revenue grew 12% YoY.",
+        registration_numbers={"VAT": "DE123456789", "DUNS": "12-345-6789"},
     )
     assert p.name == "Acme"
     assert p.website == "https://acme.com"
@@ -45,21 +51,14 @@ def test_company_profile_accepts_all_fields():
     assert p.review_score == 4.2
     assert p.review_count == 312
     assert p.description == "Acme makes things."
+    assert p.financial_health_score == 4
+    assert p.financial_health_rationale == "Revenue grew 12% YoY."
+    assert p.registration_numbers == {"VAT": "DE123456789", "DUNS": "12-345-6789"}
 
 
-def test_financial_health_requires_score_and_rationale():
-    fh = FinancialHealth(score=3, rationale="Stable company, no major signals.")
-    assert fh.score == 3
-    assert fh.rationale == "Stable company, no major signals."
-
-
-def test_company_profile_accepts_financial_health():
-    fh = FinancialHealth(score=4, rationale="Growing revenue.")
-    p = CompanyProfile(name="Acme", financial_health=fh)
-    assert p.financial_health.score == 4
-    assert p.financial_health.rationale == "Growing revenue."
-
-
-def test_company_profile_financial_health_defaults_to_none():
-    p = CompanyProfile(name="Acme")
-    assert p.financial_health is None
+def test_financial_health_score_validates_range():
+    import pytest
+    with pytest.raises(Exception):
+        CompanyProfile(name="Acme", financial_health_score=0)
+    with pytest.raises(Exception):
+        CompanyProfile(name="Acme", financial_health_score=6)
