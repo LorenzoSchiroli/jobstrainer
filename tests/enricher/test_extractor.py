@@ -58,6 +58,9 @@ def test_extract_with_llm_returns_parsed_fields():
         "review_score": 4.2,
         "review_count": 312,
         "description": "Acme makes things.",
+        "financial_health_score": 4,
+        "financial_health_rationale": "Revenue grew 12% YoY.",
+        "registration_numbers": {"VAT": "DE123456789", "EIN": "12-3456789"},
     })
 
     result = extract_with_llm(_HTML_NO_JSONLD, "Acme", "Berlin", mock_client)
@@ -66,6 +69,9 @@ def test_extract_with_llm_returns_parsed_fields():
     assert result.is_consulting is False
     assert result.is_startup is True
     assert result.founded_year == 2010
+    assert result.financial_health_score == 4
+    assert result.financial_health_rationale == "Revenue grew 12% YoY."
+    assert result.registration_numbers == {"VAT": "DE123456789", "EIN": "12-3456789"}
 
 
 def test_extract_with_llm_handles_invalid_json():
@@ -76,6 +82,7 @@ def test_extract_with_llm_handles_invalid_json():
 
     assert result.country is None
     assert result.founded_year is None
+    assert result.financial_health_score is None
 
 
 def test_extract_with_llm_strips_markdown_code_block():
@@ -96,65 +103,15 @@ def test_extract_with_llm_strips_markdown_code_block_uppercase():
     assert result.country == "Germany"
 
 
-from enricher.extractor import assess_financial_health
-from enricher.models import FinancialHealth
-
-
-def test_assess_financial_health_returns_score_and_rationale():
+def test_extract_with_llm_includes_financial_snippets_in_prompt():
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-        "score": 4,
-        "rationale": "Revenue grew 12% YoY with a strong cash position and no debt concerns.",
-    })
+    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({})
 
-    result = assess_financial_health(
-        html="<html><body>Revenue grew 12% YoY.</body></html>",
-        snippets=["Strong cash position, no debt."],
-        name="Acme",
-        client=mock_client,
+    extract_with_llm(
+        _HTML_NO_JSONLD, "Acme", "Berlin", mock_client,
+        financial_snippets=["Revenue grew 12% YoY.", "Strong cash position."],
     )
 
-    assert isinstance(result, FinancialHealth)
-    assert result.score == 4
-    assert "Revenue" in result.rationale
-
-
-def test_assess_financial_health_returns_none_when_no_input():
-    mock_client = MagicMock()
-
-    result = assess_financial_health(html=None, snippets=[], name="Acme", client=mock_client)
-
-    assert result is None
-    mock_client.chat.completions.create.assert_not_called()
-
-
-def test_assess_financial_health_returns_none_on_llm_failure():
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = Exception("API error")
-
-    result = assess_financial_health(
-        html="<html><body>Some financial data.</body></html>",
-        snippets=[],
-        name="Acme",
-        client=mock_client,
-    )
-
-    assert result is None
-
-
-def test_assess_financial_health_uses_snippets_when_no_html():
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-        "score": 2,
-        "rationale": "Snippets indicate significant debt and declining revenue.",
-    })
-
-    result = assess_financial_health(
-        html=None,
-        snippets=["Significant debt load. Revenue down 20%."],
-        name="Acme",
-        client=mock_client,
-    )
-
-    assert isinstance(result, FinancialHealth)
-    assert result.score == 2
+    prompt_sent = mock_client.chat.completions.create.call_args[1]["messages"][0]["content"]
+    assert "Revenue grew 12% YoY." in prompt_sent
+    assert "Financial snippets" in prompt_sent
