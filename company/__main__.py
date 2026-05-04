@@ -5,7 +5,7 @@ import time
 from dotenv import load_dotenv
 from groq import Groq
 
-from enricher.enricher import enrich
+from company.company import enrich
 
 load_dotenv()
 
@@ -18,7 +18,7 @@ def main():
         logging.getLogger(_noisy).setLevel(logging.ERROR)
 
     if not args:
-        print("Usage: python -m enricher \"<company name>\" [location] [--debug]")
+        print("Usage: python -m company \"<company name>\" [location] [--debug]")
         sys.exit(1)
     name = args[0]
     location = args[1] if len(args) > 1 else ""

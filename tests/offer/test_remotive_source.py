@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
-from retriever.sources.remotive_source import RemotiveSource
+from offer.scraping.sources.remotive_source import RemotiveSource
 
 _recent = (datetime.now() - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
 _old = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -40,7 +40,7 @@ def _mock_get(response):
 
 
 def test_returns_matching_english_offers_within_hours():
-    with patch("retriever.sources.remotive_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
+    with patch("offer.scraping.sources.remotive_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
         results = RemotiveSource().fetch("python", hours=72)
 
     assert len(results) == 1
@@ -49,5 +49,5 @@ def test_returns_matching_english_offers_within_hours():
 
 
 def test_returns_empty_on_error():
-    with patch("retriever.sources.remotive_source.requests.get", side_effect=Exception("timeout")):
+    with patch("offer.scraping.sources.remotive_source.requests.get", side_effect=Exception("timeout")):
         assert RemotiveSource().fetch("python", hours=72) == []

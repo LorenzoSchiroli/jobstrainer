@@ -1,4 +1,4 @@
-from retriever.filters import is_english
+from offer.scraping.filters import is_english
 
 
 def test_english_title_passes():

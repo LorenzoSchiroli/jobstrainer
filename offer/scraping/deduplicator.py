@@ -1,5 +1,5 @@
 import re
-from retriever.models import JobOffer
+from offer.scraping.models import JobOffer
 
 _PRIORITY = {"jobspy": 0, "adzuna": 1, "arbeitnow": 2, "remotive": 3}
 

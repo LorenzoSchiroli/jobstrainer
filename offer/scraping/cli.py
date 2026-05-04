@@ -7,12 +7,12 @@ from datetime import date
 from dotenv import load_dotenv
 from tabulate import tabulate
 
-from retriever.deduplicator import deduplicate
-from retriever.models import JobOffer
-from retriever.sources.adzuna_source import AdzunaSource
-from retriever.sources.arbeitnow_source import ArbeitnowSource
-from retriever.sources.jobspy_source import JobspySource
-from retriever.sources.remotive_source import RemotiveSource
+from offer.scraping.deduplicator import deduplicate
+from offer.scraping.models import JobOffer
+from offer.scraping.sources.adzuna_source import AdzunaSource
+from offer.scraping.sources.arbeitnow_source import ArbeitnowSource
+from offer.scraping.sources.jobspy_source import JobspySource
+from offer.scraping.sources.remotive_source import RemotiveSource
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 

@@ -3,10 +3,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from groq import Groq
 
-from enricher.extractor import extract_jsonld, extract_with_llm
-from enricher.fetcher import fetch_html, find_relevant_links
-from enricher.models import CompanyProfile
-from enricher.searcher import search_company_urls, search_financial
+from company.parsing.extractor import extract_jsonld, extract_with_llm
+from company.scraping.fetcher import fetch_html, find_relevant_links
+from company.models import CompanyProfile
+from company.scraping.searcher import search_company_urls, search_financial
 
 logger = logging.getLogger(__name__)
 

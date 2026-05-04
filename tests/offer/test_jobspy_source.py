@@ -1,7 +1,7 @@
 from datetime import date
 from unittest.mock import patch
 import pandas as pd
-from retriever.sources.jobspy_source import JobspySource
+from offer.scraping.sources.jobspy_source import JobspySource
 
 
 def _linkedin_df():
@@ -44,7 +44,7 @@ def test_returns_english_offers_from_all_calls():
             return _linkedin_df()
         return _indeed_df()
 
-    with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
+    with patch("offer.scraping.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
         results = JobspySource().fetch("python", hours=72)
 
     titles = [r.title for r in results]
@@ -63,12 +63,12 @@ def test_linkedin_failure_does_not_block_indeed():
             raise Exception("blocked")
         return _indeed_df()
 
-    with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
+    with patch("offer.scraping.sources.jobspy_source.scrape_jobs", side_effect=side_effect):
         results = JobspySource().fetch("python", hours=72)
 
     assert results == []  # indeed df has no valid titles
 
 
 def test_returns_empty_when_all_fail():
-    with patch("retriever.sources.jobspy_source.scrape_jobs", side_effect=Exception("blocked")):
+    with patch("offer.scraping.sources.jobspy_source.scrape_jobs", side_effect=Exception("blocked")):
         assert JobspySource().fetch("python", hours=72) == []

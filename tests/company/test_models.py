@@ -1,4 +1,4 @@
-from enricher.models import CompanyProfile
+from company.models import CompanyProfile
 
 
 def test_company_profile_requires_name():

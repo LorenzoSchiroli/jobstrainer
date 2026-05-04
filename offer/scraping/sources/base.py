@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from retriever.models import JobOffer
+from offer.scraping.models import JobOffer
 
 
 class Source(ABC):
