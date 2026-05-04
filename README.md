@@ -2,26 +2,26 @@
 
 ## Commands
 
-### Retriever
+### Offer
 
 Fetch recent job offers matching a search query.
 
 ```bash
-uv run python -m retriever "machine learning engineer"
-uv run python -m retriever "machine learning engineer" --hours 48
-uv run python -m retriever "machine learning engineer" --sources jobspy,adzuna
+uv run python -m offer "machine learning engineer"
+uv run python -m offer "machine learning engineer" --hours 48
+uv run python -m offer "machine learning engineer" --sources jobspy,adzuna
 ```
 
 Available sources: `jobspy`, `adzuna`, `arbeitnow`, `remotive` (default: all).
 
-### Enricher
+### Company
 
-Enrich a company profile with metadata (size, funding, tech stack, etc.).
+Enrich a company profile with metadata (size, funding, financial health, etc.).
 
 ```bash
-uv run python -m enricher "Stripe"
-uv run python -m enricher "Stripe" "San Francisco"
-uv run python -m enricher "Stripe" --debug
+uv run python -m company "Stripe"
+uv run python -m company "Stripe" "San Francisco"
+uv run python -m company "Stripe" --debug
 ```
 
 Requires `GROQ_API_KEY` in `.env`.
