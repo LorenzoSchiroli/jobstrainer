@@ -35,3 +35,21 @@ uv run python tailor_cv.py
 ```
 
 Outputs to `tailor/lorenzo_schiroli_cv_llm.docx` and `tailor/lorenzo_schiroli_cv_cv.docx`.
+
+## Design
+
+search
+input: cv + query (what i'm looking for)
+output: rank of offers
+
+Architecture:
+- crawler + enricher (jobs and companies, actively interrogate the backend)
+- backend (holding the database and data, holding the ranker operation, fully passive)
+- frontend (just ui)
+
+ranker
+approaches: bm25 + embedding -> cross-encoder reranker
+
+Other things:
+- tailorer
+- company discover

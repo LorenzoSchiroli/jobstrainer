@@ -36,8 +36,8 @@ def rm(para):
 # LLM FOCUSED
 # ---------------------------------------------------------------------------
 src = "data/lorenzo_schiroli_cv.docx"
-shutil.copy(src, "tailor/lorenzo_schiroli_cv_llm.docx")
-d = Document("tailor/lorenzo_schiroli_cv_llm.docx")
+shutil.copy(src, "data/lorenzo_schiroli_cv_llm.docx")
+d = Document("data/lorenzo_schiroli_cv_llm.docx")
 p = d.paragraphs
 
 # Title (para 2): runs 0/1/2 are all blue 00B0F0
@@ -112,15 +112,15 @@ rm(proj_heading)
 rm(proj_intro)
 rm(sudoku_para)
 
-d.save("tailor/lorenzo_schiroli_cv_llm.docx")
-print("✓ LLM version saved → tailor/lorenzo_schiroli_cv_llm.docx")
+d.save("data/lorenzo_schiroli_cv_llm.docx")
+print("✓ LLM version saved → data/lorenzo_schiroli_cv_llm.docx")
 
 
 # ---------------------------------------------------------------------------
 # COMPUTER VISION FOCUSED
 # ---------------------------------------------------------------------------
-shutil.copy(src, "tailor/lorenzo_schiroli_cv_cv.docx")
-d2 = Document("tailor/lorenzo_schiroli_cv_cv.docx")
+shutil.copy(src, "data/lorenzo_schiroli_cv_cv.docx")
+d2 = Document("data/lorenzo_schiroli_cv_cv.docx")
 p2 = d2.paragraphs
 
 # Title
@@ -201,5 +201,5 @@ collapse(
 
 rm(llm_para)
 
-d2.save("tailor/lorenzo_schiroli_cv_cv.docx")
-print("✓ CV  version saved → tailor/lorenzo_schiroli_cv_cv.docx")
+d2.save("data/lorenzo_schiroli_cv_cv.docx")
+print("✓ CV  version saved → data/lorenzo_schiroli_cv_cv.docx")
