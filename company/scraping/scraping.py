@@ -1,4 +1,5 @@
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from company.scraping.fetcher import fetch_html, find_relevant_links
@@ -6,9 +7,19 @@ from company.scraping.searcher import search_company_urls, search_financial
 
 logger = logging.getLogger(__name__)
 
+Timings = list[tuple[str, float]]
 
-def scrape(name: str, location: str) -> dict:
+
+def scrape(name: str, location: str) -> tuple[dict, Timings]:
+    timings: Timings = []
+
+    def tick(label: str, t0: float) -> float:
+        timings.append((label, time.perf_counter() - t0))
+        return time.perf_counter()
+
+    t = time.perf_counter()
     urls, review_snippets, financial_snippets = search_company_urls(name, location)
+    t = tick("scrape / search", t)
 
     with ThreadPoolExecutor(max_workers=3) as ex:
         fut_website   = ex.submit(fetch_html, urls["website"])   if "website"   in urls else None
@@ -17,13 +28,16 @@ def scrape(name: str, location: str) -> dict:
         website_html   = fut_website.result()   if fut_website   else None
         financial_html = fut_financial.result() if fut_financial else None
         linkedin_html  = fut_linkedin.result()  if fut_linkedin  else None
+    t = tick("scrape / fetch website+linkedin+financial", t)
 
     extra_htmls: list[str] = []
     if website_html:
         extra_urls = find_relevant_links(website_html, urls.get("website", ""))
+        t = tick("scrape / find links", t)
         if extra_urls:
             with ThreadPoolExecutor(max_workers=3) as ex:
                 extra_htmls = [h for h in ex.map(fetch_html, extra_urls) if h]
+            t = tick("scrape / fetch extra pages", t)
 
     return {
         "website_url": urls.get("website"),
@@ -35,14 +49,23 @@ def scrape(name: str, location: str) -> dict:
         "financial_html": financial_html,
         "review_snippets": review_snippets,
         "financial_snippets": financial_snippets,
-    }
+    }, timings
 
 
-def scrape_financial(name: str, location: str, registration_numbers: dict) -> dict:
+def scrape_financial(name: str, location: str, registration_numbers: dict) -> tuple[dict, Timings]:
+    timings: Timings = []
+
+    def tick(label: str, t0: float) -> float:
+        timings.append((label, time.perf_counter() - t0))
+        return time.perf_counter()
+
+    t = time.perf_counter()
     url, snippets = search_financial(name, location, registration_numbers)
     html = fetch_html(url) if url else None
+    tick("scrape financial / search+fetch", t)
+
     return {
         "financial_url": url,
         "financial_html": html,
         "financial_snippets": snippets,
-    }
+    }, timings

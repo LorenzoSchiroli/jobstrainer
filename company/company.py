@@ -16,17 +16,18 @@ def enrich(name: str, location: str, client: Groq) -> tuple[CompanyProfile, list
         timings.append((label, time.perf_counter() - t0))
         return time.perf_counter()
 
-    t = time.perf_counter()
-    text_dict = scrape(name, location)
-    t = tick("scrape", t)
+    text_dict, scrape_timings = scrape(name, location)
+    timings.extend(scrape_timings)
 
+    t = time.perf_counter()
     info = parse(name, location, text_dict, client)
-    t = tick("parse", t)
+    tick("parse", t)
 
     if info.registration_numbers and info.financial_health_score in (None, 3):
-        financial_text = scrape_financial(name, location, info.registration_numbers)
-        t = tick("scrape financial", t)
+        financial_text, financial_scrape_timings = scrape_financial(name, location, info.registration_numbers)
+        timings.extend(financial_scrape_timings)
+        t = time.perf_counter()
         info = parse_financial(name, location, info, financial_text, client)
-        t = tick("parse financial", t)
+        tick("parse financial", t)
 
     return CompanyProfile.model_validate({"name": name, **info.model_dump()}), timings

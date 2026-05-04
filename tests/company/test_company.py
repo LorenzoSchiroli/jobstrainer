@@ -11,7 +11,7 @@ def _make_client():
 def test_enrich_returns_company_profile():
     info = CompanyExtraction(industry="Software", is_consulting=False, is_startup=True, country="DE", founded_year=2010)
 
-    with patch("company.company.scrape", return_value={}):
+    with patch("company.company.scrape", return_value=({}, [])):
         with patch("company.company.parse", return_value=info):
             result, _ = enrich("Acme", "Berlin", _make_client())
 
@@ -25,7 +25,7 @@ def test_enrich_returns_company_profile():
 
 
 def test_enrich_handles_no_data_gracefully():
-    with patch("company.company.scrape", return_value={}):
+    with patch("company.company.scrape", return_value=({}, [])):
         with patch("company.company.parse", return_value=CompanyExtraction()):
             result, _ = enrich("Acme", "Berlin", _make_client())
 
@@ -46,9 +46,9 @@ def test_enrich_triggers_targeted_financial_search_when_registration_numbers_fou
         financial_health_rationale="Strong balance sheet per annual report.",
     )
 
-    with patch("company.company.scrape", return_value={}):
+    with patch("company.company.scrape", return_value=({}, [])):
         with patch("company.company.parse", return_value=first_info):
-            with patch("company.company.scrape_financial", return_value={}) as mock_sf:
+            with patch("company.company.scrape_financial", return_value=({}, [])) as mock_sf:
                 with patch("company.company.parse_financial", return_value=second_info):
                     result, _ = enrich("Acme", "Berlin", _make_client())
 
@@ -64,7 +64,7 @@ def test_enrich_skips_targeted_financial_search_when_score_is_confident():
         financial_health_rationale="Profitable.",
     )
 
-    with patch("company.company.scrape", return_value={}):
+    with patch("company.company.scrape", return_value=({}, [])):
         with patch("company.company.parse", return_value=info):
             with patch("company.company.scrape_financial") as mock_sf:
                 enrich("Acme", "Berlin", _make_client())
@@ -75,7 +75,7 @@ def test_enrich_skips_targeted_financial_search_when_score_is_confident():
 def test_enrich_skips_targeted_financial_search_when_no_registration_numbers():
     info = CompanyExtraction(financial_health_score=3)
 
-    with patch("company.company.scrape", return_value={}):
+    with patch("company.company.scrape", return_value=({}, [])):
         with patch("company.company.parse", return_value=info):
             with patch("company.company.scrape_financial") as mock_sf:
                 enrich("Acme", "Berlin", _make_client())
