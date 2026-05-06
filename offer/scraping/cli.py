@@ -1,14 +1,12 @@
 import argparse
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 from dotenv import load_dotenv
 from tabulate import tabulate
 
-from offer.scraping.deduplicator import deduplicate
-from offer.scraping.models import JobOffer
+from offer.scraping.scraping import scrape
 from offer.scraping.sources.adzuna_source import AdzunaSource
 from offer.scraping.sources.arbeitnow_source import ArbeitnowSource
 from offer.scraping.sources.jobspy_source import JobspySource
@@ -50,14 +48,7 @@ def main() -> None:
 
     print(f"Searching for '{args.query}' (last {args.hours}h) across: {', '.join(source_names)}...\n")
 
-    all_offers: list[JobOffer] = []
-    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        futures = {pool.submit(src.fetch, args.query, args.hours): src.__class__.__name__ for src in sources}
-        for future in as_completed(futures):
-            all_offers.extend(future.result())
-
-    deduped = deduplicate(all_offers)
-    deduped.sort(key=lambda o: o.posted_at or date.min, reverse=True)
+    deduped = scrape(args.query, args.hours, sources=sources)
 
     if not deduped:
         print("No offers found.")
@@ -78,4 +69,4 @@ def main() -> None:
 
     headers = ["#", "Title", "Company", "Location", "Source", "Posted", "URL"]
     print(tabulate(rows, headers=headers, tablefmt="simple"))
-    print(f"\n{len(deduped)} offers found ({len(all_offers)} before deduplication).")
+    print(f"\n{len(deduped)} offers found.")
