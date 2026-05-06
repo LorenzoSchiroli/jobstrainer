@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-from datetime import date
 
 from dotenv import load_dotenv
 from tabulate import tabulate
