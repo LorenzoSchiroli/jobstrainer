@@ -3,9 +3,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 import pandas as pd
 from jobspy import scrape_jobs
+from offer.scraping.filters import is_english, _strip_html
 from offer.scraping.models import JobOffer
 from offer.scraping.sources.base import Source
-from offer.scraping.filters import is_english
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
             except Exception:
                 pass
         site = row.get("site", "unknown")
+        raw_desc = row.get("description") or ""
         results.append(JobOffer(
             title=title,
             company=str(row.get("company") or ""),
@@ -35,6 +36,7 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
             url=str(row.get("job_url") or ""),
             source=f"jobspy:{site}",
             posted_at=posted_at,
+            description=_strip_html(str(raw_desc)) or None if raw_desc else None,
         ))
     return results
 

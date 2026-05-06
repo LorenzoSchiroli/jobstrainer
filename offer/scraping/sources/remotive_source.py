@@ -1,9 +1,9 @@
 import logging
 import requests
 from datetime import date, datetime, timedelta
+from offer.scraping.filters import is_english, _strip_html
 from offer.scraping.models import JobOffer
 from offer.scraping.sources.base import Source
-from offer.scraping.filters import is_english
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class RemotiveSource(Source):
             title = item.get("title", "")
             if not is_english(title):
                 continue
+            raw_desc = item.get("description", "")
             results.append(JobOffer(
                 title=title,
                 company=item.get("company_name", ""),
@@ -41,6 +42,7 @@ class RemotiveSource(Source):
                 url=item.get("url", ""),
                 source="remotive",
                 posted_at=posted.date(),
+                description=_strip_html(raw_desc) or None,
             ))
 
         return results

@@ -12,6 +12,7 @@ MOCK_RESPONSE = {
             "location": "Berlin, Germany",
             "url": "https://arbeitnow.com/jobs/python-dev-123",
             "created_at": int(_NOW - 3600),  # 1 hour ago — within 3 days
+            "description": "<p>Build <b>Python</b> services for data pipelines.</p>",
         },
         {
             "title": "Softwareentwickler",  # German title — should be discarded
@@ -46,6 +47,16 @@ def test_returns_matching_english_offers_within_days():
     assert results[0].title == "Python Developer"
     assert results[0].source == "arbeitnow"
     assert results[0].company == "TechCorp"
+
+
+def test_description_is_stripped_of_html():
+    with patch("offer.scraping.sources.arbeitnow_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
+        results = ArbeitnowSource().fetch("python", hours=72)
+
+    assert results[0].description is not None
+    assert "Build" in results[0].description
+    assert "Python" in results[0].description
+    assert "<" not in results[0].description
 
 
 def test_returns_empty_on_network_error():

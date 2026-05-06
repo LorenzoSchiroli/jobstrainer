@@ -2,9 +2,9 @@ import logging
 import time
 import requests
 from datetime import date
+from offer.scraping.filters import is_english, _strip_html
 from offer.scraping.models import JobOffer
 from offer.scraping.sources.base import Source
-from offer.scraping.filters import is_english
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class ArbeitnowSource(Source):
                 continue
             if not is_english(title):
                 continue
+            raw_desc = item.get("description", "")
             results.append(JobOffer(
                 title=title,
                 company=item.get("company_name", ""),
@@ -41,6 +42,7 @@ class ArbeitnowSource(Source):
                 url=item.get("url", ""),
                 source="arbeitnow",
                 posted_at=date.fromtimestamp(item["created_at"]) if item.get("created_at") else None,
+                description=_strip_html(raw_desc) or None,
             ))
 
         return results

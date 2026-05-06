@@ -2,9 +2,9 @@ import logging
 import os
 import requests
 from datetime import date, datetime
+from offer.scraping.filters import is_english
 from offer.scraping.models import JobOffer
 from offer.scraping.sources.base import Source
-from offer.scraping.filters import is_english
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ class AdzunaSource(Source):
                         url=item.get("redirect_url", ""),
                         source="adzuna",
                         posted_at=posted_at,
+                        description=item.get("description") or None,
                     ))
             except Exception as e:
                 logger.warning("Adzuna fetch failed for %s: %s", country, e)

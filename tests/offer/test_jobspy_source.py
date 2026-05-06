@@ -13,6 +13,7 @@ def _linkedin_df():
             "job_url": "https://linkedin.com/jobs/view/123",
             "date_posted": pd.Timestamp("2026-04-19"),
             "site": "linkedin",
+            "description": None,
         },
         {
             "title": "Ingénieur Python",  # French — should be discarded
@@ -21,6 +22,7 @@ def _linkedin_df():
             "job_url": "https://linkedin.com/jobs/view/456",
             "date_posted": pd.Timestamp("2026-04-19"),
             "site": "linkedin",
+            "description": None,
         },
     ])
 
@@ -34,6 +36,7 @@ def _indeed_df():
             "job_url": "https://indeed.com/jobs/789",
             "date_posted": None,
             "site": "indeed",
+            "description": None,
         },
     ])
 
@@ -72,3 +75,24 @@ def test_linkedin_failure_does_not_block_indeed():
 def test_returns_empty_when_all_fail():
     with patch("offer.scraping.sources.jobspy_source.scrape_jobs", side_effect=Exception("blocked")):
         assert JobspySource().fetch("python", hours=72) == []
+
+
+def test_description_is_stripped_of_html():
+    mock_df = pd.DataFrame([{
+        "title": "Python Engineer",
+        "company": "SpyCorp",
+        "location": "London, UK",
+        "job_url": "https://linkedin.com/jobs/view/123",
+        "date_posted": pd.Timestamp("2026-04-19"),
+        "site": "linkedin",
+        "description": "<p>Build <b>microservices</b> in Python.</p>",
+    }])
+
+    with patch("offer.scraping.sources.jobspy_source.scrape_jobs", return_value=mock_df):
+        results = JobspySource().fetch("python", hours=72)
+
+    assert len(results) >= 1
+    matching = [r for r in results if r.title == "Python Engineer"]
+    assert len(matching) >= 1
+    assert "microservices" in matching[0].description
+    assert "<" not in matching[0].description

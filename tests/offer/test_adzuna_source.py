@@ -12,6 +12,7 @@ MOCK_RESPONSE = {
             "location": {"display_name": "London, UK"},
             "redirect_url": "https://adzuna.co.uk/jobs/details/123",
             "created": _recent,
+            "description": "Develop ML models and pipelines.",
         }
     ]
 }
@@ -45,3 +46,11 @@ def test_returns_empty_on_http_error():
         with patch("offer.scraping.sources.adzuna_source.requests.get", side_effect=Exception("403")):
             results = AdzunaSource().fetch("python", hours=72)
     assert results == []
+
+
+def test_description_is_populated():
+    with patch.dict("os.environ", {"ADZUNA_APP_ID": "fake_id", "ADZUNA_APP_KEY": "fake_key"}):
+        with patch("offer.scraping.sources.adzuna_source.requests.get", return_value=_mock_get(MOCK_RESPONSE)):
+            results = AdzunaSource().fetch("machine learning", hours=72)
+
+    assert results[0].description == "Develop ML models and pipelines."
