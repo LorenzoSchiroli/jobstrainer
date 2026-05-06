@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 
@@ -10,3 +10,4 @@ class JobOffer:
     url: str
     source: str
     posted_at: date | None
+    description: str | None = None
