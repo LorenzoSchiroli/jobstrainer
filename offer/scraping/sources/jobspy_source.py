@@ -28,7 +28,8 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
             except Exception:
                 pass
         site = row.get("site", "unknown")
-        raw_desc = row.get("description") or ""
+        raw_desc_val = row.get("description")
+        raw_desc = "" if pd.isna(raw_desc_val) else str(raw_desc_val or "")
         results.append(JobOffer(
             title=title,
             company=str(row.get("company") or ""),
@@ -36,7 +37,7 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
             url=str(row.get("job_url") or ""),
             source=f"jobspy:{site}",
             posted_at=posted_at,
-            description=_strip_html(str(raw_desc)) or None if raw_desc else None,
+            description=_strip_html(raw_desc) or None,
         ))
     return results
 

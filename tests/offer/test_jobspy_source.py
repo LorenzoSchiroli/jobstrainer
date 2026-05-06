@@ -96,3 +96,26 @@ def test_description_is_stripped_of_html():
     assert len(matching) >= 1
     assert "microservices" in matching[0].description
     assert "<" not in matching[0].description
+
+
+def test_description_is_none_when_description_column_is_nan():
+    # Simulate a real jobspy DataFrame where description column has NaN values
+    # This mimics what jobspy returns when a job listing has no description
+    import numpy as np
+
+    mock_df = pd.DataFrame([{
+        "title": "Python Engineer",
+        "company": "SpyCorp",
+        "location": "London, UK",
+        "job_url": "https://linkedin.com/jobs/view/999",
+        "date_posted": pd.Timestamp("2026-04-19"),
+        "site": "linkedin",
+        "description": np.nan,  # jobspy returns NaN for missing descriptions
+    }])
+
+    with patch("offer.scraping.sources.jobspy_source.scrape_jobs", return_value=mock_df):
+        results = JobspySource().fetch("python", hours=72)
+
+    matching = [r for r in results if r.title == "Python Engineer"]
+    assert len(matching) >= 1
+    assert matching[0].description is None  # must not be "nan"
