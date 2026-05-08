@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
-from offer.scraping.sources.adzuna_source import AdzunaSource
+from ingestion.offer.scraping.sources.adzuna_source import AdzunaSource
 
 _recent = (datetime.now() - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
 

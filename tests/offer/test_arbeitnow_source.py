@@ -1,6 +1,6 @@
 import time
 from unittest.mock import MagicMock, patch
-from offer.scraping.sources.arbeitnow_source import ArbeitnowSource
+from ingestion.offer.scraping.sources.arbeitnow_source import ArbeitnowSource
 
 _NOW = time.time()
 

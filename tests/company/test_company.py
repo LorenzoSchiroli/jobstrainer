@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from company.company import enrich
-from company.models import CompanyExtraction, CompanyProfile
+from ingestion.company.company import enrich
+from ingestion.company.models import CompanyExtraction, CompanyProfile
 
 
 def _make_client():

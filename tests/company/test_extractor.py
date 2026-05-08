@@ -1,8 +1,8 @@
 import json
 from unittest.mock import MagicMock
 
-from company.parsing.extractor import extract_jsonld, extract_with_llm
-from company.models import CompanyExtraction
+from ingestion.company.parsing.extractor import extract_jsonld, extract_with_llm
+from ingestion.company.models import CompanyExtraction
 
 _HTML_WITH_JSONLD = """<html><head>
 <script type="application/ld+json">

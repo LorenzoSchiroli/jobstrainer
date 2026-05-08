@@ -1,5 +1,5 @@
-from offer.scraping.models import JobOffer
-from offer.scraping.deduplicator import deduplicate
+from ingestion.offer.scraping.models import JobOffer
+from ingestion.offer.scraping.deduplicator import deduplicate
 
 
 def _offer(title="Engineer", company="Acme", url="https://example.com/1", source="adzuna"):

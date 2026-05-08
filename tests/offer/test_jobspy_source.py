@@ -1,7 +1,7 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 import pandas as pd
-from offer.scraping.sources.jobspy_source import JobspySource, _scrape_linkedin
+from ingestion.offer.scraping.sources.jobspy_source import JobspySource, _scrape_linkedin
 
 
 def _make_job_post(title, job_id="123"):

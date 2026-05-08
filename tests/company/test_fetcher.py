@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from company.scraping.fetcher import fetch_html
+from ingestion.company.scraping.fetcher import fetch_html
 
 
 def test_fetch_returns_html_on_200():

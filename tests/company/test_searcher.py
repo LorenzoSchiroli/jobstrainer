@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from company.scraping.searcher import _financial_query, search_company_urls, search_financial
+from ingestion.company.scraping.searcher import _financial_query, search_company_urls, search_financial
 
 
 def test_search_returns_website_and_glassdoor_snippets():

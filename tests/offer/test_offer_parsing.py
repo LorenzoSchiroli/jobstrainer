@@ -1,9 +1,9 @@
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-from offer.models import OfferExtraction
-from offer.parsing.parsing import parse
-from offer.scraping.models import JobOffer
+from ingestion.offer.models import OfferExtraction
+from ingestion.offer.parsing.parsing import parse
+from ingestion.offer.scraping.models import JobOffer
 
 
 def _make_offer(description: str | None) -> JobOffer:

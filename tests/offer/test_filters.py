@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from offer.scraping.filters import is_english, _strip_html, _fetch_description_from_url
+from ingestion.offer.scraping.filters import is_english, _strip_html, _fetch_description_from_url
 
 
 def test_english_title_passes():

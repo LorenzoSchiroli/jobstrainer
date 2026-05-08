@@ -1,4 +1,4 @@
-from company.models import CompanyProfile
+from ingestion.company.models import CompanyProfile
 
 
 def test_company_profile_requires_name():

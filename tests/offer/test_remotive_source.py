@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
-from offer.scraping.sources.remotive_source import RemotiveSource
+from ingestion.offer.scraping.sources.remotive_source import RemotiveSource
 
 _recent = (datetime.now() - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
 _old = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
