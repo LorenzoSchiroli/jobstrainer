@@ -2,8 +2,8 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from company.scraping.fetcher import fetch_html, find_relevant_links
-from company.scraping.searcher import search_company_urls, search_financial
+from ingestion.company.scraping.fetcher import fetch_html, find_relevant_links
+from ingestion.company.scraping.searcher import search_company_urls, search_financial
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 import re
-from offer.scraping.models import JobOffer
+from ingestion.offer.scraping.models import JobOffer
 
 _PRIORITY = {"jobspy": 0, "adzuna": 1, "arbeitnow": 2, "remotive": 3}
 

@@ -2,9 +2,9 @@ import logging
 import os
 import requests
 from datetime import date, datetime
-from offer.scraping.filters import is_english
-from offer.scraping.models import JobOffer
-from offer.scraping.sources.base import Source
+from ingestion.offer.scraping.filters import is_english
+from ingestion.offer.scraping.models import JobOffer
+from ingestion.offer.scraping.sources.base import Source
 
 logger = logging.getLogger(__name__)
 

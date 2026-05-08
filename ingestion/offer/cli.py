@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 from groq import Groq
 from tabulate import tabulate
 
-from offer.offer import enrich_all
-from offer.scraping.sources.adzuna_source import AdzunaSource
-from offer.scraping.sources.arbeitnow_source import ArbeitnowSource
-from offer.scraping.sources.jobspy_source import JobspySource
-from offer.scraping.sources.remotive_source import RemotiveSource
+from ingestion.offer.offer import enrich_all
+from ingestion.offer.scraping.sources.adzuna_source import AdzunaSource
+from ingestion.offer.scraping.sources.arbeitnow_source import ArbeitnowSource
+from ingestion.offer.scraping.sources.jobspy_source import JobspySource
+from ingestion.offer.scraping.sources.remotive_source import RemotiveSource
 
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
 logging.getLogger("offer").setLevel(logging.INFO)

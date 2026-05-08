@@ -4,7 +4,7 @@ import re
 from bs4 import BeautifulSoup
 from groq import Groq
 
-from company.models import CompanyExtraction
+from ingestion.company.models import CompanyExtraction
 
 logger = logging.getLogger(__name__)
 

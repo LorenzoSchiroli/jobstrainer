@@ -1,8 +1,8 @@
 from groq import Groq
 
-from offer.models import OfferExtraction
-from offer.parsing.extractor import extract_with_llm
-from offer.scraping.models import JobOffer
+from ingestion.offer.models import OfferExtraction
+from ingestion.offer.parsing.extractor import extract_with_llm
+from ingestion.offer.scraping.models import JobOffer
 
 
 def parse(offer: JobOffer, client: Groq) -> OfferExtraction:

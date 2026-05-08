@@ -4,12 +4,12 @@ from threading import Semaphore, Lock
 from urllib.parse import urlparse
 from groq import Groq
 
-from offer.models import EnrichedOffer
-from offer.parsing.parsing import parse
-from offer.scraping.filters import _fetch_description_from_url, _strip_html
-from offer.scraping.models import JobOffer
-from offer.scraping.scraping import scrape
-from offer.scraping.sources.jobspy_source import make_linkedin_scraper
+from ingestion.offer.models import EnrichedOffer
+from ingestion.offer.parsing.parsing import parse
+from ingestion.offer.scraping.filters import _fetch_description_from_url, _strip_html
+from ingestion.offer.scraping.models import JobOffer
+from ingestion.offer.scraping.scraping import scrape
+from ingestion.offer.scraping.sources.jobspy_source import make_linkedin_scraper
 
 logger = logging.getLogger(__name__)
 

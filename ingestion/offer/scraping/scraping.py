@@ -2,13 +2,13 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
-from offer.scraping.deduplicator import deduplicate
-from offer.scraping.models import JobOffer
-from offer.scraping.sources.adzuna_source import AdzunaSource
-from offer.scraping.sources.arbeitnow_source import ArbeitnowSource
-from offer.scraping.sources.base import Source
-from offer.scraping.sources.jobspy_source import JobspySource
-from offer.scraping.sources.remotive_source import RemotiveSource
+from ingestion.offer.scraping.deduplicator import deduplicate
+from ingestion.offer.scraping.models import JobOffer
+from ingestion.offer.scraping.sources.adzuna_source import AdzunaSource
+from ingestion.offer.scraping.sources.arbeitnow_source import ArbeitnowSource
+from ingestion.offer.scraping.sources.base import Source
+from ingestion.offer.scraping.sources.jobspy_source import JobspySource
+from ingestion.offer.scraping.sources.remotive_source import RemotiveSource
 
 logger = logging.getLogger(__name__)
 

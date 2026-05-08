@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from offer.scraping.models import JobOffer
+from ingestion.offer.scraping.models import JobOffer
 
 
 class Source(ABC):

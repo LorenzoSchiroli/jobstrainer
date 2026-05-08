@@ -3,8 +3,8 @@ import re
 import time
 from groq import Groq, RateLimitError
 
-from offer.models import OfferExtraction
-from offer.scraping.models import JobOffer
+from ingestion.offer.models import OfferExtraction
+from ingestion.offer.scraping.models import JobOffer
 
 logger = logging.getLogger(__name__)
 

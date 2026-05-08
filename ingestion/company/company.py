@@ -2,9 +2,9 @@ import logging
 import time
 from groq import Groq
 
-from company.models import CompanyProfile
-from company.scraping.scraping import scrape, scrape_financial
-from company.parsing.parsing import parse, parse_financial
+from ingestion.company.models import CompanyProfile
+from ingestion.company.scraping.scraping import scrape, scrape_financial
+from ingestion.company.parsing.parsing import parse, parse_financial
 
 logger = logging.getLogger(__name__)
 

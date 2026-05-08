@@ -1,8 +1,8 @@
 import logging
 from groq import Groq
 
-from company.models import CompanyExtraction
-from company.parsing.extractor import extract_jsonld, extract_with_llm
+from ingestion.company.models import CompanyExtraction
+from ingestion.company.parsing.extractor import extract_jsonld, extract_with_llm
 
 logger = logging.getLogger(__name__)
 

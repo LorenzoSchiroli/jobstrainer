@@ -5,7 +5,7 @@ import time
 from dotenv import load_dotenv
 from groq import Groq
 
-from company.company import enrich
+from ingestion.company.company import enrich
 
 load_dotenv()
 
