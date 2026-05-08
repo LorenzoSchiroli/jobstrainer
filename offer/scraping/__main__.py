@@ -1,4 +1,4 @@
-from offer.cli import main
+from offer.scraping.cli import main
 
 if __name__ == "__main__":
     main()

@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 import pandas as pd
 from jobspy import scrape_jobs
+from jobspy.linkedin import LinkedIn
+from jobspy.model import ScraperInput, Site, DescriptionFormat
 from offer.scraping.filters import is_english, _strip_html
 from offer.scraping.models import JobOffer
 from offer.scraping.sources.base import Source
@@ -42,16 +44,46 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
     return results
 
 
+def _linkedin_job_to_offer(job) -> JobOffer:
+    location = job.location.display_location() if job.location else ""
+    return JobOffer(
+        title=job.title,
+        company=job.company_name or "",
+        location=location,
+        url=job.job_url,
+        source="jobspy:linkedin",
+        posted_at=job.date_posted,
+        description=None,
+    )
+
+
+def make_linkedin_scraper() -> LinkedIn:
+    """Create a LinkedIn scraper instance ready for parallel description fetching."""
+    scraper = LinkedIn()
+    scraper.scraper_input = ScraperInput(
+        site_type=[Site.LINKEDIN],
+        description_format=DescriptionFormat.HTML,
+    )
+    return scraper
+
+
 def _scrape_linkedin(query: str, hours: int) -> list[JobOffer]:
     try:
-        df = scrape_jobs(
-            site_name=["linkedin"],
+        scraper = LinkedIn()
+        response = scraper.scrape(ScraperInput(
+            site_type=[Site.LINKEDIN],
             search_term=query,
             location="Europe",
             hours_old=hours,
             results_wanted=50,
-        )
-        return _df_to_offers(df)
+            linkedin_fetch_description=False,
+            description_format=DescriptionFormat.HTML,
+        ))
+        return [
+            _linkedin_job_to_offer(job)
+            for job in response.jobs
+            if job.title and is_english(job.title)
+        ]
     except Exception as e:
         logger.warning("jobspy LinkedIn fetch failed: %s", e)
         return []

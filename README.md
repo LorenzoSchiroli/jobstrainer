@@ -43,9 +43,9 @@ input: cv + query (what i'm looking for)
 output: rank of offers
 
 Architecture:
-- crawler + enricher (jobs and companies, actively interrogate the backend)
-- backend (holding the database and data, holding the ranker operation, fully passive)
-- frontend (just ui)
+- scraper + parsing (jobs and companies, actively interrogate the backend); tools: langchain?
+- backend (holding the database and data, holding the ranker operation, fully passive); tools: postgresql + pgvector + pg_bm25 + llamaindex + langchain (+ crossencoder)
+- frontend (just ui, react)
 
 ranker
 approaches: bm25 + embedding -> cross-encoder reranker

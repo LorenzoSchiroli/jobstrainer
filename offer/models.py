@@ -8,6 +8,8 @@ class OfferExtraction(BaseModel):
     office: str | None = None
     seniority: str | None = None
     salary_range: str | None = None
+    languages_required: list[str] | None = None
+    text_language: str | None = None
 
 
 class EnrichedOffer(BaseModel):
@@ -22,3 +24,5 @@ class EnrichedOffer(BaseModel):
     office: str | None = None
     seniority: str | None = None
     salary_range: str | None = None
+    languages_required: list[str] | None = None
+    text_language: str | None = None
