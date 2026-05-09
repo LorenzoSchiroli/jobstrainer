@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_session
@@ -17,8 +18,14 @@ async def upsert_job(body: JobRequest, response: Response, session: AsyncSession
     company_result = await session.execute(select(Company).where(Company.name == normalized_company))
     company = company_result.scalar_one_or_none()
     if company is None:
-        company = Company(name=normalized_company)
-        session.add(company)
+        try:
+            company = Company(name=normalized_company)
+            session.add(company)
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            result = await session.execute(select(Company).where(Company.name == normalized_company))
+            company = result.scalar_one()
 
     job_result = await session.execute(select(Job).where(Job.url == body.url))
     job = job_result.scalar_one_or_none()

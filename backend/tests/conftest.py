@@ -35,9 +35,12 @@ async def db_session(engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session):
+async def client(engine):
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
     async def override_get_session():
-        yield db_session
+        async with session_factory() as session:
+            yield session
 
     app.dependency_overrides[get_session] = override_get_session
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
