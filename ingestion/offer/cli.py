@@ -1,7 +1,9 @@
 import argparse
+import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -41,6 +43,11 @@ def main() -> None:
         default=",".join(_ALL_SOURCES),
         help=f"Comma-separated sources. Available: {', '.join(_ALL_SOURCES)} (default: all)",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Save full results (including description and LLM output) to data/offers.json",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("GROQ_API_KEY")
@@ -53,11 +60,12 @@ def main() -> None:
     if unknown:
         parser.error(f"Unknown sources: {', '.join(unknown)}. Available: {', '.join(_ALL_SOURCES)}")
 
+    sources = [_ALL_SOURCES[name]() for name in source_names]
     client = Groq(api_key=api_key)
 
     print(f"Searching and parsing '{args.query}' (last {args.hours}h)...\n")
 
-    results = enrich_all(args.query, args.hours, client)
+    results = enrich_all(args.query, args.hours, client, sources)
 
     if not results:
         print("No offers found.")
@@ -73,7 +81,7 @@ def main() -> None:
             _t(o.office, 15),
             _t(o.seniority, 10),
             _t(o.salary_range, 20),
-            str(o.posted_at) if o.posted_at else "—",
+            (o.posted_at.strftime("%Y-%m-%d %H:%M") if o.posted_at.hour or o.posted_at.minute else o.posted_at.strftime("%Y-%m-%d")) if o.posted_at else "—",
         ]
         for i, o in enumerate(results)
     ]
@@ -81,3 +89,15 @@ def main() -> None:
     headers = ["#", "Title", "Company", "Type", "Location", "Office", "Seniority", "Salary", "Posted"]
     print(tabulate(rows, headers=headers, tablefmt="simple"))
     print(f"\n{len(results)} offers found.")
+
+    if args.json:
+        out_path = Path("data/offers.json")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            json.dump(
+                [o.model_dump(mode="json") for o in results],
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+        print(f"Saved to {out_path}")
