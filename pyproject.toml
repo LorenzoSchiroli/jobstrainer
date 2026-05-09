@@ -16,6 +16,7 @@ dependencies = [
     "python-jobspy>=1.1.82",
     "requests>=2.33.1",
     "tabulate>=0.10.0",
+    "tqdm>=4.67.3",
 ]
 
 [dependency-groups]
