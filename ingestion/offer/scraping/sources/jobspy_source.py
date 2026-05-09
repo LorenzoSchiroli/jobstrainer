@@ -1,6 +1,5 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import datetime, time as dt_time
 import pandas as pd
 from jobspy import scrape_jobs
 from jobspy.linkedin import LinkedIn
@@ -22,11 +21,11 @@ def _df_to_offers(df: pd.DataFrame) -> list[JobOffer]:
             continue
         if not is_english(title):
             continue
-        posted_at: date | None = None
+        posted_at: datetime | None = None
         raw_date = row.get("date_posted")
         if pd.notna(raw_date) and raw_date is not None:
             try:
-                posted_at = pd.Timestamp(raw_date).date()
+                posted_at = datetime.combine(pd.Timestamp(raw_date).date(), dt_time.min)
             except Exception:
                 pass
         site = row.get("site", "unknown")
@@ -52,19 +51,9 @@ def _linkedin_job_to_offer(job) -> JobOffer:
         location=location,
         url=job.job_url,
         source="jobspy:linkedin",
-        posted_at=job.date_posted,
-        description=None,
+        posted_at=datetime.combine(job.date_posted, dt_time.min) if job.date_posted else None,
+        description=_strip_html(job.description) if job.description else None,
     )
-
-
-def make_linkedin_scraper() -> LinkedIn:
-    """Create a LinkedIn scraper instance ready for parallel description fetching."""
-    scraper = LinkedIn()
-    scraper.scraper_input = ScraperInput(
-        site_type=[Site.LINKEDIN],
-        description_format=DescriptionFormat.HTML,
-    )
-    return scraper
 
 
 def _scrape_linkedin(query: str, hours: int) -> list[JobOffer]:
@@ -76,7 +65,7 @@ def _scrape_linkedin(query: str, hours: int) -> list[JobOffer]:
             location="Europe",
             hours_old=hours,
             results_wanted=50,
-            linkedin_fetch_description=False,
+            linkedin_fetch_description=True,
             description_format=DescriptionFormat.HTML,
         ))
         return [
@@ -137,18 +126,9 @@ def _scrape_indeed(query: str, hours: int, country: str) -> list[JobOffer]:
 class JobspySource(Source):
     def fetch(self, query: str, hours: int) -> list[JobOffer]:
         results: list[JobOffer] = []
-
-        tasks = [
-            (_scrape_linkedin, (query, hours)),
-            (_scrape_glassdoor, (query, hours)),
-            (_scrape_google, (query, hours)),
-        ] + [
-            (_scrape_indeed, (query, hours, country)) for country in _INDEED_COUNTRIES
-        ]
-
-        with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-            futures = [pool.submit(fn, *args) for fn, args in tasks]
-            for future in as_completed(futures):
-                results.extend(future.result())
-
+        results.extend(_scrape_linkedin(query, hours))
+        results.extend(_scrape_glassdoor(query, hours))
+        results.extend(_scrape_google(query, hours))
+        for country in _INDEED_COUNTRIES:
+            results.extend(_scrape_indeed(query, hours, country))
         return results

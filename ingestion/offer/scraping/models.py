@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 
 
 @dataclass
@@ -9,5 +9,5 @@ class JobOffer:
     location: str
     url: str
     source: str
-    posted_at: date | None
+    posted_at: datetime | None
     description: str | None = None

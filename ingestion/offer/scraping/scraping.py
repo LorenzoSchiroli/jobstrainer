@@ -1,6 +1,7 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import datetime
+
+from tqdm import tqdm
 
 from ingestion.offer.scraping.deduplicator import deduplicate
 from ingestion.offer.scraping.models import JobOffer
@@ -20,14 +21,11 @@ def scrape(query: str, hours: int, sources: list[Source] | None = None) -> list[
         sources = [cls() for cls in _ALL_SOURCE_CLASSES]
     logger.info("Scraping %d source(s)...", len(sources))
     all_offers: list[JobOffer] = []
-    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        futures = {pool.submit(src.fetch, query, hours): src.__class__.__name__ for src in sources}
-        for future in as_completed(futures):
-            src_name = futures[future]
-            offers = future.result()
-            logger.info("  %-20s %d offers", src_name, len(offers))
-            all_offers.extend(offers)
+    for src in tqdm(sources, desc="Scraping sources", unit="source"):
+        offers = src.fetch(query, hours)
+        logger.info("  %-20s %d offers", src.__class__.__name__, len(offers))
+        all_offers.extend(offers)
     deduped = deduplicate(all_offers)
-    deduped.sort(key=lambda o: o.posted_at or date.min, reverse=True)
+    deduped.sort(key=lambda o: o.posted_at or datetime.min, reverse=True)
     logger.info("Scraped %d offers total (after dedup)", len(deduped))
     return deduped

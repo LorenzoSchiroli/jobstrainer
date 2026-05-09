@@ -1,7 +1,7 @@
 import logging
 import time
 import requests
-from datetime import date
+from datetime import datetime
 from ingestion.offer.scraping.filters import is_english, _strip_html
 from ingestion.offer.scraping.models import JobOffer
 from ingestion.offer.scraping.sources.base import Source
@@ -41,7 +41,7 @@ class ArbeitnowSource(Source):
                 location=item.get("location", ""),
                 url=item.get("url", ""),
                 source="arbeitnow",
-                posted_at=date.fromtimestamp(item["created_at"]) if item.get("created_at") else None,
+                posted_at=datetime.fromtimestamp(item["created_at"]) if item.get("created_at") else None,
                 description=_strip_html(raw_desc) or None,
             ))
 

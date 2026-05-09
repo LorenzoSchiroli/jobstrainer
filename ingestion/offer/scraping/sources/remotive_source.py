@@ -1,6 +1,6 @@
 import logging
 import requests
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from ingestion.offer.scraping.filters import is_english, _strip_html
 from ingestion.offer.scraping.models import JobOffer
 from ingestion.offer.scraping.sources.base import Source
@@ -41,7 +41,7 @@ class RemotiveSource(Source):
                 location=item.get("candidate_required_location", "Remote"),
                 url=item.get("url", ""),
                 source="remotive",
-                posted_at=posted.date(),
+                posted_at=posted.replace(tzinfo=None),
                 description=_strip_html(raw_desc) or None,
             ))
 
