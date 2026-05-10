@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 import pytest
+import requests
 from ingestion.offer.models import EnrichedOffer
 from ingestion.client import post_job, post_company
 
@@ -12,7 +13,9 @@ def backend_url(monkeypatch):
 def _resp(status: int, body: dict) -> MagicMock:
     r = MagicMock()
     r.status_code = status
+    r.ok = status < 400
     r.json.return_value = body
+    r.text = str(body)
     return r
 
 
@@ -70,3 +73,17 @@ def test_post_company_hits_correct_url():
         post_company({"name": "Acme"})
 
     assert mock_post.call_args.args[0] == "http://localhost:8000/companies"
+
+
+def test_post_job_raises_on_http_error():
+    with patch("ingestion.client.requests.post") as mock_post:
+        mock_post.return_value = _resp(422, {"detail": "validation error"})
+        with pytest.raises(requests.HTTPError):
+            post_job(_offer())
+
+
+def test_post_company_raises_on_http_error():
+    with patch("ingestion.client.requests.post") as mock_post:
+        mock_post.return_value = _resp(500, {"detail": "internal error"})
+        with pytest.raises(requests.HTTPError):
+            post_company({"name": "Acme"})

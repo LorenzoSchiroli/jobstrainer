@@ -4,18 +4,23 @@ from ingestion.offer.models import EnrichedOffer
 
 
 def _base() -> str:
-    return os.environ["BACKEND_URL"].rstrip("/")
+    url = os.environ.get("BACKEND_URL")
+    if not url:
+        raise RuntimeError("BACKEND_URL environment variable is not set")
+    return url.rstrip("/")
 
 
 def post_job(offer: EnrichedOffer) -> tuple[int, dict]:
     payload = offer.model_dump(mode="json")
     payload["company_name"] = payload.pop("company")
     resp = requests.post(f"{_base()}/jobs", json=payload)
-    resp.raise_for_status()
+    if not resp.ok:
+        raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
     return resp.status_code, resp.json()
 
 
 def post_company(data: dict) -> tuple[int, dict]:
     resp = requests.post(f"{_base()}/companies", json=data)
-    resp.raise_for_status()
+    if not resp.ok:
+        raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
     return resp.status_code, resp.json()
