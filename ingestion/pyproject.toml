@@ -1,0 +1,22 @@
+[project]
+name = "ingestion"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "ddgs>=9.14.1",
+    "groq>=1.2.0",
+    "playwright>=1.58.0",
+    "pydantic>=2.13.2",
+    "pyperclip>=1.11.0",
+    "python-dotenv>=1.2.2",
+    "python-jobspy>=1.1.82",
+    "requests>=2.33.1",
+    "tabulate>=0.10.0",
+    "tqdm>=4.67.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
