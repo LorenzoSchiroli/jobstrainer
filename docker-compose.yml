@@ -35,8 +35,12 @@ services:
     environment:
       OFFER_QUERY: "machine learning engineer"
       GROQ_API_KEY: ${GROQ_API_KEY}
+      BACKEND_URL: http://backend:8000
     volumes:
       - ./data:/app/ingestion/data
+    depends_on:
+      backend:
+        condition: service_started
 
 volumes:
   postgres_data:

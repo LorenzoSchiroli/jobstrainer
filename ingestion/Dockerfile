@@ -16,4 +16,4 @@ COPY ingestion/ ./ingestion/
 
 WORKDIR /app/ingestion
 
-CMD ["sh", "-c", "if [ -z \"$OFFER_QUERY\" ]; then echo 'ERROR: OFFER_QUERY is not set' >&2; exit 1; fi; while true; do uv run python -m ingestion.offer \"$OFFER_QUERY\" --hours 2 --json; sleep 7200; done"]
+CMD ["sh", "-c", "if [ -z \"$OFFER_QUERY\" ]; then echo 'ERROR: OFFER_QUERY is not set' >&2; exit 1; fi; while true; do uv run python -m ingestion.pipeline \"$OFFER_QUERY\" --hours 2; sleep 7200; done"]
