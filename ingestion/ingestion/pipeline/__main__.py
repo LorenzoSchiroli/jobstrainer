@@ -53,12 +53,12 @@ def run(query: str, hours: int) -> None:
         if status == 201:
             new_companies += 1
         if is_enrichment_needed(record):
-            profile, _ = enrich_company(name, location, groq)
             try:
+                profile, _ = enrich_company(name, location, groq)
                 post_company(profile.model_dump(mode="json"))
                 enriched += 1
             except Exception as e:
-                print(f"[warn] Failed to post enriched company {name!r}: {e}")
+                print(f"[warn] Failed to enrich company {name!r}: {e}")
     print(f"Companies: {new_companies} new, {enriched} enriched out of {len(company_locations)} unique")
 
 
