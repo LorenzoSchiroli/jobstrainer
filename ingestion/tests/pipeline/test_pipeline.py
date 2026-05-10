@@ -41,3 +41,19 @@ def test_bool_false_is_not_null():
         "is_startup": False, "website": "acme.com", "country": "US",
     }
     assert is_enrichment_needed(company) is False
+
+
+def test_identity_fields_not_counted():
+    # id and name are always populated — should not dilute the null count
+    company = {
+        "id": "abc-123",
+        "name": "Acme",
+        "created_at": "2024-01-01",
+        "updated_at": "2024-01-01",
+        "website": None,
+        "country": None,
+        "founded_year": None,
+        "employee_count": None,
+    }
+    # 4 None enrichable fields out of 4 enrichable = 100% → True
+    assert is_enrichment_needed(company) is True

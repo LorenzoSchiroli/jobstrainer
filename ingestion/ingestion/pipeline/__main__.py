@@ -6,8 +6,14 @@ from ingestion.company.company import enrich as enrich_company
 from ingestion.client import post_job, post_company
 
 
+_IDENTITY_FIELDS = {"id", "name", "created_at", "updated_at"}
+
+
 def is_enrichment_needed(company: dict) -> bool:
-    values = list(company.values())
+    enrichable = {k: v for k, v in company.items() if k not in _IDENTITY_FIELDS}
+    values = list(enrichable.values())
+    if not values:
+        return False
     return sum(1 for v in values if v is None) >= len(values) / 2
 
 
@@ -19,23 +25,41 @@ def run(query: str, hours: int) -> None:
     print(f"Scraped {len(offers)} offers")
 
     new_jobs = 0
+    errors = 0
     company_locations: dict[str, str] = {}
     for offer in offers:
-        status, _ = post_job(offer)
-        if status == 201:
-            new_jobs += 1
-        if offer.company not in company_locations:
+        try:
+            status, _ = post_job(offer)
+            if status == 201:
+                new_jobs += 1
+        except Exception as e:
+            print(f"[warn] Failed to post job {offer.url!r}: {e}")
+            errors += 1
+            continue
+        if offer.company not in company_locations or (
+            company_locations[offer.company] == "" and offer.location
+        ):
             company_locations[offer.company] = offer.location or ""
-    print(f"Jobs: {new_jobs} new, {len(offers) - new_jobs} existing")
+    print(f"Jobs: {new_jobs} new, {len(offers) - new_jobs - errors} existing, {errors} errors")
 
     enriched = 0
+    new_companies = 0
     for name, location in company_locations.items():
-        _, record = post_company({"name": name})
+        try:
+            status, record = post_company({"name": name})
+        except Exception as e:
+            print(f"[warn] Failed to upsert company {name!r}: {e}")
+            continue
+        if status == 201:
+            new_companies += 1
         if is_enrichment_needed(record):
             profile, _ = enrich_company(name, location, groq)
-            post_company(profile.model_dump(mode="json"))
-            enriched += 1
-    print(f"Companies: {enriched} enriched out of {len(company_locations)} unique")
+            try:
+                post_company(profile.model_dump(mode="json"))
+                enriched += 1
+            except Exception as e:
+                print(f"[warn] Failed to post enriched company {name!r}: {e}")
+    print(f"Companies: {new_companies} new, {enriched} enriched out of {len(company_locations)} unique")
 
 
 def main() -> None:
