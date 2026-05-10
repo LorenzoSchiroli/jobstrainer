@@ -26,6 +26,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   ingestion:
     build:
@@ -40,7 +46,7 @@ services:
       - ./data:/app/ingestion/data
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   postgres_data:

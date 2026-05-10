@@ -14,6 +14,11 @@ app.include_router(companies.router)
 app.include_router(jobs.router)
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     import traceback
