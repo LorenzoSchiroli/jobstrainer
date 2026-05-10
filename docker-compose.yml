@@ -27,5 +27,15 @@ services:
       postgres:
         condition: service_healthy
 
+  ingestion:
+    build:
+      context: .
+      dockerfile: ingestion/Dockerfile
+    environment:
+      OFFER_QUERY: "machine learning engineer"
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    volumes:
+      - ./data:/app/ingestion/data
+
 volumes:
   postgres_data:
