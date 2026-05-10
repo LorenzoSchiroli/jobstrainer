@@ -55,7 +55,7 @@ def test_post_job_hits_correct_url():
         mock_post.return_value = _resp(201, {})
         post_job(_offer())
 
-    assert mock_post.call_args.args[0] == "http://localhost:8000/jobs"
+    assert mock_post.call_args.args[0] == "http://localhost:8000/jobs/"
 
 
 def test_post_company_sends_dict_and_returns_status():
@@ -72,7 +72,7 @@ def test_post_company_hits_correct_url():
         mock_post.return_value = _resp(200, {})
         post_company({"name": "Acme"})
 
-    assert mock_post.call_args.args[0] == "http://localhost:8000/companies"
+    assert mock_post.call_args.args[0] == "http://localhost:8000/companies/"
 
 
 def test_post_job_raises_on_http_error():
