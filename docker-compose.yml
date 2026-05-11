@@ -39,8 +39,12 @@ services:
       dockerfile: ingestion/Dockerfile
     restart: unless-stopped
     environment:
-      OFFER_QUERY: "machine learning engineer"
+      OFFER_QUERY: ${OFFER_QUERY}
       GROQ_API_KEY: ${GROQ_API_KEY}
+      SERPERDEV_API_KEY: ${SERPERDEV_API_KEY}
+      DDGS_PROXY: ${DDGS_PROXY:-}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
       BACKEND_URL: http://backend:8000
     volumes:
       - ./data:/app/ingestion/data

@@ -8,7 +8,8 @@ from ddgs import DDGS
 logger = logging.getLogger(__name__)
 
 _REGION = "wt-wt"
-_BACKEND = "duckduckgo,brave"
+_BACKEND = "auto"
+_PROXY = os.environ.get("DDGS_PROXY")
 _SERPER_URL = "https://google.serper.dev/search"
 
 _BLOCKED_DOMAINS = {
@@ -63,7 +64,7 @@ def _search_serper(query: str, max_results: int, api_key: str) -> list[dict]:
 
 def _search_ddgs(query: str, max_results: int) -> list[dict]:
     try:
-        with DDGS() as ddgs:
+        with DDGS(proxy=_PROXY) as ddgs:
             return list(ddgs.text(query, max_results=max_results, region=_REGION, backend=_BACKEND))
     except Exception as e:
         logger.warning("DDG search failed for %r: %s", query, e)
