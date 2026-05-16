@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
+from ingestion.utils.text import has_text as _has_text_util
+
 logger = logging.getLogger(__name__)
 
 _HEADERS = {
@@ -124,10 +126,7 @@ def _is_challenge(html: str) -> bool:
 
 
 def _has_text(html: str) -> bool:
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer"]):
-        tag.decompose()
-    return bool(soup.get_text(strip=True))
+    return _has_text_util(html)
 
 
 def fetch_html(url: str) -> str | None:

@@ -8,6 +8,7 @@ from ingestion.offer.parsing.parsing import parse
 from ingestion.offer.scraping.filters import _fetch_description_from_url
 from ingestion.offer.scraping.models import JobOffer
 from ingestion.offer.scraping.scraping import scrape
+from ingestion.utils.text import truncate_description
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,10 @@ def _enrich_one(offer: JobOffer, client: Groq) -> EnrichedOffer:
         logger.info("fetch  [%s] %s", offer.source, offer.title[:60])
         full_desc = _fetch_description_from_url(offer.url)
         if full_desc:
-            offer.description = full_desc
+            offer.description = truncate_description(full_desc)
+
+    if offer.description:
+        offer.description = truncate_description(offer.description)
 
     logger.info("parse  [%s] %s", offer.source, offer.title[:60])
     extraction = parse(offer, client)
