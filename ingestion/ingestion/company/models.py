@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 
 class CompanyExtraction(BaseModel):
     website: str | None = None
+    linkedin_url: str | None = None
+    topic: str | None = None
     country: str | None = None
     founded_year: int | None = None
     employee_count: str | None = None
