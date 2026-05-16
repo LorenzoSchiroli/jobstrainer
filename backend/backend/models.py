@@ -54,6 +54,7 @@ class Job(Base):
     salary_range: Mapped[str | None] = mapped_column(Text)
     languages_required: Mapped[list | None] = mapped_column(JSONB)
     text_language: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

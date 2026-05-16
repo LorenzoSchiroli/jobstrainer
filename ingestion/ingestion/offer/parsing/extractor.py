@@ -5,6 +5,7 @@ from groq import Groq
 
 from ingestion.offer.models import OfferExtraction
 from ingestion.offer.scraping.models import JobOffer
+from ingestion.utils.text import MAX_OFFER_DESCRIPTION_CHARS
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,14 @@ _LLM_PROMPT = (
     "Extract job offer details from the text below. "
     "Return ONLY valid JSON with exactly these fields:\n"
     '{{"employment_type": str|null, "location_type": str|null, "office": str|null, "seniority": str|null, '
-    '"salary_range": str|null, "languages_required": list, "text_language": str}}\n\n'
+    '"salary_range": str|null, "languages_required": list, "text_language": str, '
+    '"summary": {{"role_info": list, "requirements": list, "responsibilities": list, "domain": list}}}}\n\n'
+    "IMPORTANT: summary contains four lists of short strings (keywords or brief phrases, not full sentences):\n"
+    "  role_info: key facts about the role itself (e.g. team size, reporting line, contract type hints).\n"
+    "  requirements: required skills, technologies, qualifications, and years of experience.\n"
+    "  responsibilities: main tasks and duties of the role.\n"
+    "  domain: business or technical domains the role operates in (e.g. 'fintech', 'machine learning', 'e-commerce'). Keep this short — 1 to 3 items.\n"
+    "Each list item must be a short phrase. Never use null for any summary list — use [] if nothing applies.\n"
     "CRITICAL: when a value is unknown or not applicable, use JSON null (no quotes) — NEVER the string \"null\".\n"
     "IMPORTANT: text_language is the main language the offer is written in (e.g. \"english\", \"french\"). "
     "Detect it from the text — NEVER return null for this field.\n"
@@ -27,7 +35,8 @@ _LLM_PROMPT = (
     "If only an office city is mentioned without specifying remote or hybrid, assume on-site.\n"
     "IMPORTANT: office must be a short city name or address (e.g. \"berlin\", \"london, canary wharf\"). "
     "Only populate when location_type is on-site or hybrid. Never write a sentence or explanation — use null instead.\n"
-    "IMPORTANT: languages_required is a list of human languages required for the role. "
+    "IMPORTANT: languages_required is a list of HUMAN SPOKEN languages required for the role (e.g. 'english', 'french', 'german'). "
+    "Never include programming languages, frameworks, or tools — only natural spoken languages. "
     "Include languages explicitly required in the qualifications. "
     "Also include the language the description is written in if it is not English, as it implies that language is needed. "
     "Return an empty list [] if no language requirement can be identified — never null.\n"
@@ -49,7 +58,7 @@ def _strip_markdown_json(text: str) -> str:
 def extract_with_llm(offer: JobOffer, client: Groq) -> OfferExtraction:
     prompt = _LLM_PROMPT.format(
         title=offer.title,
-        description=(offer.description or "")[:8000],
+        description=(offer.description or "")[:MAX_OFFER_DESCRIPTION_CHARS],
     )
     try:
         response = client.chat.completions.create(
