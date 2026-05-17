@@ -1,0 +1,40 @@
+import json
+import os
+from groq import Groq
+from backend.search.filters import SearchFilters
+
+_SYSTEM_PROMPT = """Extract structured search filters and a semantic query from a CV and job search query.
+Return a JSON object with exactly these fields (null for unknown):
+{
+  "semantic_query": "required — keyword-rich string combining CV skills and job intent",
+  "is_consulting": boolean or null,
+  "is_startup": boolean or null,
+  "industry": "string or null",
+  "country": "string or null",
+  "employee_count": "string or null",
+  "min_review_score": number or null,
+  "min_financial_health_score": integer or null,
+  "employment_type": "full-time|part-time|contract|internship|stage|freelance or null",
+  "location_type": "on-site|remote|hybrid or null",
+  "seniority": "junior|mid|senior|lead|principal|staff|director or null",
+  "languages_required": ["list"] or null
+}"""
+
+
+def get_groq_client() -> Groq:
+    return Groq(api_key=os.environ["GROQ_API_KEY"])
+
+
+async def extract_filters(client: Groq, cv_text: str, query: str) -> SearchFilters:
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": f"CV:\n{cv_text}\n\nSearch query:\n{query}"},
+        ],
+        response_format={"type": "json_object"},
+    )
+    data = json.loads(response.choices[0].message.content)
+    data.setdefault("semantic_query", query)
+    valid_fields = SearchFilters.model_fields.keys()
+    return SearchFilters(**{k: v for k, v in data.items() if k in valid_fields})
