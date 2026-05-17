@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_session
-from backend.models import Company, Job
+from backend.models import Company, Job, Outbox
 from backend.schemas import JobRequest, JobResponse
 from backend.routers.companies import _normalize, _is_empty
 
@@ -30,17 +30,26 @@ async def upsert_job(body: JobRequest, response: Response, session: AsyncSession
     job_result = await session.execute(select(Job).where(Job.url == body.url))
     job = job_result.scalar_one_or_none()
 
+    embedding = body.embedding
+    job_data = body.model_dump(exclude={"company_name", "embedding"})
+
     if job is None:
-        data = body.model_dump(exclude={"company_name"})
-        job = Job(company_id=company.id, **data)
+        job = Job(company_id=company.id, **job_data)
         session.add(job)
         response.status_code = 201
     else:
-        data = body.model_dump(exclude={"company_name", "url"})
-        for field, value in data.items():
-            if not _is_empty(value) and _is_empty(getattr(job, field)):
+        for field, value in job_data.items():
+            if field != "url" and not _is_empty(value) and _is_empty(getattr(job, field)):
                 setattr(job, field, value)
         response.status_code = 200
+
+    await session.flush()
+
+    session.add(Outbox(
+        event_type="job_upserted",
+        entity_id=job.id,
+        payload={"embedding": embedding},
+    ))
 
     await session.commit()
     await session.refresh(job)

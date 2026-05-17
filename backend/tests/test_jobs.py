@@ -105,3 +105,22 @@ async def test_create_job_accepts_summary_and_embedding(client):
         "embedding": [0.1] * 384,
     })
     assert resp.status_code == 201
+
+
+from sqlalchemy import select
+from backend.models import Outbox
+
+
+async def test_job_upsert_creates_outbox_event(client, db_session):
+    await client.post("/jobs/", json={
+        "url": "https://example.com/outbox-test",
+        "title": "Engineer",
+        "company_name": "Acme",
+        "embedding": [0.5] * 384,
+    })
+    result = await db_session.execute(
+        select(Outbox).where(Outbox.event_type == "job_upserted")
+    )
+    events = result.scalars().all()
+    assert len(events) == 1
+    assert events[0].payload["embedding"] == [0.5] * 384
