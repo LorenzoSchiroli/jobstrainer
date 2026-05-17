@@ -9,6 +9,9 @@ COPY backend/pyproject.toml ./backend/pyproject.toml
 
 RUN uv sync --package backend --no-dev
 
+RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-en-v1.5')"
+RUN uv run python -c "from sentence_transformers.cross_encoder import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+
 COPY backend/ ./backend/
 
 WORKDIR /app/backend
