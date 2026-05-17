@@ -34,7 +34,9 @@ async def search_client(engine):
             yield session
 
     mock_biencoder = MagicMock()
-    mock_biencoder.encode.return_value = [0.0] * 384
+    encode_result = MagicMock()
+    encode_result.tolist.return_value = [0.0] * 384
+    mock_biencoder.encode.return_value = encode_result
     mock_reranker = MagicMock()
     mock_reranker.predict.return_value = [0.9]
     mock_os = AsyncMock()

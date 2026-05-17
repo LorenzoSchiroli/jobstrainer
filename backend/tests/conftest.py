@@ -1,9 +1,9 @@
 import os
 
-# Set DATABASE_URL before any backend imports to avoid KeyError at module load time
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test")
 
 import pytest_asyncio
+from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -43,6 +43,9 @@ async def client(engine):
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
+    with patch("backend.main.init_models"), \
+         patch("backend.main.init_opensearch", new_callable=AsyncMock), \
+         patch("backend.main.outbox_worker", new_callable=AsyncMock):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            yield ac
     app.dependency_overrides.clear()
