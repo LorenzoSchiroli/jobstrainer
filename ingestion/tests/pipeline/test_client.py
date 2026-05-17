@@ -87,3 +87,17 @@ def test_post_company_raises_on_http_error():
         mock_post.return_value = _resp(500, {"detail": "internal error"})
         with pytest.raises(requests.HTTPError):
             post_company({"name": "Acme"})
+
+
+def test_post_job_includes_embedding_when_provided():
+    with patch("ingestion.client.requests.post") as mock_post:
+        mock_post.return_value = _resp(201, {"id": "abc"})
+        post_job(_offer(), embedding=[0.1, 0.2, 0.3])
+    assert mock_post.call_args.kwargs["json"]["embedding"] == [0.1, 0.2, 0.3]
+
+
+def test_post_job_omits_embedding_when_none():
+    with patch("ingestion.client.requests.post") as mock_post:
+        mock_post.return_value = _resp(201, {"id": "abc"})
+        post_job(_offer(), embedding=None)
+    assert "embedding" not in mock_post.call_args.kwargs["json"]

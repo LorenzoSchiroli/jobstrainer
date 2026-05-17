@@ -4,7 +4,7 @@ from groq import Groq
 from ingestion.offer.offer import enrich_all
 from ingestion.company.company import enrich as enrich_company
 from ingestion.client import post_job, post_company
-
+from ingestion.embedder import embed
 
 _IDENTITY_FIELDS = {"id", "name", "created_at", "updated_at"}
 
@@ -29,7 +29,8 @@ def run(query: str, hours: int) -> None:
     company_locations: dict[str, str] = {}
     for offer in offers:
         try:
-            status, _ = post_job(offer)
+            embedding = embed(offer.title, offer.summary)
+            status, _ = post_job(offer, embedding=embedding)
             if status == 201:
                 new_jobs += 1
         except Exception as e:

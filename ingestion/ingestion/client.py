@@ -10,9 +10,11 @@ def _base() -> str:
     return url.rstrip("/")
 
 
-def post_job(offer: EnrichedOffer) -> tuple[int, dict]:
+def post_job(offer: EnrichedOffer, embedding: list[float] | None = None) -> tuple[int, dict]:
     payload = offer.model_dump(mode="json")
     payload["company_name"] = payload.pop("company")
+    if embedding is not None:
+        payload["embedding"] = embedding
     resp = requests.post(f"{_base()}/jobs/", json=payload, timeout=30)
     if not resp.ok:
         raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
