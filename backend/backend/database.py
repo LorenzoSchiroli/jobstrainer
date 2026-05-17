@@ -14,6 +14,11 @@ def _init():
         _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
 
 
+def get_session_factory() -> async_sessionmaker:
+    _init()
+    return _session_factory
+
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     _init()
     async with _session_factory() as session:
