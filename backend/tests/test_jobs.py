@@ -94,3 +94,14 @@ async def test_get_job_returns_200(client):
 async def test_get_job_returns_404_when_not_found(client):
     resp = await client.get("/jobs/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+async def test_create_job_accepts_summary_and_embedding(client):
+    resp = await client.post("/jobs/", json={
+        "url": "https://example.com/job/schema-test",
+        "title": "ML Engineer",
+        "company_name": "Acme",
+        "summary": {"role_info": ["builds models"], "requirements": ["Python"], "responsibilities": [], "domain": []},
+        "embedding": [0.1] * 384,
+    })
+    assert resp.status_code == 201

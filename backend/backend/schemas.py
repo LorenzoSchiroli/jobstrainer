@@ -43,6 +43,8 @@ class JobRequest(BaseModel):
     salary_range: str | None = None
     languages_required: list[str] = []
     text_language: str | None = None
+    summary: dict | None = None
+    embedding: list[float] | None = None
 
 
 class JobResponse(BaseModel):
@@ -70,3 +72,19 @@ class JobResponse(BaseModel):
     @classmethod
     def coerce_null(cls, v: list[str] | None) -> list[str]:
         return v or []
+
+
+class CompanyInSearch(BaseModel):
+    name: str
+    is_consulting: bool | None = None
+    is_startup: bool | None = None
+    review_score: float | None = None
+    financial_health_score: int | None = None
+    industry: str | None = None
+    country: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class JobSearchResponse(JobResponse):
+    company: CompanyInSearch
