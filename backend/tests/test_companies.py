@@ -43,3 +43,17 @@ async def test_get_company_returns_200(client):
 async def test_get_company_returns_404_when_not_found(client):
     resp = await client.get("/companies/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+from sqlalchemy import select
+from backend.models import Outbox
+
+
+async def test_company_upsert_creates_outbox_event(client, db_session):
+    await client.post("/companies/", json={"name": "TestCo", "industry": "tech"})
+    result = await db_session.execute(
+        select(Outbox).where(Outbox.event_type == "company_upserted")
+    )
+    events = result.scalars().all()
+    assert len(events) == 1
+    assert events[0].payload == {}

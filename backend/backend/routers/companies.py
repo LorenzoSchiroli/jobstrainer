@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_session
-from backend.models import Company
+from backend.models import Company, Outbox
 from backend.schemas import CompanyRequest, CompanyResponse
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -40,6 +40,14 @@ async def upsert_company(body: CompanyRequest, response: Response, session: Asyn
             if not _is_empty(value) and _is_empty(getattr(company, field)):
                 setattr(company, field, value)
         response.status_code = 200
+
+    await session.flush()
+
+    session.add(Outbox(
+        event_type="company_upserted",
+        entity_id=company.id,
+        payload={},
+    ))
 
     await session.commit()
     await session.refresh(company)
