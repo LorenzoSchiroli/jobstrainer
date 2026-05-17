@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "python-jobspy>=1.1.82",
     "requests>=2.33.1",
+    "sentence-transformers>=3.0.0",
     "tabulate>=0.10.0",
     "trafilatura>=2.0.0",
     "tqdm>=4.67.3",
