@@ -18,7 +18,7 @@ _INDEX_BODY = {
             "embedding": {
                 "type": "knn_vector",
                 "dimension": 384,
-                "method": {"name": "hnsw", "space_type": "cosine", "engine": "faiss"},
+                "method": {"name": "hnsw", "space_type": "cosinesimil", "engine": "lucene"},
             },
             "employment_type":          {"type": "keyword"},
             "location_type":            {"type": "keyword"},
