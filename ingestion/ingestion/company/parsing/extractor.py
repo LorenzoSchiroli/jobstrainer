@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from bs4 import BeautifulSoup
 from groq import Groq
@@ -8,6 +9,8 @@ from ingestion.company.models import CompanyExtraction
 from ingestion.utils.text import MAX_COMPANY_DESCRIPTION_CHARS
 
 logger = logging.getLogger(__name__)
+
+_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 _ORG_TYPES = ("Organization", "LocalBusiness", "Corporation")
 
@@ -120,7 +123,7 @@ def extract_with_llm(
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )

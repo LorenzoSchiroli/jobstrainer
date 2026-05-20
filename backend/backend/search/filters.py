@@ -21,19 +21,16 @@ def build_filters(filters: SearchFilters) -> list[dict]:
     for field, value in {
         "is_consulting": filters.is_consulting,
         "is_startup": filters.is_startup,
-        "industry": filters.industry,
-        "country": filters.country,
-        "employee_count": filters.employee_count,
         "employment_type": filters.employment_type,
         "location_type": filters.location_type,
         "seniority": filters.seniority,
     }.items():
-        if value is not None:
+        if value is not None and (not isinstance(value, str) or "|" not in value):
             clauses.append({"term": {field: value}})
     if filters.min_review_score is not None:
         clauses.append({"range": {"review_score": {"gte": filters.min_review_score}}})
     if filters.min_financial_health_score is not None:
         clauses.append({"range": {"financial_health_score": {"gte": filters.min_financial_health_score}}})
     if filters.languages_required:
-        clauses.append({"terms": {"languages_required": filters.languages_required}})
+        clauses.append({"terms": {"languages_required": [lang.lower() for lang in filters.languages_required]}})
     return clauses

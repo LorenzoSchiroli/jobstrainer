@@ -3,6 +3,8 @@ import os
 from groq import Groq
 from backend.search.filters import SearchFilters
 
+_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
 _SYSTEM_PROMPT = """Extract structured search filters and a semantic query from a CV and job search query.
 Return a JSON object with exactly these fields (null for unknown):
 {
@@ -14,10 +16,10 @@ Return a JSON object with exactly these fields (null for unknown):
   "employee_count": "string or null",
   "min_review_score": number or null,
   "min_financial_health_score": integer or null,
-  "employment_type": "full-time|part-time|contract|internship|stage|freelance or null",
-  "location_type": "on-site|remote|hybrid or null",
-  "seniority": "junior|mid|senior|lead|principal|staff|director or null",
-  "languages_required": ["list"] or null
+  "employment_type": "one of: full-time, part-time, contract, internship, stage, freelance — or null if not specified",
+  "location_type": "one of: on-site, remote, hybrid — or null if not specified",
+  "seniority": "one of: junior, mid, senior, lead, principal, staff, director — or null if not specified",
+  "languages_required": ["list of spoken/natural languages e.g. English, German, French"] or null
 }"""
 
 
@@ -27,7 +29,7 @@ def get_groq_client() -> Groq:
 
 async def extract_filters(client: Groq, cv_text: str, query: str) -> SearchFilters:
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=_MODEL,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"CV:\n{cv_text}\n\nSearch query:\n{query}"},
