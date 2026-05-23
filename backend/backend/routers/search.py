@@ -1,3 +1,5 @@
+import logging
+import time
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -19,11 +21,13 @@ from backend.search.reranker import rerank
 from backend.opensearch_client import get_opensearch
 
 router = APIRouter(prefix="/jobs", tags=["search"])
+logger = logging.getLogger(__name__)
 
 
 class SearchRequest(BaseModel):
     cv_text: str
     query: str
+    strict: bool = False
 
 
 @router.post("/search", response_model=list[JobSearchResponse])
@@ -35,17 +39,31 @@ async def search_jobs(
     groq_client: Groq = Depends(get_groq_client),
     os_client: AsyncOpenSearch = Depends(get_opensearch),
 ) -> list[JobSearchResponse]:
+    t0 = time.perf_counter()
+
     filters: SearchFilters = await extract_filters(groq_client, body.cv_text, body.query)
+    t1 = time.perf_counter()
+
     query_embedding: list[float] = biencoder.encode(filters.semantic_query).tolist()
-    hits = await hybrid_retrieve(os_client, query_embedding, filters)
+    t2 = time.perf_counter()
+
+    hits = await hybrid_retrieve(os_client, query_embedding, filters, strict=body.strict)
+    t3 = time.perf_counter()
+
     ranked_hits = rerank(reranker, hits, filters.semantic_query)
+    t4 = time.perf_counter()
 
     if not ranked_hits:
+        logger.info("[search timing] query_understanding=%.3fs embed=%.3fs retrieve=%.3fs rerank=%.3fs total=%.3fs (no hits)", t1-t0, t2-t1, t3-t2, t4-t3, t4-t0)
         return []
 
     ranked_ids = [hit["_source"]["job_id"] for hit in ranked_hits]
     result = await session.execute(
         select(Job).options(selectinload(Job.company)).where(Job.id.in_(ranked_ids))
     )
+    t5 = time.perf_counter()
+
+    logger.info("[search timing] query_understanding=%.3fs embed=%.3fs retrieve=%.3fs rerank=%.3fs db=%.3fs total=%.3fs", t1-t0, t2-t1, t3-t2, t4-t3, t5-t4, t5-t0)
+
     jobs_by_id = {str(job.id): job for job in result.scalars()}
     return [jobs_by_id[id_] for id_ in ranked_ids if id_ in jobs_by_id]
