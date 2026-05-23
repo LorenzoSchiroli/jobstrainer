@@ -43,13 +43,23 @@ input: cv + query (what i'm looking for)
 output: rank of offers
 
 Architecture:
-- scraper + parsing (jobs and companies, actively interrogate the backend); tools: langchain?
-- backend (holding the database and data, holding the ranker operation, fully passive); tools: postgresql + pgvector + pg_bm25 + llamaindex + langchain (+ crossencoder)
+- scraper + parsing (jobs and companies, actively interrogate the backend);
+    - clean text before saving
+- backend (holding the database and data, holding the ranker operation, fully passive); tools: postgresql + opensearch (bm25 on full text + embedding on summary + crossencoder, no chunking because llm sullary seems to be better)
 - frontend (just ui, react)
 
-ranker
-approaches: bm25 + embedding -> cross-encoder reranker
-
-Other things:
-- tailorer
+Next:
+- fix scraper?
+- llanggraph:
+    - iterative refinement job search / query search + memory of user preferences or past session
+    - tailorer with multiple nodes / agents (one for cv, one for cl etc)
+    - tailor with autofill in the job offer page (company website)
+- trining (do at the end): use llm to generate 1-5k examples for the training + 500 test (hard negatives are important)
 - company discover
+
+langgraph
+- insert cv
+- query jobs (+ cv)
+- list of jobs
+- click tailor button -> custom cv + cl + message
+
