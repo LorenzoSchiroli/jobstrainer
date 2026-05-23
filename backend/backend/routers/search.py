@@ -1,6 +1,6 @@
 import logging
 import time
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from groq import Groq
 
 from backend.database import get_session
-from backend.models import Job
+from backend.models import Job, User
 from backend.schemas import JobSearchResponse
 from backend.search.filters import SearchFilters
 from backend.search.models_lifecycle import get_biencoder, get_reranker
@@ -19,13 +19,13 @@ from backend.search.query_understanding import extract_filters, get_groq_client
 from backend.search.retrieval import hybrid_retrieve
 from backend.search.reranker import rerank
 from backend.opensearch_client import get_opensearch
+from backend.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/jobs", tags=["search"])
 logger = logging.getLogger(__name__)
 
 
 class SearchRequest(BaseModel):
-    cv_text: str
     query: str
     strict: bool = False
 
@@ -33,15 +33,19 @@ class SearchRequest(BaseModel):
 @router.post("/search", response_model=list[JobSearchResponse])
 async def search_jobs(
     body: SearchRequest,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
     biencoder: SentenceTransformer = Depends(get_biencoder),
     reranker: CrossEncoder = Depends(get_reranker),
     groq_client: Groq = Depends(get_groq_client),
     os_client: AsyncOpenSearch = Depends(get_opensearch),
 ) -> list[JobSearchResponse]:
+    if not current_user.cv_text:
+        raise HTTPException(status_code=400, detail="No CV uploaded. Please upload your CV first.")
+
     t0 = time.perf_counter()
 
-    filters: SearchFilters = await extract_filters(groq_client, body.cv_text, body.query)
+    filters: SearchFilters = await extract_filters(groq_client, current_user.cv_text, body.query)
     t1 = time.perf_counter()
 
     query_embedding: list[float] = biencoder.encode(filters.semantic_query).tolist()

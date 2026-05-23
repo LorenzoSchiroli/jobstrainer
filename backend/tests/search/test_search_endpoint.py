@@ -10,7 +10,8 @@ from backend.database import get_session
 from backend.search.models_lifecycle import get_biencoder, get_reranker
 from backend.search.query_understanding import get_groq_client
 from backend.opensearch_client import get_opensearch
-from backend.models import Company, Job
+from backend.auth.dependencies import get_current_user
+from backend.models import Company, Job, User
 
 
 def _mock_groq(semantic_query: str = "python engineer") -> MagicMock:
@@ -23,6 +24,10 @@ def _mock_groq(semantic_query: str = "python engineer") -> MagicMock:
     client = MagicMock()
     client.chat.completions.create.return_value = completion
     return client
+
+
+def _mock_user(cv_text: str | None = "5yr Python dev") -> User:
+    return User(id=uuid.uuid4(), username="testuser", password_hash="x", cv_text=cv_text)
 
 
 @pytest_asyncio.fixture
@@ -46,6 +51,7 @@ async def search_client(engine):
     app.dependency_overrides[get_reranker] = lambda: mock_reranker
     app.dependency_overrides[get_groq_client] = lambda: _mock_groq()
     app.dependency_overrides[get_opensearch] = lambda: mock_os
+    app.dependency_overrides[get_current_user] = lambda: _mock_user()
 
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \
@@ -71,18 +77,42 @@ async def test_search_returns_200_with_ranked_jobs(search_client):
         "hits": {"hits": [{"_source": {"job_id": str(job_id), "summary_text": "ml engineer"}}]}
     }
 
-    resp = await ac.post("/jobs/search", json={"cv_text": "5yr Python", "query": "ml engineer"})
+    resp = await ac.post("/jobs/search", json={"query": "ml engineer"})
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
     assert data[0]["id"] == str(job_id)
-    assert "company" in data[0]
     assert data[0]["company"]["name"] == "acme"
 
 
 async def test_search_returns_empty_list_when_no_hits(search_client):
     ac, mock_os, _ = search_client
     mock_os.search.return_value = {"hits": {"hits": []}}
-    resp = await ac.post("/jobs/search", json={"cv_text": "cv", "query": "q"})
+    resp = await ac.post("/jobs/search", json={"query": "q"})
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+async def test_search_returns_400_when_no_cv(engine):
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_session():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[get_biencoder] = lambda: MagicMock()
+    app.dependency_overrides[get_reranker] = lambda: MagicMock()
+    app.dependency_overrides[get_groq_client] = lambda: _mock_groq()
+    app.dependency_overrides[get_opensearch] = lambda: AsyncMock()
+    app.dependency_overrides[get_current_user] = lambda: _mock_user(cv_text=None)
+
+    with patch("backend.main.init_models"), \
+         patch("backend.main.init_opensearch", new_callable=AsyncMock), \
+         patch("backend.main.outbox_worker", new_callable=AsyncMock):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/jobs/search", json={"query": "ml engineer"})
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 400
+    assert "CV" in resp.json()["detail"]
