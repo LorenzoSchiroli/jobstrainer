@@ -10,7 +10,7 @@ from ingestion.utils.text import MAX_COMPANY_DESCRIPTION_CHARS
 
 logger = logging.getLogger(__name__)
 
-_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+_MODEL = os.environ["GROQ_MODEL_BASE"]
 
 _ORG_TYPES = ("Organization", "LocalBusiness", "Corporation")
 

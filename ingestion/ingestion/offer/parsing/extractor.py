@@ -47,7 +47,7 @@ _LLM_PROMPT = (
     "Job description:\n{description}"
 )
 
-_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+_MODEL = os.environ["GROQ_MODEL_BASE"]
 
 
 def _strip_markdown_json(text: str) -> str:

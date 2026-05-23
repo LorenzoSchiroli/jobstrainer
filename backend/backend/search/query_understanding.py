@@ -3,7 +3,7 @@ import os
 from groq import Groq
 from backend.search.filters import SearchFilters
 
-_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+_MODEL = os.environ["GROQ_MODEL_LARGE"]
 
 _SYSTEM_PROMPT = """Extract structured search filters and a semantic query from a CV and job search query.
 Return a JSON object with exactly these fields (null for unknown):

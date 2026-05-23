@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CV_PATH = "data/lorenzo_schiroli_cv.docx"
+_MODEL = os.environ["GROQ_MODEL_LARGE"]
 
 
 def extract_cv_text(docx_path: str) -> str:
@@ -56,7 +57,7 @@ def generate_cover_letter(cv_text: str, job_description: str, client: Groq) -> t
         f"Job Description:\n{job_description}"
     )
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = response.choices[0].message.content.strip()
@@ -91,7 +92,7 @@ def generate_linkedin_messages(cv_text: str, job_description: str, client: Groq)
         f"Job Description:\n{job_description}"
     )
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = response.choices[0].message.content.strip()
@@ -137,7 +138,7 @@ def generate_cv_modifications(paragraphs: list[tuple[int, str]], job_description
         f"Job Description:\n{job_description}"
     )
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = response.choices[0].message.content.strip()
