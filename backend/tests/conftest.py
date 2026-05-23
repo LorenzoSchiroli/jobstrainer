@@ -1,6 +1,9 @@
 import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test")
+os.environ.setdefault("GROQ_MODEL_LARGE", "test-model")
+os.environ.setdefault("GROQ_MODEL_BASE", "test-model")
+os.environ.setdefault("SECRET_KEY", "test-secret")
 
 import pytest_asyncio
 from unittest.mock import patch, AsyncMock
