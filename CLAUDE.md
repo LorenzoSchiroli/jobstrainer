@@ -35,7 +35,7 @@ uv run alembic upgrade head                # apply DB migrations
 uv run uvicorn backend.main:app --reload   # run dev server on :8000
 uv run pytest                              # run all backend tests
 uv run pytest tests/test_jobs.py           # run a single test file
-uv run pytest tests/search/test_filters.py::test_build_filters_empty_when_all_none  # single test
+uv run pytest tests/search/test_filters.py::test_build_clauses_empty_when_all_none  # single test
 ```
 
 Tests require a live Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test` (override via `TEST_DATABASE_URL`). OpenSearch and ML models are mocked in the test suite.
@@ -54,7 +54,8 @@ Create a `.env` file (or export):
 
 ```
 GROQ_API_KEY=...
-GROQ_MODEL=llama-3.1-8b-instant        # optional, this is the default
+GROQ_MODEL_LARGE=openai/gpt-oss-120b   # used by query understanding and cover letter generation
+GROQ_MODEL_BASE=qwen/qwen3-32b         # used by offer/company parsing
 OFFER_QUERY=...                         # used by the ingestion Docker service
 SERPERDEV_API_KEY=...                   # company enrichment web search
 ADZUNA_APP_ID=...                       # optional job source
@@ -69,8 +70,8 @@ DDGS_PROXY=...                          # optional proxy for DuckDuckGo scraping
 `POST /jobs/search` (`cv_text` + `query`) runs four sequential steps:
 
 1. **Query understanding** — Groq LLM extracts `SearchFilters` (seniority, location_type, languages, etc.) and a `semantic_query` from CV + query text (`search/query_understanding.py`)
-2. **Hybrid retrieval** — OpenSearch hybrid query: BM25 on `description` + k-NN on `embedding` (384-dim, `BAAI/bge-small-en-v1.5`), results combined via min-max normalization with 50/50 weights (`search/retrieval.py`)
-3. **Cross-encoder reranking** — `cross-encoder/ms-marco-MiniLM-L-6-v2` reranks top-50 hits on `summary_text`, returns top 20 (`search/reranker.py`)
+2. **Hybrid retrieval** — OpenSearch hybrid query: BM25 on `description` + k-NN on `embedding` (384-dim, `BAAI/bge-small-en-v1.5`), results combined via min-max normalization with 50/50 weights (`search/retrieval.py`). Filter clauses are soft by default (scored `should` with boost=2) so near-misses still surface; pass `strict=true` in the request to apply them as a hard `post_filter` with a larger prefetch.
+3. **Cross-encoder reranking** — `cross-encoder/ms-marco-MiniLM-L-6-v2` reranks retrieved hits on `summary_text`, returns top 20 (`search/reranker.py`)
 4. **Postgres round-trip** — full `Job` + `Company` records fetched by ID for the response
 
 ### Outbox Pattern (backend)
