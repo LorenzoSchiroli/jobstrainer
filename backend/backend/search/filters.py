@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+_BOOST = 2.0
+
 
 class SearchFilters(BaseModel):
     is_consulting: bool | None = None
@@ -16,7 +18,13 @@ class SearchFilters(BaseModel):
     semantic_query: str
 
 
-def build_filters(filters: SearchFilters) -> list[dict]:
+def build_clauses(filters: SearchFilters, strict: bool = False) -> list[dict]:
+    def term(field: str, value: object) -> dict:
+        return {"term": {field: value if strict else {"value": value, "boost": _BOOST}}}
+
+    def rng(field: str, gte: float | int) -> dict:
+        return {"range": {field: {"gte": gte} if strict else {"gte": gte, "boost": _BOOST}}}
+
     clauses: list[dict] = []
     for field, value in {
         "is_consulting": filters.is_consulting,
@@ -26,11 +34,16 @@ def build_filters(filters: SearchFilters) -> list[dict]:
         "seniority": filters.seniority,
     }.items():
         if value is not None and (not isinstance(value, str) or "|" not in value):
-            clauses.append({"term": {field: value}})
+            clauses.append(term(field, value))
     if filters.min_review_score is not None:
-        clauses.append({"range": {"review_score": {"gte": filters.min_review_score}}})
+        clauses.append(rng("review_score", filters.min_review_score))
     if filters.min_financial_health_score is not None:
-        clauses.append({"range": {"financial_health_score": {"gte": filters.min_financial_health_score}}})
+        clauses.append(rng("financial_health_score", filters.min_financial_health_score))
     if filters.languages_required:
-        clauses.append({"terms": {"languages_required": [lang.lower() for lang in filters.languages_required]}})
+        langs = [lang.lower() for lang in filters.languages_required]
+        clauses.append(
+            {"terms": {"languages_required": langs}}
+            if strict
+            else {"terms": {"languages_required": langs, "boost": _BOOST}}
+        )
     return clauses
