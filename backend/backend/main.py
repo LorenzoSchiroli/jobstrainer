@@ -8,6 +8,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message
 
 from backend.routers import companies, jobs
 from backend.routers.search import router as search_router
+from backend.routers.auth import router as auth_router
 from backend.search.models_lifecycle import init_models
 from backend.opensearch_client import init_opensearch
 from backend.outbox.worker import outbox_worker
@@ -26,6 +27,7 @@ app = FastAPI(title="jobstrainer backend", lifespan=lifespan)
 app.include_router(companies.router)
 app.include_router(jobs.router)
 app.include_router(search_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")
