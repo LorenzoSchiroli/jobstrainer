@@ -10,14 +10,36 @@ def test_build_hybrid_query_has_two_legs():
     assert len(legs) == 2
     assert "match" in legs[0]["bool"]["must"]
     assert "knn" in legs[1]["bool"]["must"]
-    assert q["size"] == 50
+    assert q["size"] == 20
 
 
-def test_build_hybrid_query_applies_filters_to_both_legs():
+def test_build_hybrid_query_soft_applies_boosts_to_both_legs():
     f = SearchFilters(semantic_query="x", seniority="senior", is_consulting=False)
     q = build_hybrid_query("x", [0.0] * 384, f)
     for leg in q["query"]["hybrid"]["queries"]:
-        assert len(leg["bool"]["filter"]) == 2
+        assert len(leg["bool"]["should"]) == 2
+    assert "post_filter" not in q
+
+
+def test_build_hybrid_query_strict_uses_post_filter():
+    f = SearchFilters(semantic_query="x", is_startup=True)
+    q = build_hybrid_query("x", [0.0] * 384, f, strict=True)
+    assert "post_filter" in q
+    assert {"term": {"is_startup": True}} in q["post_filter"]["bool"]["filter"]
+    for leg in q["query"]["hybrid"]["queries"]:
+        assert "filter" not in leg["bool"]
+        assert "should" not in leg["bool"]
+
+
+def test_build_hybrid_query_strict_uses_large_prefetch():
+    f = SearchFilters(semantic_query="x", is_startup=True)
+    q = build_hybrid_query("x", [0.0] * 384, f, strict=True)
+    assert q["size"] == 200
+
+
+def test_build_hybrid_query_strict_no_post_filter_when_no_clauses():
+    q = build_hybrid_query("x", [0.0] * 384, SearchFilters(semantic_query="x"), strict=True)
+    assert "post_filter" not in q
 
 
 async def test_hybrid_retrieve_uses_pipeline():
