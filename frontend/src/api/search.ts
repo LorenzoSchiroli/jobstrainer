@@ -21,5 +21,5 @@ export interface Job {
   company: Company
 }
 
-export const searchJobs = (query: string, strict: boolean) =>
-  client.post<Job[]>('/jobs/search', { query, strict }).then(r => r.data)
+export const searchJobs = (query: string) =>
+  client.post<Job[]>('/jobs/search', { query }).then(r => r.data)

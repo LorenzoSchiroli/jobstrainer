@@ -30,6 +30,7 @@ _INDEX_BODY = {
             "country":                  {"type": "keyword"},
             "review_score":             {"type": "float"},
             "financial_health_score":   {"type": "integer"},
+            "created_at":               {"type": "date"},
         }
     },
 }
@@ -59,6 +60,10 @@ async def init_opensearch() -> None:
     _client = AsyncOpenSearch(hosts=[url])
     if not await _client.indices.exists(index=INDEX_NAME):
         await _client.indices.create(index=INDEX_NAME, body=_INDEX_BODY)
+    await _client.indices.put_mapping(
+        index=INDEX_NAME,
+        body={"properties": {"created_at": {"type": "date"}}},
+    )
     await _client.transport.perform_request(
         method="PUT",
         url=f"/_search/pipeline/{PIPELINE_NAME}",

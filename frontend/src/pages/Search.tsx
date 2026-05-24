@@ -5,7 +5,6 @@ import JobCard from '../components/JobCard'
 
 export default function Search() {
   const [query, setQuery] = useState('')
-  const [strict, setStrict] = useState(false)
   const [results, setResults] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -18,7 +17,7 @@ export default function Search() {
     setLoading(true)
     setSearched(true)
     try {
-      setResults(await searchJobs(query, strict))
+      setResults(await searchJobs(query))
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Search failed')
     } finally {
@@ -41,11 +40,6 @@ export default function Search() {
           {loading ? '...' : 'Search'}
         </button>
       </form>
-
-      <label style={{ fontSize: '0.875rem', opacity: 0.6, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.5rem' }}>
-        <input type="checkbox" checked={strict} onChange={e => setStrict(e.target.checked)} />
-        Strict mode
-      </label>
 
       {error && <p style={{ color: '#f87171' }}>{error}</p>}
 

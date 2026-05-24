@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 
 _BOOST = 2.0
@@ -15,14 +16,18 @@ class SearchFilters(BaseModel):
     location_type: str | None = None
     seniority: str | None = None
     languages_required: list[str] | None = None
+    max_age_hours: int | None = 720
     semantic_query: str
+    strict: bool = False
 
 
-def build_clauses(filters: SearchFilters, strict: bool = False) -> list[dict]:
+def build_clauses(filters: SearchFilters) -> list[dict]:
+    strict = filters.strict
+
     def term(field: str, value: object) -> dict:
         return {"term": {field: value if strict else {"value": value, "boost": _BOOST}}}
 
-    def rng(field: str, gte: float | int) -> dict:
+    def rng(field: str, gte: object) -> dict:
         return {"range": {field: {"gte": gte} if strict else {"gte": gte, "boost": _BOOST}}}
 
     clauses: list[dict] = []
@@ -46,4 +51,7 @@ def build_clauses(filters: SearchFilters, strict: bool = False) -> list[dict]:
             if strict
             else {"terms": {"languages_required": langs, "boost": _BOOST}}
         )
+    if filters.max_age_hours is not None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=filters.max_age_hours)).isoformat()
+        clauses.append(rng("created_at", cutoff))
     return clauses

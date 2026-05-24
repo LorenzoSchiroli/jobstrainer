@@ -44,6 +44,7 @@ def _build_job_doc(job: Job, embedding: list[float] | None) -> dict:
         "country": c.country if c else None,
         "review_score": c.review_score if c else None,
         "financial_health_score": c.financial_health_score if c else None,
+        "created_at": job.created_at.isoformat(),
     }
 
 

@@ -9,16 +9,15 @@ def build_hybrid_query(
     semantic_query: str,
     query_embedding: list[float],
     filters: SearchFilters,
-    strict: bool = False,
     size: int = 20,
 ) -> dict:
     legs = [
         {"bool": {"must": {"match": {"description": semantic_query}}}},
         {"bool": {"must": {"knn": {"embedding": {"vector": query_embedding, "k": 100}}}}},
     ]
-    clauses = build_clauses(filters, strict=strict)
+    clauses = build_clauses(filters)
 
-    if strict:
+    if filters.strict:
         query: dict = {"query": {"hybrid": {"queries": legs}}, "size": _STRICT_PREFETCH}
         if clauses:
             query["post_filter"] = {"bool": {"filter": clauses}}
@@ -33,9 +32,8 @@ async def hybrid_retrieve(
     client: AsyncOpenSearch,
     query_embedding: list[float],
     filters: SearchFilters,
-    strict: bool = False,
 ) -> list[dict]:
-    query = build_hybrid_query(filters.semantic_query, query_embedding, filters, strict=strict)
+    query = build_hybrid_query(filters.semantic_query, query_embedding, filters)
     response = await client.search(
         index=INDEX_NAME,
         body=query,

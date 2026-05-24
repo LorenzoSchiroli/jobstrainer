@@ -7,7 +7,7 @@ def test_only_semantic_query_required():
 
 
 def test_build_clauses_empty_when_all_none():
-    assert build_clauses(SearchFilters(semantic_query="x")) == []
+    assert build_clauses(SearchFilters(semantic_query="x", max_age_hours=None)) == []
 
 
 def test_build_clauses_soft_term_bool():
@@ -36,20 +36,20 @@ def test_build_clauses_soft_terms_languages():
 
 
 def test_build_clauses_strict_term_bool():
-    result = build_clauses(SearchFilters(semantic_query="x", is_startup=True), strict=True)
+    result = build_clauses(SearchFilters(semantic_query="x", is_startup=True, strict=True))
     assert {"term": {"is_startup": True}} in result
 
 
 def test_build_clauses_strict_range():
-    result = build_clauses(SearchFilters(semantic_query="x", min_review_score=4.0), strict=True)
+    result = build_clauses(SearchFilters(semantic_query="x", min_review_score=4.0, strict=True))
     assert {"range": {"review_score": {"gte": 4.0}}} in result
 
 
 def test_build_clauses_strict_terms_languages():
-    result = build_clauses(SearchFilters(semantic_query="x", languages_required=["English"]), strict=True)
+    result = build_clauses(SearchFilters(semantic_query="x", languages_required=["English"], strict=True))
     assert {"terms": {"languages_required": ["english"]}} in result
 
 
 def test_build_clauses_multiple():
-    result = build_clauses(SearchFilters(semantic_query="x", seniority="senior", is_startup=True, min_review_score=3.5))
+    result = build_clauses(SearchFilters(semantic_query="x", seniority="senior", is_startup=True, min_review_score=3.5, max_age_hours=None))
     assert len(result) == 3

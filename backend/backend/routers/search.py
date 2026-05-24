@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 class SearchRequest(BaseModel):
     query: str
-    strict: bool = False
 
 
 @router.post("/search", response_model=list[JobSearchResponse])
@@ -51,7 +50,7 @@ async def search_jobs(
     query_embedding: list[float] = biencoder.encode(filters.semantic_query).tolist()
     t2 = time.perf_counter()
 
-    hits = await hybrid_retrieve(os_client, query_embedding, filters, strict=body.strict)
+    hits = await hybrid_retrieve(os_client, query_embedding, filters)
     t3 = time.perf_counter()
 
     ranked_hits = rerank(reranker, hits, filters.semantic_query)

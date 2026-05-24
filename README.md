@@ -49,17 +49,13 @@ Architecture:
 - frontend (just ui, react)
 
 Next:
-- fix scraper?
+- fix scraper? add llanggraph (or temporal) as a crawler orchestrator?
 - llanggraph:
-    - iterative refinement job search / query search + memory of user preferences or past session
-    - tailorer with multiple nodes / agents (one for cv, one for cl etc)
-    - tailor with autofill in the job offer page (company website)
+    - advanced query search with miltistep refinement (very fiew steps) + fit evaluation for final result (using also memory of user preferences or past session)
+    - tailor for cv, cl, custom message, "autofill" job offer page
+    - advanced crawling / discovery / orchestration around scraping (find links, retries, fallbacks): only on edge cases / unknown websites, like hidden job discovery or company discover
 - trining (do at the end): use llm to generate 1-5k examples for the training + 500 test (hard negatives are important)
 - company discover
 
-langgraph
-- insert cv
-- query jobs (+ cv)
-- list of jobs
-- click tailor button -> custom cv + cl + message
+
 
