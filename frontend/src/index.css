@@ -20,6 +20,7 @@ input {
 }
 
 input:focus { outline: none; border-color: #555; }
+input[type="checkbox"] { width: auto; padding: 0; }
 
 button {
   background: #2a2a2a;

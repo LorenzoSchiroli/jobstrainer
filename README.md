@@ -45,7 +45,7 @@ output: rank of offers
 Architecture:
 - scraper + parsing (jobs and companies, actively interrogate the backend);
     - clean text before saving
-- backend (holding the database and data, holding the ranker operation, fully passive); tools: postgresql + opensearch (bm25 on full text + embedding on summary + crossencoder, no chunking because llm sullary seems to be better)
+- backend (holding the database and data, holding the ranker operation, fully passive); tools: postgresql + opensearch (bm25 on full text + embedding on summary + crossencoder, no chunking because llm summary seems to be better)
 - frontend (just ui, react)
 
 Next:
