@@ -2,6 +2,7 @@ const API_BASE = 'http://localhost:8000';
 
 const pendingJobs = {};  // tabId -> { job_id, token }
 const sessions = {};     // tabId -> { job_id, token, thread_id, ws, pendingNavigate, reconnectDelay }
+const injectedTabs = new Set();
 
 // ── Tab detection ──────────────────────────────────────────────────────────
 
@@ -35,14 +36,17 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
   if (!pendingJobs[tabId] && !sessions[tabId]) return;
 
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/overlay.js'],
-    });
-    await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
-  } catch (_) {
-    return; // Tab not injectable (e.g., chrome:// URL, PDF)
+  if (!injectedTabs.has(tabId)) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/overlay.js'],
+      });
+      await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
+      injectedTabs.add(tabId);
+    } catch (_) {
+      return; // Tab not injectable (e.g., chrome:// URL, PDF)
+    }
   }
 
   if (pendingJobs[tabId]) {
@@ -56,6 +60,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     session.pendingNavigate = false;
     requestSnapshotAndSend(tabId);
   }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (sessions[tabId]) {
+    sessions[tabId].ws?.close();
+    delete sessions[tabId];
+  }
+  delete pendingJobs[tabId];
+  injectedTabs.delete(tabId);
+  chrome.storage.local.remove([`status_${tabId}`, `session_${tabId}`]);
 });
 
 // ── Messages from content scripts ─────────────────────────────────────────
@@ -89,15 +103,15 @@ function openSession(tabId, job_id, token) {
     ws, pendingNavigate: false, reconnectDelay: 1000,
   };
 
-  ws.onmessage = (event) => {
-    try { handleAgentMessage(tabId, JSON.parse(event.data)); } catch (_) {}
+  ws.onmessage = async (event) => {
+    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (_) {}
   };
 
   ws.onclose = () => {
     const s = sessions[tabId];
     if (!s) return;
-    const delay = Math.min(s.reconnectDelay * 2, 30000);
-    s.reconnectDelay = delay;
+    const delay = s.reconnectDelay;
+    s.reconnectDelay = Math.min(delay * 2, 30000);
     setTimeout(() => { if (sessions[tabId]) openSession(tabId, s.job_id, s.token); }, delay);
   };
 
@@ -167,7 +181,8 @@ async function handleAgentMessage(tabId, msg) {
   if (msg.type === 'done') {
     setStatus(tabId, 'done');
     chrome.tabs.sendMessage(tabId, msg);
-    chrome.storage.local.remove([`status_${tabId}`]);
+    chrome.storage.local.remove([`status_${tabId}`, `session_${tabId}`]);
+    injectedTabs.delete(tabId);
     delete sessions[tabId];
     return;
   }
@@ -182,16 +197,20 @@ async function handleAgentMessage(tabId, msg) {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function requestSnapshotAndSend(tabId) {
-  const session = sessions[tabId];
   chrome.tabs.sendMessage(tabId, { type: 'request_snapshot' }, (snapshot) => {
-    if (snapshot && session?.ws?.readyState === WebSocket.OPEN) {
-      session.ws.send(JSON.stringify(snapshot));
+    const liveSession = sessions[tabId];
+    if (snapshot && liveSession?.ws?.readyState === WebSocket.OPEN) {
+      liveSession.ws.send(JSON.stringify(snapshot));
     }
   });
 }
 
 async function handleFileUpload(tabId, msg) {
   const session = sessions[tabId];
+  if (!session?.thread_id) {
+    console.error('[tailorer] file upload attempted before session_started');
+    return;
+  }
   const fileType = msg.value === '__CV__' ? 'cv' : 'cover_letter';
   const filename = fileType === 'cv' ? 'tailored_cv.docx' : 'cover_letter.docx';
   const url = `${API_BASE}/tailorer/files/${session.thread_id}/${fileType}?token=${encodeURIComponent(session.token)}`;
