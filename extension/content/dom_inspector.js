@@ -20,7 +20,9 @@ export function buildSnapshot() {
     .forEach((el) => {
       if (!el.id) el.id = `field_${autoId++}`;
       const label = resolveLabel(el);
-      const type = el.tagName === 'SELECT' ? 'select' : (el.type || 'text');
+      const type = el.tagName === 'SELECT' ? 'select'
+                 : el.tagName === 'TEXTAREA' ? 'textarea'
+                 : (el.type || 'text');
 
       if (type === 'file') {
         fields.push({ id: el.id, label, type: 'file' });
@@ -46,9 +48,10 @@ export function buildSnapshot() {
   }));
 
   const buttons = [];
-  document.querySelectorAll('button, input[type="submit"]').forEach((btn, i) => {
+  let buttonId = 0;
+  document.querySelectorAll('button, input[type="submit"]').forEach((btn) => {
     const label = btn.textContent?.trim() || btn.value?.trim() || '';
-    if (!btn.id) btn.id = `btn_${i}`;
+    if (!btn.id) btn.id = `btn_${buttonId++}`;
     buttons.push({ label, selector: `#${btn.id}` });
   });
 

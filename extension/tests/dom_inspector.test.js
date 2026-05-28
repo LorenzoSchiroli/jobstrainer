@@ -79,4 +79,18 @@ describe('buildSnapshot', () => {
     expect(snap.fields).toHaveLength(1);
     expect(snap.fields[0].id).toBe('visible');
   });
+
+  test('captures textarea with type textarea', () => {
+    document.body.innerHTML = `
+      <label for="cover">Cover Letter</label>
+      <textarea id="cover">Dear hiring manager</textarea>
+    `;
+    const snap = buildSnapshot();
+    expect(snap.fields[0]).toEqual({
+      id: 'cover',
+      label: 'Cover Letter',
+      type: 'textarea',
+      value: 'Dear hiring manager',
+    });
+  });
 });
