@@ -8,11 +8,21 @@ export default function JobCard({ job }: { job: Job }) {
     ...job.languages_required,
   ].filter(Boolean) as string[]
 
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Signal to extension which job is being opened
+    try {
+      localStorage.setItem('tailorer_pending', JSON.stringify({ job_id: job.id }))
+    } catch {
+      // localStorage unavailable — extension will fall back to URL-based detection
+    }
+  }
+
   return (
     <a
       href={job.url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={handleClick}
       style={{
         display: 'block',
         padding: '1rem',
