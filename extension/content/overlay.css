@@ -1,1 +1,68 @@
-/* Tailorer overlay styles */
+.tailorer-apply-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-family: system-ui, sans-serif;
+}
+
+.tailorer-apply-btn:hover { background: #1d4ed8; }
+
+.tailorer-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
+  background: #1e293b;
+  color: #f1f5f9;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  flex-wrap: wrap;
+}
+
+.tailorer-banner--stuck { background: #7c2d12; }
+.tailorer-banner--done  { background: #14532d; }
+
+.tailorer-banner__msg { flex: 1; min-width: 0; }
+
+.tailorer-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.tailorer-btn--approve  { background: #16a34a; }
+.tailorer-btn--correct  { background: #475569; }
+.tailorer-btn--unblock  { background: #475569; }
+.tailorer-btn:hover     { filter: brightness(1.15); }
+
+.tailorer-correction-input {
+  flex: 1;
+  min-width: 160px;
+  background: #334155;
+  color: #f1f5f9;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+}
