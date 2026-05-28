@@ -206,3 +206,44 @@ async def tailorer_ws(
             pass
     finally:
         await websocket.close()
+
+
+@router.get("/files/{thread_id}/{file_type}")
+async def download_tailored_file(
+    thread_id: str,
+    file_type: str,
+    token: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+):
+    from fastapi.responses import Response
+    try:
+        user = await _get_user_from_token(token, session)
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    if file_type not in ("cv", "cover_letter"):
+        raise HTTPException(status_code=400, detail="file_type must be 'cv' or 'cover_letter'")
+
+    from backend.main import get_checkpointer
+    checkpointer = get_checkpointer()
+    config = {"configurable": {"thread_id": thread_id}}
+    graph = build_graph(checkpointer)
+    state_snapshot = await graph.aget_state(config)
+    if not state_snapshot or not state_snapshot.values:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    values = state_snapshot.values
+    if values.get("user_id") != str(user.id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    key = "cv_bytes" if file_type == "cv" else "cl_bytes"
+    file_bytes = values.get(key, b"")
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="File not yet generated")
+
+    filename = "tailored_cv.docx" if file_type == "cv" else "cover_letter.docx"
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
