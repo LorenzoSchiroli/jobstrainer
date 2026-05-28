@@ -95,40 +95,41 @@ def navigate_to_apply(state: TailorerState) -> TailorerState:
     llm = _make_llm(_BASE())
     retry = state["retry_count"]
 
-    snapshot = interrupt({"type": "navigate", "url": state["company_homepage"]})
+    while True:
+        snapshot = interrupt({"type": "navigate", "url": state["company_homepage"]})
 
-    careers_url = _find_best_link_in_snapshot(snapshot, ["career", "job", "hiring", "work with us", "vacancies"])
-    if not careers_url:
-        retry += 1
-        if retry >= 2:
-            interrupt({"type": "show_stuck", "message": "Can't find the careers page. Can you navigate there for me?"})
-            retry = 0
-        return {**state, "retry_count": retry}
+        careers_url = _find_best_link_in_snapshot(snapshot, ["career", "job", "hiring", "work with us", "vacancies"])
+        if not careers_url:
+            retry += 1
+            if retry >= 2:
+                interrupt({"type": "show_stuck", "message": "Can't find the careers page. Can you navigate there for me?"})
+                retry = 0
+            continue
 
-    snapshot = interrupt({"type": "navigate", "url": careers_url})
+        snapshot = interrupt({"type": "navigate", "url": careers_url})
 
-    apply_url = _find_apply_url_in_snapshot(llm, snapshot, state["job_title"])
-    if not apply_url:
-        retry += 1
-        if retry >= 2:
-            interrupt({"type": "show_stuck", "message": f"Can't find '{state['job_title']}' on the careers page. Can you click the job for me?"})
-            retry = 0
-        return {**state, "retry_count": retry}
+        apply_url = _find_apply_url_in_snapshot(llm, snapshot, state["job_title"])
+        if not apply_url:
+            retry += 1
+            if retry >= 2:
+                interrupt({"type": "show_stuck", "message": f"Can't find '{state['job_title']}' on the careers page. Can you click the job for me?"})
+                retry = 0
+            continue
 
-    snapshot = interrupt({"type": "navigate", "url": apply_url})
-    form_url = _find_best_link_in_snapshot(snapshot, ["apply", "application"])
-    if form_url:
-        snapshot = interrupt({"type": "navigate", "url": form_url})
-        apply_url = form_url
+        snapshot = interrupt({"type": "navigate", "url": apply_url})
+        form_url = _find_best_link_in_snapshot(snapshot, ["apply", "application"])
+        if form_url:
+            snapshot = interrupt({"type": "navigate", "url": form_url})
+            apply_url = form_url
 
-    return {**state, "apply_url": apply_url, "status": "tailoring", "retry_count": 0}
+        return {**state, "apply_url": apply_url, "status": "tailoring", "retry_count": 0}
 
 
 async def tailor_documents(state: TailorerState) -> TailorerState:
-    from groq import Groq
+    from groq import AsyncGroq
     from backend.tailorer.tailor import generate_tailored_documents
 
-    groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    groq_client = AsyncGroq(api_key=os.environ["GROQ_API_KEY"])
 
     if not state["cv_bytes"]:
         import io
@@ -182,7 +183,7 @@ def fill_page(state: TailorerState) -> TailorerState:
     elif response["type"] == "user_manual_edit":
         updated_fields = {**state["filled_fields"], response["field_id"]: response["value"]}
         return {**state, "filled_fields": updated_fields, "pending_correction": None, "status": "filling_correction"}
-    return state
+    return {**state, "status": "failed"}
 
 
 def navigate_next(state: TailorerState) -> TailorerState:

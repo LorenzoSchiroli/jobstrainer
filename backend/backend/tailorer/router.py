@@ -184,10 +184,13 @@ async def tailorer_ws(
 
             state_snapshot = await graph.aget_state(config)
             if not state_snapshot.next:
+                try:
+                    app_record = Application(user_id=user.id, job_id=job_id)
+                    session.add(app_record)
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
                 await websocket.send_json({"type": "done", "message": "Application submitted!"})
-                app_record = Application(user_id=user.id, job_id=job_id)
-                session.add(app_record)
-                await session.commit()
                 break
 
             interrupts = [i for task in state_snapshot.tasks for i in task.interrupts]

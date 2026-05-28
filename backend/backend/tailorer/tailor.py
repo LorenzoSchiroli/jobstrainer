@@ -2,11 +2,10 @@ import io
 import json
 import os
 import re
-import tempfile
 
 import docx
 from docx import Document
-from groq import Groq
+from groq import AsyncGroq
 
 _LARGE = lambda: os.environ["GROQ_MODEL_LARGE"]
 
@@ -45,10 +44,7 @@ def _rm(para) -> None:
 
 
 def _apply_cv_modifications(cv_bytes: bytes, modifications: list[dict]) -> bytes:
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
-        f.write(cv_bytes)
-        tmp = f.name
-    doc = Document(tmp)
+    doc = Document(io.BytesIO(cv_bytes))
     paragraphs = doc.paragraphs
     for mod in modifications:
         idx = mod.get("index")
@@ -60,8 +56,6 @@ def _apply_cv_modifications(cv_bytes: bytes, modifications: list[dict]) -> bytes
             _rm(paragraphs[idx])
     buf = io.BytesIO()
     doc.save(buf)
-    import os as _os
-    _os.unlink(tmp)
     return buf.getvalue()
 
 
@@ -69,7 +63,7 @@ async def generate_tailored_documents(
     cv_text: str,
     cv_bytes: bytes,
     job_description: str,
-    groq_client: Groq,
+    groq_client: AsyncGroq,
 ) -> tuple[bytes, bytes, str]:
     """Returns: (tailored_cv_bytes, cover_letter_bytes, cover_letter_text)"""
     cl_prompt = (
@@ -87,7 +81,7 @@ async def generate_tailored_documents(
         "- No bullet points, no bold text, no placeholders\n\n"
         f"CV:\n{cv_text}\n\nJob Description:\n{job_description}"
     )
-    cl_resp = groq_client.chat.completions.create(
+    cl_resp = await groq_client.chat.completions.create(
         model=_LARGE(),
         messages=[{"role": "user", "content": cl_prompt}],
     )
@@ -108,7 +102,7 @@ async def generate_tailored_documents(
         "GOLDEN RULE: only use words/tools already in the CV. Never invent skills.\n\n"
         f"CV:\n{para_list}\n\nJob Description:\n{job_description}"
     )
-    cv_resp = groq_client.chat.completions.create(
+    cv_resp = await groq_client.chat.completions.create(
         model=_LARGE(),
         messages=[{"role": "user", "content": cv_mod_prompt}],
     )
