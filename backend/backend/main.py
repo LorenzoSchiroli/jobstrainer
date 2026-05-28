@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
@@ -20,6 +22,14 @@ from backend.database import get_session_factory
 from backend.models import Job
 
 logger = logging.getLogger(__name__)
+
+_checkpointer: AsyncPostgresSaver | None = None
+
+
+def get_checkpointer() -> AsyncPostgresSaver:
+    if _checkpointer is None:
+        raise RuntimeError("Checkpointer not initialized")
+    return _checkpointer
 
 
 async def _backfill_created_at() -> None:
@@ -39,12 +49,19 @@ async def _backfill_created_at() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _checkpointer
     init_models()
     await init_opensearch()
     await _backfill_created_at()
-    task = asyncio.create_task(outbox_worker())
-    yield
-    task.cancel()
+
+    db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    async with AsyncPostgresSaver.from_conn_string(db_url) as checkpointer:
+        await checkpointer.setup()
+        _checkpointer = checkpointer
+
+        task = asyncio.create_task(outbox_worker())
+        yield
+        task.cancel()
 
 
 app = FastAPI(title="jobstrainer backend", lifespan=lifespan)

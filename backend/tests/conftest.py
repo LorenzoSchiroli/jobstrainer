@@ -6,7 +6,7 @@ os.environ.setdefault("GROQ_MODEL_BASE", "test-model")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
 import pytest_asyncio
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
@@ -47,9 +47,18 @@ async def client(engine):
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
+
+    mock_checkpointer = MagicMock()
+    mock_checkpointer.setup = AsyncMock()
+    mock_saver_cm = MagicMock()
+    mock_saver_cm.__aenter__ = AsyncMock(return_value=mock_checkpointer)
+    mock_saver_cm.__aexit__ = AsyncMock(return_value=None)
+
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.outbox_worker", new_callable=AsyncMock):
+         patch("backend.main.outbox_worker", new_callable=AsyncMock), \
+         patch("backend.main._backfill_created_at", new_callable=AsyncMock), \
+         patch("backend.main.AsyncPostgresSaver.from_conn_string", return_value=mock_saver_cm):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac
     app.dependency_overrides.clear()
