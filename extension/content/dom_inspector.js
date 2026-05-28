@@ -1,7 +1,7 @@
 export function resolveLabel(el) {
   if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
   if (el.id) {
-    const lbl = document.querySelector(`label[for="${el.id}"]`);
+    const lbl = document.querySelector(`label[for='${CSS.escape(el.id)}']`);
     if (lbl) return lbl.textContent.trim();
   }
   if (el.placeholder) return el.placeholder.trim();

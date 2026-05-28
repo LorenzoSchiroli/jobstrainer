@@ -159,8 +159,9 @@ async function handleAgentMessage(tabId, msg) {
   if (msg.type === 'navigate_next') {
     setStatus(tabId, 'navigating');
     chrome.tabs.sendMessage(tabId, { type: 'navigate_next' }, (response) => {
-      if (session.ws.readyState === WebSocket.OPEN) {
-        session.ws.send(JSON.stringify(response || { submitted: false }));
+      const liveSession = sessions[tabId];
+      if (liveSession?.ws?.readyState === WebSocket.OPEN) {
+        liveSession.ws.send(JSON.stringify(response || { submitted: false }));
       }
     });
     return;
@@ -190,6 +191,8 @@ async function handleAgentMessage(tabId, msg) {
   if (msg.type === 'error') {
     setStatus(tabId, 'error');
     chrome.tabs.sendMessage(tabId, msg);
+    injectedTabs.delete(tabId);
+    delete sessions[tabId];
     return;
   }
 }
