@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 
 from backend.database import get_session
 from backend.models import User
+from backend.tailorer.models import ApplicantProfile
 from backend.auth.jwt import create_access_token
 from backend.auth.dependencies import get_current_user
 
@@ -51,9 +52,11 @@ async def login(body: AuthRequest, session: AsyncSession = Depends(get_session))
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(current_user: User = Depends(get_current_user)):
+async def me(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    profile = await session.execute(select(ApplicantProfile).where(ApplicantProfile.user_id == current_user.id))
+    applicant_profile = profile.scalar_one_or_none()
     return UserResponse(
         id=str(current_user.id),
         username=current_user.username,
-        has_cv=current_user.cv_text is not None,
+        has_cv=applicant_profile is not None and applicant_profile.cv_text is not None,
     )
