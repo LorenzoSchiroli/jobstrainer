@@ -20,6 +20,7 @@ from backend.search.retrieval import hybrid_retrieve
 from backend.search.reranker import rerank
 from backend.opensearch_client import get_opensearch
 from backend.auth.dependencies import get_current_user
+from backend.tailorer.models import ApplicantProfile
 
 router = APIRouter(prefix="/jobs", tags=["search"])
 logger = logging.getLogger(__name__)
@@ -39,12 +40,16 @@ async def search_jobs(
     groq_client: Groq = Depends(get_groq_client),
     os_client: AsyncOpenSearch = Depends(get_opensearch),
 ) -> list[JobSearchResponse]:
-    if not current_user.cv_text:
+    profile_result = await session.execute(
+        select(ApplicantProfile).where(ApplicantProfile.user_id == current_user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if not profile or not profile.cv_text:
         raise HTTPException(status_code=400, detail="No CV uploaded. Please upload your CV first.")
 
     t0 = time.perf_counter()
 
-    filters: SearchFilters = await extract_filters(groq_client, current_user.cv_text, body.query)
+    filters: SearchFilters = await extract_filters(groq_client, profile.cv_text, body.query)
     t1 = time.perf_counter()
 
     query_embedding: list[float] = biencoder.encode(filters.semantic_query).tolist()

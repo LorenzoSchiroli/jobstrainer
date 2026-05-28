@@ -12,6 +12,7 @@ from backend.search.query_understanding import get_groq_client
 from backend.opensearch_client import get_opensearch
 from backend.auth.dependencies import get_current_user
 from backend.models import Company, Job, User
+from backend.tailorer.models import ApplicantProfile
 
 
 def _mock_groq(semantic_query: str = "python engineer") -> MagicMock:
@@ -26,13 +27,21 @@ def _mock_groq(semantic_query: str = "python engineer") -> MagicMock:
     return client
 
 
-def _mock_user(cv_text: str | None = "5yr Python dev") -> User:
-    return User(id=uuid.uuid4(), username="testuser", password_hash="x", cv_text=cv_text)
-
-
 @pytest_asyncio.fixture
 async def search_client(engine):
     factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Create a real user + applicant profile in the DB so the endpoint can find it
+    user_id = uuid.uuid4()
+    async with factory() as session:
+        user = User(id=user_id, username="testuser", password_hash="x")
+        session.add(user)
+        await session.flush()
+        profile = ApplicantProfile(user_id=user_id, cv_text="5yr Python dev")
+        session.add(profile)
+        await session.commit()
+
+    mock_user = User(id=user_id, username="testuser", password_hash="x")
 
     async def override_session():
         async with factory() as session:
@@ -51,7 +60,7 @@ async def search_client(engine):
     app.dependency_overrides[get_reranker] = lambda: mock_reranker
     app.dependency_overrides[get_groq_client] = lambda: _mock_groq()
     app.dependency_overrides[get_opensearch] = lambda: mock_os
-    app.dependency_overrides[get_current_user] = lambda: _mock_user()
+    app.dependency_overrides[get_current_user] = lambda: mock_user
 
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \
@@ -96,6 +105,15 @@ async def test_search_returns_empty_list_when_no_hits(search_client):
 async def test_search_returns_400_when_no_cv(engine):
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
+    # Create a user with no ApplicantProfile so cv_text is absent
+    user_id = uuid.uuid4()
+    async with factory() as session:
+        user = User(id=user_id, username="testuser_nocv", password_hash="x")
+        session.add(user)
+        await session.commit()
+
+    mock_user = User(id=user_id, username="testuser_nocv", password_hash="x")
+
     async def override_session():
         async with factory() as session:
             yield session
@@ -105,7 +123,7 @@ async def test_search_returns_400_when_no_cv(engine):
     app.dependency_overrides[get_reranker] = lambda: MagicMock()
     app.dependency_overrides[get_groq_client] = lambda: _mock_groq()
     app.dependency_overrides[get_opensearch] = lambda: AsyncMock()
-    app.dependency_overrides[get_current_user] = lambda: _mock_user(cv_text=None)
+    app.dependency_overrides[get_current_user] = lambda: mock_user
 
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \

@@ -1,10 +1,12 @@
 import io
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.database import get_session
 from backend.models import User
+from backend.tailorer.models import ApplicantProfile
 from backend.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/users", tags=["cv"])
@@ -35,6 +37,17 @@ class CVUploadResponse(BaseModel):
     char_count: int
 
 
+async def _get_or_create_profile(session: AsyncSession, user_id) -> ApplicantProfile:
+    result = await session.execute(
+        select(ApplicantProfile).where(ApplicantProfile.user_id == user_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        profile = ApplicantProfile(user_id=user_id)
+        session.add(profile)
+    return profile
+
+
 @router.post("/cv", response_model=CVUploadResponse)
 async def upload_cv(
     file: UploadFile = File(...),
@@ -49,12 +62,21 @@ async def upload_cv(
     text = _extract_text(filename, content)
     if not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from file.")
-    current_user.cv_text = text
-    session.add(current_user)
+    profile = await _get_or_create_profile(session, current_user.id)
+    profile.cv_text = text
+    session.add(profile)
     await session.commit()
     return CVUploadResponse(message="CV uploaded successfully", char_count=len(text))
 
 
 @router.get("/cv", response_model=CVResponse)
-async def get_cv(current_user: User = Depends(get_current_user)):
-    return CVResponse(cv_text=current_user.cv_text, has_cv=current_user.cv_text is not None)
+async def get_cv(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    result = await session.execute(
+        select(ApplicantProfile).where(ApplicantProfile.user_id == current_user.id)
+    )
+    profile = result.scalar_one_or_none()
+    cv_text = profile.cv_text if profile else None
+    return CVResponse(cv_text=cv_text, has_cv=cv_text is not None)
