@@ -26,10 +26,12 @@ The agent is **agent-driven**: it sends commands to the extension, not the other
 
 ## Entry Point / Session Activation
 
-1. User clicks a job link in the jobstrainer frontend. Before `window.open()`, the frontend writes `localStorage.tailorer_pending = { job_id }`.
-2. Job board page opens in a new tab. The extension service worker detects the new tab via `chrome.tabs.onCreated`, reads `tailorer_pending` from the opener tab via `chrome.scripting.executeScript`.
-3. Extension injects `overlay.js` into the new tab, showing a floating **"Apply with Agent"** button on the job board page.
+1. User clicks a job link in the jobstrainer frontend. Before `window.open()`, the frontend calls `chrome.runtime.sendMessage(EXTENSION_ID, { type: "tailorer_pending", job_id })` via the extension's `externally_connectable` manifest entry. The service worker stores `{ job_id }` keyed by opener tab ID.
+2. Job board page opens in a new tab. The service worker detects it via `chrome.tabs.onCreated`, matches it to the stored `job_id`, and injects `overlay.js`.
+3. A floating **"Apply with Agent"** button appears on the job board page.
 4. User clicks it → extension opens WebSocket `GET /tailorer/ws/{job_id}?token=JWT` → agent starts. The backend sends a `session_started` message with the generated `thread_id`; the extension stores this for file download URLs.
+
+The extension's `manifest.json` must declare `externally_connectable.matches` for the jobstrainer frontend origin (e.g. `http://localhost:3000/*` for dev, production origin for prod).
 
 No button is added to the jobstrainer frontend itself.
 
@@ -58,7 +60,7 @@ Runs once per session before the first page fill. Reads `Job.description` + `Job
 - Tailored CV (docx bytes) — same logic as the existing `tailor/cover_letter.py`
 - Tailored cover letter (docx bytes + plain text)
 
-Both are stored as files under `{TAILORER_FILES_DIR}/{thread_id}/` (configurable env var, defaults to `/tmp/tailorer/`). The filesystem path is stored in LangGraph state. The extension downloads them via a signed endpoint when a file upload field is encountered.
+Both are stored as bytes in LangGraph state (`cv_bytes`, `cl_bytes`) and persisted by `AsyncPostgresSaver` into Postgres. No filesystem dependency — files survive container restarts. The file download endpoint reads the bytes directly from the checkpointer state by `thread_id`.
 
 **③ fill_page**  
 Receives a `dom_snapshot` from the extension. The LLM maps each detected field to the best value from: `ApplicantProfile` fields, tailored document text, or `extra_qa` JSONB. Sends `fill_field`, `file_upload`, and `click` commands back. Fields the agent is uncertain about are flagged in the subsequent `show_confirm` message.
@@ -72,8 +74,8 @@ Sends `show_confirm` to the extension. The extension injects a fixed-position ov
 **④ navigate_next**  
 Clicks the "Next" or "Submit" button. Detects whether more pages remain or the application is complete. If more pages → back to `fill_page`. If done → `done` node.
 
-**⚡ stuck_handler**  
-Reachable from any node after 2 failed retries. Sends `show_stuck` with a human-readable message ("Can't find the Apply button — can you click it for me?"). Waits for `stuck_unblocked` from the extension, then resumes from the node that failed.
+**⚡ stuck (inline interrupt, not a separate node)**  
+After 2 failed retries, any node calls `interrupt({"type": "stuck", "message": "..."})` directly. The WS layer surfaces this to the extension as `show_stuck`. When the user unblocks and the extension sends `stuck_unblocked`, the client resumes the graph with `Command(resume=stuck_unblocked_value)` and LangGraph re-executes the same node from the top (nodes must be idempotent for this reason). No separate `stuck_handler` node or `failed_node` state field is needed — this is the idiomatic LangGraph pattern for human-in-the-loop interrupts.
 
 **✓ done**  
 Inserts a row into `applications (user_id, job_id)` to record the completed application.
@@ -86,12 +88,14 @@ Persisted automatically by `AsyncPostgresSaver` (LangGraph's Postgres checkpoint
 apply_url: str
 current_page: int
 filled_fields: dict[str, str]
-cv_path: str
-cl_path: str
+cv_bytes: bytes       # tailored CV docx stored in LangGraph state (Postgres bytea via checkpointer)
+cl_bytes: bytes       # tailored cover letter docx
+cl_text: str          # plain text cover letter for text fields
 retry_count: int
-failed_node: str | None   # set before entering stuck_handler so it knows where to resume
-status: str               # navigating | filling | awaiting_user | stuck | done | failed
+status: str           # navigating | filling | awaiting_user | stuck | done | failed
 ```
+
+Files (CV, cover letter) are stored as bytes directly in LangGraph state, persisted by `AsyncPostgresSaver` into Postgres. This avoids filesystem dependency and survives container restarts. They are served via the file download endpoint, which reads them from the checkpointer state.
 
 ---
 
@@ -125,9 +129,9 @@ All messages are JSON. Each message includes a `message_id` (UUID) for acknowled
 | `show_stuck` | `message` | extension shows stuck overlay |
 | `done` | `message` | extension shows success banner |
 
-**File upload note:** tailored CV/CL bytes are never sent over the WebSocket. The agent stores them server-side and sends a signed `download_url`. The extension fetches the file as a `Blob` and sets it programmatically on the `<input type="file">` element.
+**File upload flow:** The agent sends a `file_upload` message with a `download_url` pointing to `GET /tailorer/files/{thread_id}/{type}?token=JWT`. The **service worker** (not the content script) fetches the file — this avoids CORS since the service worker has extension-level host permissions. It receives an `ArrayBuffer` (not Blob, which is not structured-cloneable across `chrome.runtime` in all browsers), sends it to the content script as `{ type: "do_file_upload", field_id, filename, buffer }`. The content script reconstructs a `File` object via `new File([buffer], filename)` and sets it on the input using `DataTransfer`.
 
-**Auth:** JWT token passed as `?token=` query param on the WebSocket handshake. The extension reconnects with exponential backoff on disconnect.
+**Auth:** JWT token passed as `?token=` query param on the WebSocket handshake. For the file download endpoint, the same JWT is passed as `?token=` query param. The endpoint is short-lived by design (only accessible while the WS session is active). The extension reconnects with exponential backoff on disconnect.
 
 ---
 
@@ -154,19 +158,20 @@ id, username, password_hash, created_at, updated_at
 1:1 with `users` (UNIQUE on `user_id`). Holds all applicant data including the CV.
 
 ```
-id             UUID PK
-user_id        FK → users UNIQUE
+id             UUID PK DEFAULT gen_random_uuid()
+user_id        FK → users ON DELETE CASCADE UNIQUE
 first_name     TEXT
 last_name      TEXT
 email          TEXT
 phone          TEXT
 city           TEXT
 country        TEXT
-work_auth      TEXT          -- e.g. "EU citizen, no sponsorship needed"
-urls           JSONB         -- {"linkedin": "…", "github": "…", "website": "…"}
-extra_qa       JSONB         -- {"notice_period": "2 weeks", "salary_expectation": "80k"}
-cv_text        TEXT          -- migrated from users.cv_text
-updated_at     TIMESTAMP
+work_auth      TEXT                   -- e.g. "EU citizen, no sponsorship needed"
+urls           JSONB                  -- {"linkedin": "…", "github": "…", "website": "…"}
+extra_qa       JSONB                  -- {"notice_period": "2 weeks", "salary_expectation": "80k"}
+cv_text        TEXT                   -- migrated from users.cv_text
+created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 Managed via `PUT /tailorer/profile`. The existing `cv` router (`/users/cv`) is updated to read/write `applicant_profile.cv_text` instead of `user.cv_text`.
@@ -176,17 +181,27 @@ Managed via `PUT /tailorer/profile`. The existing `cv` router (`/users/cv`) is u
 Junction table tracking which user applied to which job.
 
 ```
-user_id     FK → users   )
-job_id      FK → jobs    )  PRIMARY KEY (user_id, job_id)
-applied_at  TIMESTAMP DEFAULT now()
+id          UUID PK DEFAULT gen_random_uuid()
+user_id     FK → users ON DELETE CASCADE
+job_id      FK → jobs ON DELETE CASCADE
+applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+status      TEXT NOT NULL DEFAULT 'applied'   -- 'applied' | 'interviewing' | 'rejected' | 'offer'
+
+UNIQUE (user_id, job_id)
 ```
 
-Presence of a row = applied. Inserted by the agent's `done` node. Extensible: a `status` ENUM column (`applied`, `interviewing`, `rejected`, `offer`) can be added later without changing the core flow.
+UUID surrogate PK with a UNIQUE constraint (not composite PK) allows multiple application attempts per user+job in future. `status` is plain `TEXT` with a CHECK constraint rather than a Postgres ENUM — consistent with the project's existing pattern (`Job.employment_type`, `Job.seniority` are plain `Text`). Inserted by the agent's `done` node.
 
 ### Alembic Migrations
 
 - `007_applicant_profile.py` — create `applicant_profile`, copy `users.cv_text` → `applicant_profile.cv_text`, drop `cv_text` from `users`
 - `008_applications.py` — create `applications` junction table
+
+**Migration 007 code call sites:** The following files all reference `User.cv_text` and must be updated in the same PR as migration 007:
+- `backend/backend/routers/cv.py` — reads/writes `current_user.cv_text` directly
+- `backend/backend/routers/auth.py` — may reference user fields
+- `backend/backend/routers/search.py` — passes CV text to search
+- `backend/backend/search/query_understanding.py` — uses CV text for query understanding
 
 ---
 
@@ -257,7 +272,11 @@ extension/
 langgraph
 langchain-groq
 langchain-core
+langgraph-checkpoint-postgres   # AsyncPostgresSaver
+psycopg[binary,pool]            # required by langgraph-checkpoint-postgres (NOT asyncpg)
 ```
+
+`AsyncPostgresSaver` uses `psycopg` (v3) and opens its own connection pool separate from the existing asyncpg/SQLAlchemy pool. It also requires a one-time `await checkpointer.setup()` call at app startup (in the FastAPI lifespan in `main.py`) to create its own tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`) in the `jobstrainer` database. This is not an Alembic migration — it is runtime DDL run once.
 
 No new Python dependencies for the extension (vanilla JS, no build step required for v1).
 
