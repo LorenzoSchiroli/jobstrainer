@@ -12,6 +12,7 @@ from backend.routers import companies, jobs
 from backend.routers.search import router as search_router
 from backend.routers.auth import router as auth_router
 from backend.routers.cv import router as cv_router
+from backend.tailorer.router import router as tailorer_router
 from backend.search.models_lifecycle import init_models
 from backend.opensearch_client import init_opensearch, get_opensearch, INDEX_NAME
 from backend.outbox.worker import outbox_worker
@@ -61,6 +62,7 @@ app.include_router(jobs.router)
 app.include_router(search_router)
 app.include_router(auth_router)
 app.include_router(cv_router)
+app.include_router(tailorer_router)
 
 
 @app.get("/health")
