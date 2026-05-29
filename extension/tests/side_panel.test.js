@@ -1,5 +1,5 @@
 import '../content/side_panel.js';
-const { initPanel, openPanel, closePanel, showStartButton, setStatusBar, appendLogEntry } = globalThis;
+const { initPanel, openPanel, closePanel, showStartButton, setStatusBar, appendLogEntry, restorePanel } = globalThis;
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -121,4 +121,97 @@ test('multiple appendLogEntry calls grow the log in order', () => {
   expect(entries).toHaveLength(2);
   expect(entries[0].textContent).toContain('Step 1');
   expect(entries[1].textContent).toContain('Step 2');
+});
+
+test('appendLogEntry confirm renders summary and approve button', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'confirm', summary: 'Filled 3 fields', uncertain_fields: ['salary'] });
+  const block = host.shadowRoot.querySelector('.tailorer-confirm-block');
+  expect(block).not.toBeNull();
+  expect(block.textContent).toContain('Filled 3 fields');
+  expect(block.textContent).toContain('salary');
+  expect(block.querySelector('.tailorer-btn--approve')).not.toBeNull();
+});
+
+test('appendLogEntry confirm — approve button sends user_approved', () => {
+  globalThis.chrome = { runtime: { sendMessage: jest.fn() } };
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'confirm', summary: 'Test', uncertain_fields: [] });
+  host.shadowRoot.querySelector('.tailorer-btn--approve').click();
+  expect(globalThis.chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'user_approved' });
+  expect(host.shadowRoot.querySelector('.tailorer-confirm-block')).toBeNull();
+});
+
+test('appendLogEntry confirm — correction input sends user_correction on Enter', () => {
+  globalThis.chrome = { runtime: { sendMessage: jest.fn() } };
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'confirm', summary: 'Test', uncertain_fields: [] });
+  const input = host.shadowRoot.querySelector('.tailorer-correction-input');
+  input.value = 'use remote instead';
+  input.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Enter' }));
+  expect(globalThis.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+    type: 'user_correction', text: 'use remote instead',
+  });
+});
+
+test('appendLogEntry stuck renders message and unblock button', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'stuck', message: 'Cannot find apply link' });
+  const block = host.shadowRoot.querySelector('.tailorer-stuck-block');
+  expect(block).not.toBeNull();
+  expect(block.textContent).toContain('Cannot find apply link');
+  expect(block.querySelector('.tailorer-btn--unblock')).not.toBeNull();
+});
+
+test('appendLogEntry stuck — unblock button sends stuck_unblocked', () => {
+  globalThis.chrome = { runtime: { sendMessage: jest.fn() } };
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'stuck', message: 'Test' });
+  host.shadowRoot.querySelector('.tailorer-btn--unblock').click();
+  expect(globalThis.chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'stuck_unblocked' });
+  expect(host.shadowRoot.querySelector('.tailorer-stuck-block')).toBeNull();
+});
+
+test('appendLogEntry done renders done entry and download links', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({
+    kind: 'done', message: 'Application submitted!',
+    thread_id: 'tid-1', token: 'tok-abc',
+  });
+  const entry = host.shadowRoot.querySelector('.tailorer-entry--done-final');
+  expect(entry).not.toBeNull();
+  expect(entry.textContent).toContain('Application submitted!');
+  const links = host.shadowRoot.querySelectorAll('.tailorer-download-link');
+  expect(links).toHaveLength(2);
+  expect(links[0].href).toContain('tid-1');
+  expect(links[0].href).toContain('tok-abc');
+});
+
+test('appendLogEntry error renders error entry', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'error', message: 'WebSocket failed' });
+  const entry = host.shadowRoot.querySelector('.tailorer-entry--error');
+  expect(entry).not.toBeNull();
+  expect(entry.textContent).toContain('WebSocket failed');
+});
+
+test('restorePanel re-renders all entries in order', () => {
+  const host = document.getElementById('tailorer-host');
+  restorePanel([
+    { kind: 'step', text: 'Step 1', done: true },
+    { kind: 'step', text: 'Step 2', done: false },
+  ], 'navigating');
+  const entries = host.shadowRoot.querySelectorAll('.tailorer-entry');
+  expect(entries).toHaveLength(2);
+  expect(entries[0].textContent).toContain('Step 1');
+  expect(entries[1].textContent).toContain('Step 2');
+});
+
+test('restorePanel clears previous entries before re-rendering', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'step', text: 'Old', done: true });
+  restorePanel([{ kind: 'step', text: 'New', done: true }], 'navigating');
+  const entries = host.shadowRoot.querySelectorAll('.tailorer-entry');
+  expect(entries).toHaveLength(1);
+  expect(entries[0].textContent).toContain('New');
 });
