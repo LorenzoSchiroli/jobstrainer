@@ -125,7 +125,11 @@ function openSession(tabId, job_id, token) {
     ws, pendingNavigate: false, reconnectDelay: 1000,
   };
 
-  ws.onopen = () => console.log('[tailorer] WebSocket open for tab', tabId);
+  let opened = false;
+  ws.onopen = () => {
+    opened = true;
+    console.log('[tailorer] WebSocket open for tab', tabId);
+  };
 
   ws.onmessage = async (event) => {
     console.log('[tailorer] ws message:', event.data);
@@ -138,6 +142,14 @@ function openSession(tabId, job_id, token) {
     console.log('[tailorer] WebSocket closed for tab', tabId, 'code:', ev.code, 'reason:', ev.reason);
     const s = sessions[tabId];
     if (!s) return;
+    // Don't retry on permanent failures (TLS error, auth rejected, never opened)
+    if (!opened || ev.code === 1015 || ev.code === 4001) {
+      console.error('[tailorer] permanent failure (code', ev.code, '), not retrying');
+      setStatus(tabId, 'error');
+      chrome.tabs.sendMessage(tabId, { type: 'error', message: `WebSocket failed (code ${ev.code})` });
+      delete sessions[tabId];
+      return;
+    }
     const delay = s.reconnectDelay;
     s.reconnectDelay = Math.min(delay * 2, 30000);
     setTimeout(() => { if (sessions[tabId]) openSession(tabId, s.job_id, s.token); }, delay);
