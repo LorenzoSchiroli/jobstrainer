@@ -252,14 +252,18 @@ function restorePanel(log, status) {
   if (status) setStatusBar(status);
 }
 
+function ensurePanelInit() {
+  if (!_shadow || !document.getElementById('tailorer-host')) initPanel();
+}
+
 if (typeof chrome !== 'undefined') {
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'show_apply_button') {
-      initPanel();
+      ensurePanelInit();
       showStartButton(msg.job_id, msg.token);
       openPanel();
     } else if (msg.type === 'restore_panel') {
-      initPanel();
+      ensurePanelInit();
       restorePanel(msg.log || [], msg.status);
       openPanel();
     } else if (msg.type === 'append_log') {
