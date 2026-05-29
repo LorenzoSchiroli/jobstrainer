@@ -3,30 +3,38 @@ const API_BASE = 'http://localhost:8000';
 const pendingJobs = {};  // tabId -> { job_id, token }
 const sessions = {};     // tabId -> { job_id, token, thread_id, ws, pendingNavigate, reconnectDelay }
 const injectedTabs = new Set();
+let pendingNextTab = null; // set by frontend_bridge before tab opens (Firefox noopener path)
 
 // ── Tab detection ──────────────────────────────────────────────────────────
 
 chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!tab.openerTabId) return;
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.openerTabId },
-      func: () => ({
-        pending: localStorage.getItem('tailorer_pending'),
-        token: localStorage.getItem('access_token'),
-      }),
-    });
-    const { pending, token } = result.result;
-    if (!pending || !token) return;
-    const { job_id } = JSON.parse(pending);
-    // Clear pending so it doesn't re-trigger on subsequent reloads
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.openerTabId },
-      func: () => localStorage.removeItem('tailorer_pending'),
-    });
-    pendingJobs[tab.id] = { job_id, token };
-  } catch (_) {
-    // Opener tab may be inaccessible (different extension origin)
+  // Chrome path: opener tab accessible, read localStorage directly
+  if (tab.openerTabId) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.openerTabId },
+        func: () => ({
+          pending: localStorage.getItem('tailorer_pending'),
+          token: localStorage.getItem('access_token'),
+        }),
+      });
+      const { pending, token } = result.result;
+      if (pending && token) {
+        const { job_id } = JSON.parse(pending);
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.openerTabId },
+          func: () => localStorage.removeItem('tailorer_pending'),
+        });
+        pendingJobs[tab.id] = { job_id, token };
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // Firefox path: noopener severs openerTabId; frontend_bridge forwards info via register_pending
+  if (pendingNextTab) {
+    pendingJobs[tab.id] = pendingNextTab;
+    pendingNextTab = null;
   }
 });
 
@@ -77,6 +85,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   const tabId = sender.tab?.id;
   if (!tabId) return;
+
+  if (msg.type === 'register_pending') {
+    pendingNextTab = { job_id: msg.job_id, token: msg.token };
+    return;
+  }
 
   if (msg.type === 'start_session') {
     delete pendingJobs[tabId];

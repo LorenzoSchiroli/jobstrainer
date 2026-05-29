@@ -9,11 +9,13 @@ export default function JobCard({ job }: { job: Job }) {
   ].filter(Boolean) as string[]
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // Signal to extension which job is being opened
     try {
       localStorage.setItem('tailorer_pending', JSON.stringify({ job_id: job.id }))
+      // Also postMessage so the extension content script can forward it to the
+      // service worker without needing tab.openerTabId (broken by noopener in Firefox)
+      window.postMessage({ type: 'tailorer_pending', job_id: job.id }, '*')
     } catch {
-      // localStorage unavailable — extension will fall back to URL-based detection
+      // localStorage unavailable
     }
   }
 
