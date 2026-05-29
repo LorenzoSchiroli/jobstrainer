@@ -1,5 +1,5 @@
 import '../content/side_panel.js';
-const { initPanel, openPanel, closePanel } = globalThis;
+const { initPanel, openPanel, closePanel, showStartButton, setStatusBar, appendLogEntry } = globalThis;
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -69,4 +69,56 @@ test('clicking toggle tab calls openPanel', () => {
 test('initPanel is idempotent — second call replaces the first host', () => {
   initPanel(); // second call
   expect(document.querySelectorAll('#tailorer-host')).toHaveLength(1);
+});
+
+test('showStartButton renders a Start Agent button', () => {
+  const host = document.getElementById('tailorer-host');
+  showStartButton('job-42', 'tok123');
+  const btn = host.shadowRoot.querySelector('.tailorer-btn--start');
+  expect(btn).not.toBeNull();
+  expect(btn.textContent).toContain('Start Agent');
+});
+
+test('showStartButton clicking sends start_session and clears the button', () => {
+  globalThis.chrome = { runtime: { sendMessage: jest.fn() } };
+  const host = document.getElementById('tailorer-host');
+  showStartButton('job-42', 'tok123');
+  host.shadowRoot.querySelector('.tailorer-btn--start').click();
+  expect(globalThis.chrome.runtime.sendMessage).toHaveBeenCalledWith({
+    type: 'start_session', job_id: 'job-42', token: 'tok123',
+  });
+  expect(host.shadowRoot.querySelector('.tailorer-btn--start')).toBeNull();
+});
+
+test('setStatusBar updates status text', () => {
+  setStatusBar('navigating');
+  const bar = document.getElementById('tailorer-host').shadowRoot.getElementById('tailorer-status');
+  expect(bar.textContent).toContain('Navigating');
+});
+
+test('appendLogEntry done=true renders ✓ entry', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'step', text: 'Filled name', done: true });
+  const entry = host.shadowRoot.querySelector('.tailorer-entry--done');
+  expect(entry).not.toBeNull();
+  expect(entry.textContent).toContain('Filled name');
+  expect(entry.textContent).toContain('✓');
+});
+
+test('appendLogEntry done=false renders ⟳ entry', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'step', text: 'Navigating…', done: false });
+  const entry = host.shadowRoot.querySelector('.tailorer-entry--pending');
+  expect(entry).not.toBeNull();
+  expect(entry.textContent).toContain('Navigating');
+});
+
+test('multiple appendLogEntry calls grow the log in order', () => {
+  const host = document.getElementById('tailorer-host');
+  appendLogEntry({ kind: 'step', text: 'Step 1', done: true });
+  appendLogEntry({ kind: 'step', text: 'Step 2', done: true });
+  const entries = host.shadowRoot.querySelectorAll('.tailorer-entry');
+  expect(entries).toHaveLength(2);
+  expect(entries[0].textContent).toContain('Step 1');
+  expect(entries[1].textContent).toContain('Step 2');
 });

@@ -1,3 +1,8 @@
+// Expose jest as a globalThis property for ESM test files
+// (--experimental-vm-modules does not inject jest into module scope automatically)
+import { jest as _jest } from '@jest/globals';
+globalThis.jest = _jest;
+
 if (!globalThis.CSS) globalThis.CSS = {};
 if (!globalThis.CSS.escape) {
   globalThis.CSS.escape = (value) =>

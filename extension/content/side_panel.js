@@ -69,10 +69,87 @@ function closePanel() {
   _shadow.getElementById('tailorer-toggle').style.display = '';
 }
 
+const STATUS_CONFIG = {
+  connecting:    { text: 'Connecting…',        dot: true },
+  navigating:    { text: 'Navigating…',         dot: true },
+  filling:       { text: 'Filling form…',       dot: true },
+  awaiting_user: { text: '⏸ Waiting for you',   dot: false, cls: 'amber' },
+  show_stuck:    { text: '⚠ Action needed',     dot: false, cls: 'red' },
+  done:          { text: '✓ Done',              dot: false, cls: 'green' },
+  error:         { text: '✗ Error',             dot: false, cls: 'red' },
+};
+
+function setStatusBar(status) {
+  if (!_shadow) return;
+  const bar = _shadow.getElementById('tailorer-status');
+  const cfg = STATUS_CONFIG[status] || { text: status, dot: true };
+  bar.className = `tailorer-status tailorer-status--${cfg.cls || 'blue'}`;
+  bar.innerHTML = '';
+  if (cfg.dot) {
+    const dot = document.createElement('span');
+    dot.className = 'tailorer-dot';
+    bar.appendChild(dot);
+  }
+  const txt = document.createElement('span');
+  txt.textContent = cfg.text;
+  bar.appendChild(txt);
+}
+
+function showStartButton(job_id, token) {
+  if (!_shadow) return;
+  const log = _shadow.getElementById('tailorer-log');
+  log.innerHTML = '';
+  const area = document.createElement('div');
+  area.className = 'tailorer-start-area';
+  const hint = document.createElement('div');
+  hint.className = 'tailorer-start-hint';
+  hint.textContent = 'Job detected — ready to apply';
+  const btn = document.createElement('button');
+  btn.className = 'tailorer-btn tailorer-btn--start';
+  btn.textContent = '⚡ Start Agent';
+  btn.addEventListener('click', () => {
+    if (typeof chrome !== 'undefined') {
+      chrome.runtime.sendMessage({ type: 'start_session', job_id, token });
+    }
+    log.innerHTML = '';
+    setStatusBar('connecting');
+  });
+  area.append(hint, btn);
+  log.appendChild(area);
+}
+
+function _makeStepEntry(text, done) {
+  const el = document.createElement('div');
+  el.className = `tailorer-entry tailorer-entry--${done ? 'done' : 'pending'}`;
+  const icon = document.createElement('span');
+  icon.className = 'tailorer-entry-icon';
+  icon.textContent = done ? '✓' : '⟳';
+  const txt = document.createElement('span');
+  txt.className = 'tailorer-entry-text';
+  txt.textContent = text;
+  el.append(icon, txt);
+  return el;
+}
+
+function appendLogEntry(entry) {
+  if (!_shadow) return;
+  const log = _shadow.getElementById('tailorer-log');
+  let el;
+  if (entry.kind === 'step') {
+    el = _makeStepEntry(entry.text, entry.done);
+  }
+  if (!el) return;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
 if (typeof chrome !== 'undefined') {
   chrome.runtime.onMessage.addListener((_msg) => {});
 } else {
   globalThis.initPanel = initPanel;
   globalThis.openPanel = openPanel;
   globalThis.closePanel = closePanel;
+  globalThis.showStartButton = showStartButton;
+  globalThis.setStatusBar = setStatusBar;
+  globalThis.appendLogEntry = appendLogEntry;
 }
