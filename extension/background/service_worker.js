@@ -41,6 +41,9 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 // ── Content script injection ───────────────────────────────────────────────
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  // New URL means a real navigation — old content scripts are gone, must re-inject
+  if (changeInfo.url) injectedTabs.delete(tabId);
+
   if (changeInfo.status !== 'complete') return;
   if (!pendingJobs[tabId] && !sessions[tabId]) return;
 
