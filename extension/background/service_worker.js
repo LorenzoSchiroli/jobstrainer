@@ -8,6 +8,7 @@ let pendingNextTab = null; // set by frontend_bridge before tab opens (Firefox n
 // ── Tab detection ──────────────────────────────────────────────────────────
 
 chrome.tabs.onCreated.addListener(async (tab) => {
+  console.log('[tailorer] tab created', tab.id, 'openerTabId:', tab.openerTabId, 'pendingNextTab:', pendingNextTab?.job_id);
   // Chrome path: opener tab accessible, read localStorage directly
   if (tab.openerTabId) {
     try {
@@ -26,6 +27,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
           func: () => localStorage.removeItem('tailorer_pending'),
         });
         pendingJobs[tab.id] = { job_id, token };
+        console.log('[tailorer] pendingJob registered via openerTab for tab', tab.id);
         return;
       }
     } catch (_) {}
@@ -35,6 +37,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   if (pendingNextTab) {
     pendingJobs[tab.id] = pendingNextTab;
     pendingNextTab = null;
+    console.log('[tailorer] pendingJob registered via pendingNextTab for tab', tab.id);
   }
 });
 
@@ -46,19 +49,27 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
   if (!injectedTabs.has(tabId)) {
     try {
+      // Use dynamic import() so the files load as ES modules (top-level export is valid)
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/overlay.js'],
+        func: () => Promise.all([
+          import(chrome.runtime.getURL('content/dom_inspector.js')),
+          import(chrome.runtime.getURL('content/form_filler.js')),
+          import(chrome.runtime.getURL('content/overlay.js')),
+        ]),
       });
       await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
       injectedTabs.add(tabId);
-    } catch (_) {
-      return; // Tab not injectable (e.g., chrome:// URL, PDF)
+      console.log('[tailorer] content scripts injected on tab', tabId);
+    } catch (err) {
+      console.error('[tailorer] injection failed on tab', tabId, err);
+      return;
     }
   }
 
   if (pendingJobs[tabId]) {
     const { job_id, token } = pendingJobs[tabId];
+    console.log('[tailorer] sending show_apply_button to tab', tabId);
     chrome.tabs.sendMessage(tabId, { type: 'show_apply_button', job_id, token });
     return;
   }
@@ -87,6 +98,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!tabId) return;
 
   if (msg.type === 'register_pending') {
+    console.log('[tailorer] register_pending from tab', tabId, 'job_id:', msg.job_id);
     pendingNextTab = { job_id: msg.job_id, token: msg.token };
     return;
   }
