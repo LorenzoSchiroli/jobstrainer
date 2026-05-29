@@ -67,8 +67,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   }
 
   const session = sessions[tabId];
-  if (session?.pendingNavigate) {
+  if (!session) return;
+
+  const wasNavigating = session.pendingNavigate;
+  if (wasNavigating) {
     session.pendingNavigate = false;
+    const last = session.log[session.log.length - 1];
+    if (last?.kind === 'step' && !last.done) last.done = true;
+  }
+
+  chrome.tabs.sendMessage(tabId, {
+    type: 'restore_panel',
+    log: session.log,
+    status: session.currentStatus,
+  });
+
+  if (wasNavigating) {
     requestSnapshotAndSend(tabId);
   }
 });
@@ -80,7 +94,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
   delete pendingJobs[tabId];
   injectedTabs.delete(tabId);
-  chrome.storage.local.remove([`status_${tabId}`, `session_${tabId}`]);
 });
 
 // ── Messages from content scripts ─────────────────────────────────────────
@@ -103,7 +116,19 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   const session = sessions[tabId];
   if (!session?.ws || session.ws.readyState !== WebSocket.OPEN) return;
 
-  if (['user_approved', 'user_correction', 'user_manual_edit', 'stuck_unblocked'].includes(msg.type)) {
+  if (msg.type === 'user_approved') {
+    const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
+    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Confirmed', done: true };
+    session.ws.send(JSON.stringify(msg));
+  } else if (msg.type === 'user_correction') {
+    const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
+    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Corrected', done: true };
+    session.ws.send(JSON.stringify(msg));
+  } else if (msg.type === 'stuck_unblocked') {
+    const idx = session.log.findLastIndex((e) => e.kind === 'stuck');
+    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Unblocked', done: true };
+    session.ws.send(JSON.stringify(msg));
+  } else if (msg.type === 'user_manual_edit') {
     session.ws.send(JSON.stringify(msg));
   }
 });
@@ -117,6 +142,7 @@ function openSession(tabId, job_id, token) {
   sessions[tabId] = {
     job_id, token, thread_id: null,
     ws, pendingNavigate: false, reconnectDelay: 1000,
+    log: [], currentStatus: 'connecting',
   };
 
   let opened = false;
@@ -131,8 +157,9 @@ function openSession(tabId, job_id, token) {
     if (!s) return;
     // Don't retry on permanent failures (TLS error, auth rejected, never connected)
     if (!opened || ev.code === 1015 || ev.code === 4001) {
-      setStatus(tabId, 'error');
-      chrome.tabs.sendMessage(tabId, { type: 'error', message: `WebSocket failed (code ${ev.code})` });
+      const entry = { kind: 'error', message: `WebSocket failed (code ${ev.code})` };
+      if (sessions[tabId]) sessions[tabId].log?.push(entry);
+      chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
       delete sessions[tabId];
       return;
     }
@@ -153,16 +180,21 @@ async function handleAgentMessage(tabId, msg) {
   if (msg.type === 'session_started') {
     session.thread_id = msg.thread_id;
     session.reconnectDelay = 1000;
-    setStatus(tabId, 'navigating');
-    chrome.storage.local.set({
-      [`session_${tabId}`]: { job_id: session.job_id, token: session.token, thread_id: msg.thread_id },
-    });
+    session.currentStatus = 'navigating';
+    const entry = { kind: 'step', text: 'Session started', done: true };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     return;
   }
 
   if (msg.type === 'navigate') {
-    setStatus(tabId, 'navigating');
+    session.currentStatus = 'navigating';
     session.pendingNavigate = true;
+    let hostname = msg.url;
+    try { hostname = new URL(msg.url).hostname; } catch (_) {}
+    const entry = { kind: 'step', text: `Navigating to ${hostname}…`, done: false };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     chrome.tabs.update(tabId, { url: msg.url });
     return;
   }
@@ -172,18 +204,24 @@ async function handleAgentMessage(tabId, msg) {
     return;
   }
 
-  // Fill command: regular field or file upload
   if (msg.field_id !== undefined) {
     if (msg.type === 'file' || msg.value === '__CV__' || msg.value === '__COVER_LETTER__') {
       await handleFileUpload(tabId, msg);
     } else {
+      session.currentStatus = 'filling';
+      const entry = { kind: 'step', text: `Filling "${msg.field_id}"…`, done: true };
+      session.log.push(entry);
+      chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
       chrome.tabs.sendMessage(tabId, { type: 'fill_field', field_id: msg.field_id, value: msg.value });
     }
     return;
   }
 
   if (msg.type === 'navigate_next') {
-    setStatus(tabId, 'navigating');
+    session.currentStatus = 'navigating';
+    const entry = { kind: 'step', text: 'Submitting page…', done: true };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     chrome.tabs.sendMessage(tabId, { type: 'navigate_next' }, (response) => {
       const liveSession = sessions[tabId];
       if (liveSession?.ws?.readyState === WebSocket.OPEN) {
@@ -194,29 +232,37 @@ async function handleAgentMessage(tabId, msg) {
   }
 
   if (msg.type === 'show_confirm') {
-    setStatus(tabId, 'awaiting_user');
-    chrome.tabs.sendMessage(tabId, msg);
+    session.currentStatus = 'awaiting_user';
+    const entry = { kind: 'confirm', summary: msg.summary, uncertain_fields: msg.uncertain_fields || [] };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     return;
   }
 
   if (msg.type === 'show_stuck') {
-    setStatus(tabId, 'show_stuck');
-    chrome.tabs.sendMessage(tabId, msg);
+    session.currentStatus = 'show_stuck';
+    const entry = { kind: 'stuck', message: msg.message };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     return;
   }
 
   if (msg.type === 'done') {
-    setStatus(tabId, 'done');
-    chrome.tabs.sendMessage(tabId, msg);
-    chrome.storage.local.remove([`status_${tabId}`, `session_${tabId}`]);
+    session.currentStatus = 'done';
+    const { thread_id, token } = session;
+    const entry = { kind: 'done', message: msg.message, thread_id, token };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     injectedTabs.delete(tabId);
     delete sessions[tabId];
     return;
   }
 
   if (msg.type === 'error') {
-    setStatus(tabId, 'error');
-    chrome.tabs.sendMessage(tabId, msg);
+    session.currentStatus = 'error';
+    const entry = { kind: 'error', message: msg.message };
+    session.log.push(entry);
+    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
     injectedTabs.delete(tabId);
     delete sessions[tabId];
     return;
@@ -248,6 +294,3 @@ async function handleFileUpload(tabId, msg) {
   } catch (_) {}
 }
 
-function setStatus(tabId, status) {
-  chrome.storage.local.set({ [`status_${tabId}`]: status });
-}
