@@ -8,7 +8,6 @@ let pendingNextTab = null; // set by frontend_bridge before tab opens (Firefox n
 // ── Tab detection ──────────────────────────────────────────────────────────
 
 chrome.tabs.onCreated.addListener(async (tab) => {
-  console.log('[tailorer] tab created', tab.id, 'openerTabId:', tab.openerTabId, 'pendingNextTab:', pendingNextTab?.job_id);
   // Chrome path: opener tab accessible, read localStorage directly
   if (tab.openerTabId) {
     try {
@@ -27,7 +26,6 @@ chrome.tabs.onCreated.addListener(async (tab) => {
           func: () => localStorage.removeItem('tailorer_pending'),
         });
         pendingJobs[tab.id] = { job_id, token };
-        console.log('[tailorer] pendingJob registered via openerTab for tab', tab.id);
         return;
       }
     } catch (_) {}
@@ -37,7 +35,6 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   if (pendingNextTab) {
     pendingJobs[tab.id] = pendingNextTab;
     pendingNextTab = null;
-    console.log('[tailorer] pendingJob registered via pendingNextTab for tab', tab.id);
   }
 });
 
@@ -55,16 +52,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
       });
       await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
       injectedTabs.add(tabId);
-      console.log('[tailorer] content scripts injected on tab', tabId);
-    } catch (err) {
-      console.error('[tailorer] injection failed on tab', tabId, err);
-      return;
+    } catch (_) {
+      return; // Tab not injectable (e.g., chrome:// URL, PDF)
     }
   }
 
   if (pendingJobs[tabId]) {
     const { job_id, token } = pendingJobs[tabId];
-    console.log('[tailorer] sending show_apply_button to tab', tabId);
     chrome.tabs.sendMessage(tabId, { type: 'show_apply_button', job_id, token });
     return;
   }
@@ -93,13 +87,11 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!tabId) return;
 
   if (msg.type === 'register_pending') {
-    console.log('[tailorer] register_pending from tab', tabId, 'job_id:', msg.job_id);
     pendingNextTab = { job_id: msg.job_id, token: msg.token };
     return;
   }
 
   if (msg.type === 'start_session') {
-    console.log('[tailorer] start_session for job', msg.job_id, 'tab', tabId);
     delete pendingJobs[tabId];
     openSession(tabId, msg.job_id, msg.token);
     return;
@@ -117,7 +109,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function openSession(tabId, job_id, token) {
   const wsUrl = `ws://localhost:8000/tailorer/ws/${job_id}?token=${encodeURIComponent(token)}`;
-  console.log('[tailorer] opening WebSocket', wsUrl);
   const ws = new WebSocket(wsUrl);
 
   sessions[tabId] = {
@@ -126,25 +117,17 @@ function openSession(tabId, job_id, token) {
   };
 
   let opened = false;
-  ws.onopen = () => {
-    opened = true;
-    console.log('[tailorer] WebSocket open for tab', tabId);
-  };
+  ws.onopen = () => { opened = true; };
 
   ws.onmessage = async (event) => {
-    console.log('[tailorer] ws message:', event.data);
-    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (err) {
-      console.error('[tailorer] handleAgentMessage error:', err);
-    }
+    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (_) {}
   };
 
   ws.onclose = (ev) => {
-    console.log('[tailorer] WebSocket closed for tab', tabId, 'code:', ev.code, 'reason:', ev.reason);
     const s = sessions[tabId];
     if (!s) return;
-    // Don't retry on permanent failures (TLS error, auth rejected, never opened)
+    // Don't retry on permanent failures (TLS error, auth rejected, never connected)
     if (!opened || ev.code === 1015 || ev.code === 4001) {
-      console.error('[tailorer] permanent failure (code', ev.code, '), not retrying');
       setStatus(tabId, 'error');
       chrome.tabs.sendMessage(tabId, { type: 'error', message: `WebSocket failed (code ${ev.code})` });
       delete sessions[tabId];
@@ -155,7 +138,7 @@ function openSession(tabId, job_id, token) {
     setTimeout(() => { if (sessions[tabId]) openSession(tabId, s.job_id, s.token); }, delay);
   };
 
-  ws.onerror = (ev) => console.error('[tailorer] WebSocket error for tab', tabId, ev);
+  ws.onerror = () => {};
 }
 
 // ── Agent message dispatch ─────────────────────────────────────────────────
@@ -250,10 +233,7 @@ function requestSnapshotAndSend(tabId) {
 
 async function handleFileUpload(tabId, msg) {
   const session = sessions[tabId];
-  if (!session?.thread_id) {
-    console.error('[tailorer] file upload attempted before session_started');
-    return;
-  }
+  if (!session?.thread_id) return;
   const fileType = msg.value === '__CV__' ? 'cv' : 'cover_letter';
   const filename = fileType === 'cv' ? 'tailored_cv.docx' : 'cover_letter.docx';
   const url = `${API_BASE}/tailorer/files/${session.thread_id}/${fileType}?token=${encodeURIComponent(session.token)}`;
@@ -262,9 +242,7 @@ async function handleFileUpload(tabId, msg) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const buffer = await resp.arrayBuffer();
     chrome.tabs.sendMessage(tabId, { type: 'do_file_upload', field_id: msg.field_id, filename, buffer });
-  } catch (err) {
-    console.error('[tailorer] file download failed:', err);
-  }
+  } catch (_) {}
 }
 
 function setStatus(tabId, status) {
