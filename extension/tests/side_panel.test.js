@@ -215,3 +215,25 @@ test('restorePanel clears previous entries before re-rendering', () => {
   expect(entries).toHaveLength(1);
   expect(entries[0].textContent).toContain('New');
 });
+
+test('show_apply_button message initialises and opens panel with start button', () => {
+  // simulate chrome message dispatch manually
+  const { initPanel: init, showStartButton: ssb, openPanel: op } = globalThis;
+  // Call the same code path the listener would: init + showStartButton + open
+  init();
+  ssb('job-5', 'tok-5');
+  op();
+  const host = document.getElementById('tailorer-host');
+  expect(host.shadowRoot.querySelector('.tailorer-btn--start')).not.toBeNull();
+  expect(document.body.style.marginRight).toBe('320px');
+});
+
+test('restore_panel message re-renders log and opens panel', () => {
+  const { initPanel: init, restorePanel: rp, openPanel: op } = globalThis;
+  init();
+  rp([{ kind: 'step', text: 'Resumed', done: true }], 'navigating');
+  op();
+  const host = document.getElementById('tailorer-host');
+  expect(host.shadowRoot.querySelector('.tailorer-entry--done')).not.toBeNull();
+  expect(host.shadowRoot.querySelector('.tailorer-entry--done').textContent).toContain('Resumed');
+});

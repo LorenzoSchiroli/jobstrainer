@@ -253,7 +253,21 @@ function restorePanel(log, status) {
 }
 
 if (typeof chrome !== 'undefined') {
-  chrome.runtime.onMessage.addListener((_msg) => {});
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'show_apply_button') {
+      initPanel();
+      showStartButton(msg.job_id, msg.token);
+      openPanel();
+    } else if (msg.type === 'restore_panel') {
+      initPanel();
+      restorePanel(msg.log || [], msg.status);
+      openPanel();
+    } else if (msg.type === 'append_log') {
+      appendLogEntry(msg.entry);
+    } else if (msg.type === 'set_status') {
+      setStatusBar(msg.status);
+    }
+  });
 } else {
   globalThis.initPanel = initPanel;
   globalThis.openPanel = openPanel;
