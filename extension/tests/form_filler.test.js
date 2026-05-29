@@ -1,4 +1,5 @@
-import { fillField, clickElement, clickNextOrSubmit } from '../content/form_filler.js';
+import '../content/form_filler.js';
+const { fillField, clickElement, clickNextOrSubmit } = globalThis;
 
 describe('fillField', () => {
   test('sets value on text input', () => {

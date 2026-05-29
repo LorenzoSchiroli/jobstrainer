@@ -1,10 +1,5 @@
-import {
-  showApplyButton,
-  showConfirmBanner,
-  showStuckBanner,
-  showDoneBanner,
-  removeAllBanners,
-} from '../content/overlay.js';
+import '../content/overlay.js';
+const { showApplyButton, showConfirmBanner, showStuckBanner, showDoneBanner, removeAllBanners } = globalThis;
 
 beforeEach(() => {
   document.body.innerHTML = '';

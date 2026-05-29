@@ -49,14 +49,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
   if (!injectedTabs.has(tabId)) {
     try {
-      // Use dynamic import() so the files load as ES modules (top-level export is valid)
       await chrome.scripting.executeScript({
         target: { tabId },
-        func: () => Promise.all([
-          import(chrome.runtime.getURL('content/dom_inspector.js')),
-          import(chrome.runtime.getURL('content/form_filler.js')),
-          import(chrome.runtime.getURL('content/overlay.js')),
-        ]),
+        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/overlay.js'],
       });
       await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
       injectedTabs.add(tabId);

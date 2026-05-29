@@ -1,4 +1,5 @@
-import { buildSnapshot, resolveLabel } from '../content/dom_inspector.js';
+import '../content/dom_inspector.js';
+const { resolveLabel, buildSnapshot } = globalThis;
 
 describe('resolveLabel', () => {
   test('returns aria-label when present', () => {

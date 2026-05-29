@@ -5,11 +5,11 @@ const BANNER_IDS = [
   'tailorer-done-banner',
 ];
 
-export function removeAllBanners() {
+function removeAllBanners() {
   BANNER_IDS.forEach((id) => document.getElementById(id)?.remove());
 }
 
-export function showApplyButton(job_id, token) {
+function showApplyButton(job_id, token) {
   document.getElementById('tailorer-apply-btn')?.remove();
   const btn = document.createElement('button');
   btn.id = 'tailorer-apply-btn';
@@ -25,7 +25,7 @@ export function showApplyButton(job_id, token) {
   document.body.appendChild(btn);
 }
 
-export function showConfirmBanner(summary, uncertainFields) {
+function showConfirmBanner(summary, uncertainFields) {
   document.getElementById('tailorer-confirm-banner')?.remove();
 
   const banner = document.createElement('div');
@@ -78,7 +78,7 @@ export function showConfirmBanner(summary, uncertainFields) {
   document.body.appendChild(banner);
 }
 
-export function showStuckBanner(message) {
+function showStuckBanner(message) {
   document.getElementById('tailorer-stuck-banner')?.remove();
 
   const banner = document.createElement('div');
@@ -103,7 +103,7 @@ export function showStuckBanner(message) {
   document.body.appendChild(banner);
 }
 
-export function showDoneBanner(message) {
+function showDoneBanner(message) {
   removeAllBanners();
   const banner = document.createElement('div');
   banner.id = 'tailorer-done-banner';
@@ -113,7 +113,6 @@ export function showDoneBanner(message) {
   setTimeout(() => banner.remove(), 5000);
 }
 
-// Listen for messages from the service worker
 if (typeof chrome !== 'undefined') {
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'show_apply_button') showApplyButton(msg.job_id, msg.token);
@@ -121,4 +120,10 @@ if (typeof chrome !== 'undefined') {
     else if (msg.type === 'show_stuck') showStuckBanner(msg.message);
     else if (msg.type === 'done') showDoneBanner(msg.message);
   });
+} else {
+  globalThis.removeAllBanners = removeAllBanners;
+  globalThis.showApplyButton = showApplyButton;
+  globalThis.showConfirmBanner = showConfirmBanner;
+  globalThis.showStuckBanner = showStuckBanner;
+  globalThis.showDoneBanner = showDoneBanner;
 }

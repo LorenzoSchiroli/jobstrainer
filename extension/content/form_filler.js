@@ -1,4 +1,4 @@
-export function fillField(fieldId, value) {
+function fillField(fieldId, value) {
   const el = document.getElementById(fieldId);
   if (!el) return;
 
@@ -17,11 +17,11 @@ export function fillField(fieldId, value) {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-export function clickElement(selector) {
+function clickElement(selector) {
   document.querySelector(selector)?.click();
 }
 
-export function setFileOnInput(fieldId, filename, buffer) {
+function setFileOnInput(fieldId, filename, buffer) {
   const el = document.getElementById(fieldId);
   if (!el || el.type !== 'file') return;
   const file = new File([buffer], filename, {
@@ -36,7 +36,7 @@ export function setFileOnInput(fieldId, filename, buffer) {
 const SUBMIT_KEYWORDS = ['submit', 'apply', 'send application', 'complete'];
 const NEXT_KEYWORDS = ['next', 'continue', 'proceed', 'save'];
 
-export function clickNextOrSubmit() {
+function clickNextOrSubmit() {
   const buttons = Array.from(
     document.querySelectorAll('button, input[type="submit"]')
   );
@@ -59,7 +59,6 @@ export function clickNextOrSubmit() {
     return { submitted: false };
   }
 
-  // Fallback: click first form button
   const fallback = buttons[0];
   if (fallback) {
     fallback.click();
@@ -69,7 +68,6 @@ export function clickNextOrSubmit() {
   return { submitted: false };
 }
 
-// Listen for commands from service worker
 if (typeof chrome !== 'undefined') {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'fill_field') {
@@ -83,4 +81,9 @@ if (typeof chrome !== 'undefined') {
       return true;
     }
   });
+} else {
+  globalThis.fillField = fillField;
+  globalThis.clickElement = clickElement;
+  globalThis.setFileOnInput = setFileOnInput;
+  globalThis.clickNextOrSubmit = clickNextOrSubmit;
 }

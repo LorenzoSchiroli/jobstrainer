@@ -1,4 +1,4 @@
-export function resolveLabel(el) {
+function resolveLabel(el) {
   if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
   if (el.id) {
     const lbl = document.querySelector(`label[for='${CSS.escape(el.id)}']`);
@@ -8,7 +8,7 @@ export function resolveLabel(el) {
   return '';
 }
 
-export function buildSnapshot() {
+function buildSnapshot() {
   let autoId = 0;
   const fields = [];
 
@@ -63,11 +63,14 @@ export function buildSnapshot() {
   };
 }
 
-// Respond to snapshot requests from the service worker
 if (typeof chrome !== 'undefined') {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'request_snapshot') {
       sendResponse(buildSnapshot());
     }
   });
+} else {
+  // Test environment (Jest/jsdom): expose functions via globalThis
+  globalThis.resolveLabel = resolveLabel;
+  globalThis.buildSnapshot = buildSnapshot;
 }
