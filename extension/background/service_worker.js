@@ -99,6 +99,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 
   if (msg.type === 'start_session') {
+    console.log('[tailorer] start_session for job', msg.job_id, 'tab', tabId);
     delete pendingJobs[tabId];
     openSession(tabId, msg.job_id, msg.token);
     return;
@@ -116,6 +117,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 function openSession(tabId, job_id, token) {
   const wsUrl = `ws://localhost:8000/tailorer/ws/${job_id}?token=${encodeURIComponent(token)}`;
+  console.log('[tailorer] opening WebSocket', wsUrl);
   const ws = new WebSocket(wsUrl);
 
   sessions[tabId] = {
@@ -123,11 +125,17 @@ function openSession(tabId, job_id, token) {
     ws, pendingNavigate: false, reconnectDelay: 1000,
   };
 
+  ws.onopen = () => console.log('[tailorer] WebSocket open for tab', tabId);
+
   ws.onmessage = async (event) => {
-    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (_) {}
+    console.log('[tailorer] ws message:', event.data);
+    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (err) {
+      console.error('[tailorer] handleAgentMessage error:', err);
+    }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
+    console.log('[tailorer] WebSocket closed for tab', tabId, 'code:', ev.code, 'reason:', ev.reason);
     const s = sessions[tabId];
     if (!s) return;
     const delay = s.reconnectDelay;
@@ -135,7 +143,7 @@ function openSession(tabId, job_id, token) {
     setTimeout(() => { if (sessions[tabId]) openSession(tabId, s.job_id, s.token); }, delay);
   };
 
-  ws.onerror = () => {};
+  ws.onerror = (ev) => console.error('[tailorer] WebSocket error for tab', tabId, ev);
 }
 
 // ── Agent message dispatch ─────────────────────────────────────────────────
