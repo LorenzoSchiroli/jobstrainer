@@ -8,6 +8,13 @@ let pendingNextTab = null;
 
 if (chrome.sidePanel?.setPanelBehavior) {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+} else {
+  // Firefox: toolbar action click toggles the native sidebar (user-gesture context)
+  chrome.action.onClicked.addListener(() => {
+    if (typeof browser !== 'undefined' && browser.sidebarAction?.toggle) {
+      browser.sidebarAction.toggle();
+    }
+  });
 }
 
 // ── Tab detection ──────────────────────────────────────────────────────────

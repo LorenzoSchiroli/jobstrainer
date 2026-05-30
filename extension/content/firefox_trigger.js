@@ -19,10 +19,7 @@
     cursor: 'pointer',
     boxShadow: '0 2px 12px rgba(0,0,0,0.35)',
   });
-  btn.textContent = '⚡ Open Tailorer';
-  btn.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'open_sidebar' });
-    btn.remove();
-  });
+  btn.textContent = '⚡ Open Tailorer — click toolbar icon';
+  btn.addEventListener('click', btn.remove.bind(btn));
   document.body.appendChild(btn);
 })();
