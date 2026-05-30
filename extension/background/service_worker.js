@@ -158,7 +158,7 @@ function openSession(tabId, job_id, token) {
     // Don't retry on permanent failures (TLS error, auth rejected, never connected)
     if (!opened || ev.code === 1015 || ev.code === 4001) {
       const entry = { kind: 'error', message: `WebSocket failed (code ${ev.code})` };
-      if (sessions[tabId]) sessions[tabId].log?.push(entry);
+      s.log.push(entry);
       chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
       delete sessions[tabId];
       return;
