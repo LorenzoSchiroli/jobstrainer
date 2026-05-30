@@ -1,14 +1,18 @@
 const API_BASE = 'http://localhost:8000';
 
 const pendingJobs = {};  // tabId -> { job_id, token }
-const sessions = {};     // tabId -> { job_id, token, thread_id, ws, pendingNavigate, reconnectDelay }
+const sessions = {};     // tabId -> { job_id, token, thread_id, ws, pendingNavigate, reconnectDelay, log, currentStatus }
 const injectedTabs = new Set();
-let pendingNextTab = null; // set by frontend_bridge before tab opens (Firefox noopener path)
+const panelPorts = {};   // tabId -> port
+let pendingNextTab = null;
+
+if (chrome.sidePanel?.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+}
 
 // ── Tab detection ──────────────────────────────────────────────────────────
 
 chrome.tabs.onCreated.addListener(async (tab) => {
-  // Chrome path: opener tab accessible, read localStorage directly
   if (tab.openerTabId) {
     try {
       const [result] = await chrome.scripting.executeScript({
@@ -26,12 +30,15 @@ chrome.tabs.onCreated.addListener(async (tab) => {
           func: () => localStorage.removeItem('tailorer_pending'),
         });
         pendingJobs[tab.id] = { job_id, token };
+        // Auto-open side panel in Chrome while we are still in the user-gesture context
+        if (chrome.sidePanel?.open) {
+          chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+        }
         return;
       }
     } catch (_) {}
   }
 
-  // Firefox path: noopener severs openerTabId; frontend_bridge forwards info via register_pending
   if (pendingNextTab) {
     pendingJobs[tab.id] = pendingNextTab;
     pendingNextTab = null;
@@ -41,7 +48,6 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 // ── Content script injection ───────────────────────────────────────────────
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  // New URL means a real navigation — old content scripts are gone, must re-inject
   if (changeInfo.url) injectedTabs.delete(tabId);
 
   if (changeInfo.status !== 'complete') return;
@@ -49,19 +55,24 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
 
   if (!injectedTabs.has(tabId)) {
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/side_panel.js'],
-      });
+      const files = ['content/dom_inspector.js', 'content/form_filler.js'];
+      // On Firefox (no chrome.sidePanel), inject the trigger button instead of auto-opening
+      if (!chrome.sidePanel) files.push('content/firefox_trigger.js');
+      await chrome.scripting.executeScript({ target: { tabId }, files });
       injectedTabs.add(tabId);
     } catch (_) {
-      return; // Tab not injectable (e.g., chrome:// URL, PDF)
+      return;
     }
+  }
+
+  // Fallback open attempt for Chrome (onCreated may have been the primary attempt)
+  if (chrome.sidePanel?.open) {
+    chrome.sidePanel.open({ tabId }).catch(() => {});
   }
 
   if (pendingJobs[tabId]) {
     const { job_id, token } = pendingJobs[tabId];
-    chrome.tabs.sendMessage(tabId, { type: 'show_apply_button', job_id, token });
+    sendToPanel(tabId, { type: 'show_apply_button', job_id, token });
     return;
   }
 
@@ -75,7 +86,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     if (last?.kind === 'step' && !last.done) last.done = true;
   }
 
-  chrome.tabs.sendMessage(tabId, {
+  sendToPanel(tabId, {
     type: 'restore_panel',
     log: session.log,
     status: session.currentStatus,
@@ -92,6 +103,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     delete sessions[tabId];
   }
   delete pendingJobs[tabId];
+  delete panelPorts[tabId];
   injectedTabs.delete(tabId);
 });
 
@@ -106,30 +118,61 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     return;
   }
 
-  if (msg.type === 'start_session') {
-    delete pendingJobs[tabId];
-    openSession(tabId, msg.job_id, msg.token);
-    return;
+  // Firefox only: user clicked the trigger button in the page
+  if (msg.type === 'open_sidebar') {
+    if (typeof browser !== 'undefined' && browser.sidebarAction?.open) {
+      browser.sidebarAction.open().catch(() => {});
+    }
+  }
+});
+
+// ── Panel port connections ─────────────────────────────────────────────────
+
+chrome.runtime.onConnect.addListener((port) => {
+  const match = port.name.match(/^panel-(\d+)$/);
+  if (!match) return;
+  const tabId = parseInt(match[1]);
+  panelPorts[tabId] = port;
+
+  port.onDisconnect.addListener(() => {
+    if (panelPorts[tabId] === port) delete panelPorts[tabId];
+  });
+
+  // Send current state to the newly connected panel
+  if (pendingJobs[tabId]) {
+    const { job_id, token } = pendingJobs[tabId];
+    port.postMessage({ type: 'show_apply_button', job_id, token });
+  } else if (sessions[tabId]) {
+    const s = sessions[tabId];
+    port.postMessage({ type: 'restore_panel', log: s.log, status: s.currentStatus });
+  } else {
+    port.postMessage({ type: 'idle' });
   }
 
-  const session = sessions[tabId];
-  if (!session?.ws || session.ws.readyState !== WebSocket.OPEN) return;
-
-  if (msg.type === 'user_approved') {
-    const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
-    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Confirmed', done: true };
-    session.ws.send(JSON.stringify(msg));
-  } else if (msg.type === 'user_correction') {
-    const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
-    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Corrected', done: true };
-    session.ws.send(JSON.stringify(msg));
-  } else if (msg.type === 'stuck_unblocked') {
-    const idx = session.log.findLastIndex((e) => e.kind === 'stuck');
-    if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Unblocked', done: true };
-    session.ws.send(JSON.stringify(msg));
-  } else if (msg.type === 'user_manual_edit') {
-    session.ws.send(JSON.stringify(msg));
-  }
+  port.onMessage.addListener((msg) => {
+    if (msg.type === 'start_session') {
+      delete pendingJobs[tabId];
+      openSession(tabId, msg.job_id, msg.token);
+      return;
+    }
+    const session = sessions[tabId];
+    if (!session?.ws || session.ws.readyState !== WebSocket.OPEN) return;
+    if (msg.type === 'user_approved') {
+      const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
+      if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Confirmed', done: true };
+      session.ws.send(JSON.stringify(msg));
+    } else if (msg.type === 'user_correction') {
+      const idx = session.log.findLastIndex((e) => e.kind === 'confirm');
+      if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Corrected', done: true };
+      session.ws.send(JSON.stringify(msg));
+    } else if (msg.type === 'stuck_unblocked') {
+      const idx = session.log.findLastIndex((e) => e.kind === 'stuck');
+      if (idx !== -1) session.log[idx] = { kind: 'step', text: 'Unblocked', done: true };
+      session.ws.send(JSON.stringify(msg));
+    } else if (msg.type === 'user_manual_edit') {
+      session.ws.send(JSON.stringify(msg));
+    }
+  });
 });
 
 // ── WebSocket session lifecycle ────────────────────────────────────────────
@@ -154,11 +197,10 @@ function openSession(tabId, job_id, token) {
   ws.onclose = (ev) => {
     const s = sessions[tabId];
     if (!s) return;
-    // Don't retry on permanent failures (TLS error, auth rejected, never connected)
     if (!opened || ev.code === 1015 || ev.code === 4001) {
       const entry = { kind: 'error', message: `WebSocket failed (code ${ev.code})` };
       s.log.push(entry);
-      chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+      sendToPanel(tabId, { type: 'append_log', entry });
       delete sessions[tabId];
       return;
     }
@@ -182,7 +224,7 @@ async function handleAgentMessage(tabId, msg) {
     session.currentStatus = 'navigating';
     const entry = { kind: 'step', text: 'Session started', done: true };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     return;
   }
 
@@ -193,7 +235,7 @@ async function handleAgentMessage(tabId, msg) {
     try { hostname = new URL(msg.url).hostname; } catch (_) {}
     const entry = { kind: 'step', text: `Navigating to ${hostname}…`, done: false };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     chrome.tabs.update(tabId, { url: msg.url });
     return;
   }
@@ -210,7 +252,7 @@ async function handleAgentMessage(tabId, msg) {
       session.currentStatus = 'filling';
       const entry = { kind: 'step', text: `Filling "${msg.field_id}"…`, done: true };
       session.log.push(entry);
-      chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+      sendToPanel(tabId, { type: 'append_log', entry });
       chrome.tabs.sendMessage(tabId, { type: 'fill_field', field_id: msg.field_id, value: msg.value });
     }
     return;
@@ -220,7 +262,7 @@ async function handleAgentMessage(tabId, msg) {
     session.currentStatus = 'navigating';
     const entry = { kind: 'step', text: 'Submitting page…', done: true };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     chrome.tabs.sendMessage(tabId, { type: 'navigate_next' }, (response) => {
       const liveSession = sessions[tabId];
       if (liveSession?.ws?.readyState === WebSocket.OPEN) {
@@ -234,7 +276,7 @@ async function handleAgentMessage(tabId, msg) {
     session.currentStatus = 'awaiting_user';
     const entry = { kind: 'confirm', summary: msg.summary, uncertain_fields: msg.uncertain_fields || [] };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     return;
   }
 
@@ -242,7 +284,7 @@ async function handleAgentMessage(tabId, msg) {
     session.currentStatus = 'show_stuck';
     const entry = { kind: 'stuck', message: msg.message };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     return;
   }
 
@@ -251,7 +293,7 @@ async function handleAgentMessage(tabId, msg) {
     const { thread_id, token } = session;
     const entry = { kind: 'done', message: msg.message, thread_id, token };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     injectedTabs.delete(tabId);
     delete sessions[tabId];
     return;
@@ -261,7 +303,7 @@ async function handleAgentMessage(tabId, msg) {
     session.currentStatus = 'error';
     const entry = { kind: 'error', message: msg.message };
     session.log.push(entry);
-    chrome.tabs.sendMessage(tabId, { type: 'append_log', entry });
+    sendToPanel(tabId, { type: 'append_log', entry });
     injectedTabs.delete(tabId);
     delete sessions[tabId];
     return;
@@ -279,6 +321,10 @@ function requestSnapshotAndSend(tabId) {
   });
 }
 
+function sendToPanel(tabId, msg) {
+  panelPorts[tabId]?.postMessage(msg);
+}
+
 async function handleFileUpload(tabId, msg) {
   const session = sessions[tabId];
   if (!session?.thread_id) return;
@@ -292,4 +338,3 @@ async function handleFileUpload(tabId, msg) {
     chrome.tabs.sendMessage(tabId, { type: 'do_file_upload', field_id: msg.field_id, filename, buffer });
   } catch (_) {}
 }
-
