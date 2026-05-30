@@ -51,9 +51,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/overlay.js'],
+        files: ['content/dom_inspector.js', 'content/form_filler.js', 'content/side_panel.js'],
       });
-      await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/overlay.css'] });
+      await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/side_panel.css'] });
       injectedTabs.add(tabId);
     } catch (_) {
       return; // Tab not injectable (e.g., chrome:// URL, PDF)
