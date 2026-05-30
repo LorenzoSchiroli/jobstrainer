@@ -6,17 +6,6 @@ const injectedTabs = new Set();
 const panelPorts = {};   // tabId -> port
 let pendingNextTab = null;
 
-if (chrome.sidePanel?.setPanelBehavior) {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
-} else {
-  // Firefox: toolbar action click toggles the native sidebar (user-gesture context)
-  chrome.action.onClicked.addListener(() => {
-    if (typeof browser !== 'undefined' && browser.sidebarAction?.toggle) {
-      browser.sidebarAction.toggle();
-    }
-  });
-}
-
 // ── Tab detection ──────────────────────────────────────────────────────────
 
 chrome.tabs.onCreated.addListener(async (tab) => {
@@ -63,8 +52,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!injectedTabs.has(tabId)) {
     try {
       const files = ['content/dom_inspector.js', 'content/form_filler.js'];
-      // On Firefox (no chrome.sidePanel), inject the trigger button instead of auto-opening
-      if (!chrome.sidePanel) files.push('content/firefox_trigger.js');
       await chrome.scripting.executeScript({ target: { tabId }, files });
       injectedTabs.add(tabId);
     } catch (_) {
@@ -122,14 +109,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
   if (msg.type === 'register_pending') {
     pendingNextTab = { job_id: msg.job_id, token: msg.token };
-    return;
-  }
-
-  // Firefox only: user clicked the trigger button in the page
-  if (msg.type === 'open_sidebar') {
-    if (typeof browser !== 'undefined' && browser.sidebarAction?.open) {
-      browser.sidebarAction.open().catch(() => {});
-    }
   }
 });
 
