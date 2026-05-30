@@ -196,11 +196,13 @@ function _connectWithTab(tabId) {
     _port.onMessage.removeListener(_handleMessage);
     _port.disconnect();
   }
-  _port = chrome.runtime.connect({ name: `panel-${tabId}` });
-  _port.onMessage.addListener(_handleMessage);
-  _port.onDisconnect.addListener(() => {
+  const port = chrome.runtime.connect({ name: `panel-${tabId}` });
+  _port = port;
+  port.onMessage.addListener(_handleMessage);
+  port.onDisconnect.addListener(() => {
+    // Only reconnect if this port is still the active one (not superseded by a tab switch)
+    if (_port !== port) return;
     _port = null;
-    // Reconnect after short delay in case service worker was killed (MV3 sleep)
     setTimeout(() => _connectWithTab(tabId), 500);
   });
 }
@@ -223,6 +225,7 @@ function _handleMessage(msg) {
 if (typeof chrome !== 'undefined' && chrome.runtime?.connect) {
   (async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
     _connectWithTab(tab.id);
   })();
 
