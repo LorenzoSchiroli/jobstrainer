@@ -5,8 +5,7 @@
   "description": "AI-powered job application assistant",
   "permissions": [
     "tabs",
-    "scripting",
-    "webNavigation"
+    "scripting"
   ],
   "host_permissions": [
     "http://localhost:8000/*",
@@ -16,6 +15,12 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://localhost:8000 http://localhost:8000"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["content/side_panel.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["http://localhost:3000/*"],
