@@ -5,7 +5,8 @@
   "description": "AI-powered job application assistant",
   "permissions": [
     "tabs",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://localhost:8000/*",
@@ -15,12 +16,6 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src ws://localhost:8000 http://localhost:8000"
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["content/side_panel.css"],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "content_scripts": [
     {
       "matches": ["http://localhost:3000/*"],
@@ -31,6 +26,14 @@
   "background": {
     "service_worker": "background/service_worker.js",
     "scripts": ["background/service_worker.js"]
+  },
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  },
+  "sidebar_action": {
+    "default_panel": "sidepanel/panel.html",
+    "default_title": "Tailorer",
+    "default_icon": { "48": "icons/icon48.png" }
   },
   "action": {
     "default_icon": {
