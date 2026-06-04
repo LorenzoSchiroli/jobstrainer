@@ -30,25 +30,6 @@ def _make_state(**overrides):
     return {**base, **overrides}
 
 
-def test_find_best_link_returns_url():
-    from backend.tailorer.nodes import _find_best_link_in_snapshot
-    snapshot = {
-        "links": [
-            {"label": "Careers", "href": "https://stripe.com/jobs"},
-            {"label": "About", "href": "https://stripe.com/about"},
-        ]
-    }
-    result = _find_best_link_in_snapshot(snapshot, ["careers", "jobs"])
-    assert result == "https://stripe.com/jobs"
-
-
-def test_find_best_link_returns_none_when_no_match():
-    from backend.tailorer.nodes import _find_best_link_in_snapshot
-    snapshot = {"links": [{"label": "About", "href": "https://stripe.com/about"}]}
-    result = _find_best_link_in_snapshot(snapshot, ["careers", "jobs"])
-    assert result is None
-
-
 def test_make_state_has_new_fields():
     from backend.tailorer.state import TailorerState
     # Verify new fields exist in the TypedDict definition
@@ -76,3 +57,80 @@ def test_build_fill_commands_maps_profile_fields():
         cmds = _map_fields_sync(instance, snapshot, state)
     assert cmds[0]["field_id"] == "first_name"
     assert cmds[0]["value"] == "Lorenzo"
+
+
+def test_decide_next_navigation_returns_batched_actions():
+    """_decide_next_navigation returns a dict with current_state + action array."""
+    import json
+    from unittest.mock import patch, MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.content = json.dumps({
+        "current_state": {
+            "evaluation_previous_goal": "Unknown - first step",
+            "memory": "Starting navigation to Stripe careers page.",
+            "next_goal": "Find apply button"
+        },
+        "action": [{"action": "click_element", "index": 1}]
+    })
+
+    with patch("backend.tailorer.nodes.ChatOpenAI") as MockLLM:
+        instance = MockLLM.return_value
+        instance.invoke.return_value = mock_resp
+        from backend.tailorer import nodes as nodes_module
+        # Force reimport to get fresh module
+        import importlib
+        importlib.reload(nodes_module)
+        result = nodes_module._decide_next_navigation(instance, {
+            "url": "https://stripe.com/jobs/123",
+            "title": "Software Engineer",
+            "elements": "[1]<button >Apply Now />\n[2]<a href=/careers >Careers />",
+            "scroll_y": 0, "scroll_height": 1000, "viewport_height": 800,
+        }, "Software Engineer", [], "")
+
+    assert "current_state" in result
+    assert "action" in result
+    assert isinstance(result["action"], list)
+    assert result["action"][0]["action"] == "click_element"
+
+
+def test_navigate_to_apply_stores_nav_memory():
+    """navigate_to_apply persists LLM memory into nav_memory state field."""
+    import json
+    import os
+    import importlib
+    from unittest.mock import patch, MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.content = json.dumps({
+        "current_state": {
+            "evaluation_previous_goal": "Unknown",
+            "memory": "On careers page, found apply button at index 1.",
+            "next_goal": "Click apply"
+        },
+        "action": [{"action": "at_form"}]
+    })
+
+    from backend.tailorer import nodes as nodes_module
+    importlib.reload(nodes_module)
+
+    with patch.dict(os.environ, {"GROQ_API_KEY": "test-key", "GROQ_MODEL_LARGE": "test-model"}), \
+         patch("backend.tailorer.nodes.ChatOpenAI") as MockLLM, \
+         patch("backend.tailorer.nodes.interrupt") as mock_interrupt:
+        instance = MockLLM.return_value
+        instance.invoke.return_value = mock_resp
+        mock_interrupt.return_value = {
+            "url": "https://stripe.com/apply",
+            "title": "Apply",
+            "elements": "[2]<input type=text />",
+            "scroll_y": 0, "scroll_height": 500, "viewport_height": 800
+        }
+        state = _make_state(
+            nav_phase="deciding",
+            nav_snapshot={"url": "https://stripe.com/jobs/123", "elements": "[1]<button >Apply />", "scroll_y": 0, "scroll_height": 1000, "viewport_height": 800},
+            nav_memory="",
+            nav_history=["https://stripe.com"],
+        )
+        result = nodes_module.navigate_to_apply(state)
+
+    assert result["nav_memory"] == "On careers page, found apply button at index 1."
