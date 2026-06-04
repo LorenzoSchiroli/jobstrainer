@@ -1,3 +1,5 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-createRoot(document.getElementById('root')!).render(<div>Tailorer</div>);
+import App from './App';
+
+createRoot(document.getElementById('root')!).render(<App />);
