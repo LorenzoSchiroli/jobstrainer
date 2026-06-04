@@ -1,12 +1,24 @@
 {
-  "name": "jobstrainer-extension",
-  "version": "0.1.0",
-  "type": "module",
+  "name": "jobstrainer-tailorer-extension",
+  "version": "0.2.0",
+  "private": true,
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "build": "mkdir -p dist && cp manifest.json dist/ && (cp -r public/* dist/ 2>/dev/null || true) && ENTRY=sw vite build && vite build",
+    "build:watch": "ENTRY=sw vite build --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0"
+    "@types/chrome": "^0.0.268",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vitest": "^2.0.3"
   }
 }
