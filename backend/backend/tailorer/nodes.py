@@ -88,35 +88,30 @@ def _decide_next_navigation(llm, snapshot: dict, job_title: str, nav_history: li
 def _map_fields_sync(llm, snapshot: dict, state: TailorerState) -> list[dict]:
     SYSTEM = (
         "You fill job application form fields from the applicant's profile and CV.\n\n"
-        "Return a JSON array of fill commands, each:\n"
-        '  {"field_id":"<id>","value":"<value>","uncertain":false}\n\n'
-        "For file upload fields (type=file):\n"
-        '  {"field_id":"<id>","value":"__CV__","type":"file"}      <- for CV/resume\n'
-        '  {"field_id":"<id>","value":"__COVER_LETTER__","type":"file"}  <- for cover letter\n\n'
+        "Interactive elements are listed as: [index]<type attributes>text</>\n"
+        "Use the numeric index to reference each element.\n\n"
+        "Return a JSON array of fill commands:\n"
+        '  {"index": N, "value": "<value>", "action": "input_text", "uncertain": false}\n'
+        '  {"index": N, "action": "select_option", "text": "<option text>", "uncertain": false}\n'
+        '  {"index": N, "value": "__CV__", "action": "file_upload"}  -- for CV/resume file input\n'
+        '  {"index": N, "value": "__COVER_LETTER__", "action": "file_upload"}  -- for cover letter\n\n'
         "Rules:\n"
-        "- NEVER fill authentication/login fields (username, password, email for signing into an account)\n"
-        "- If the page shows both a login section AND a first-time/guest applicant section, ONLY fill the first-time applicant fields (file uploads, name, email for the application itself)\n"
+        "- NEVER fill authentication/login fields\n"
         "- uncertain=true if you are not sure of the correct value\n"
         "- Omit fields you have no data for\n"
-        "- For dropdowns, use exact text from the options array\n"
+        "- For select dropdowns, use exact option text\n"
         "- Return ONLY the JSON array, no prose\n"
     )
     profile_str = json.dumps(state["profile"], indent=2)
-    # Trim dropdown options to avoid exceeding TPM limits
-    trimmed_fields = []
-    for f in snapshot.get("fields", []):
-        tf = {k: v for k, v in f.items() if k != "options"}
-        if f.get("options"):
-            tf["options"] = f["options"][:20]  # cap dropdown options at 20
-        trimmed_fields.append(tf)
-    fields_str = json.dumps(trimmed_fields, indent=2)
+    elements = snapshot.get("elements", "")
+
     resp = llm.invoke([
         SystemMessage(content=SYSTEM),
         HumanMessage(content=(
             f"Profile:\n{profile_str}\n\n"
             f"CV (excerpt):\n{state['cv_text'][:1500]}\n\n"
             f"Cover letter:\n{state['cl_text'][:400]}\n\n"
-            f"Form fields:\n{fields_str}"
+            f"Interactive elements:\n{elements}"
         ))
     ])
     raw = re.sub(r"```(?:json)?\s*|\s*```", "", resp.content.strip())
@@ -125,7 +120,7 @@ def _map_fields_sync(llm, snapshot: dict, state: TailorerState) -> list[dict]:
 
 def _apply_correction_sync(llm, correction_text: str, original_commands: list[dict], state: TailorerState) -> list[dict]:
     resp = llm.invoke([
-        SystemMessage(content="Correct job application fill commands based on user feedback. Return the corrected JSON array only."),
+        SystemMessage(content="Correct job application fill commands based on user feedback. Commands use 'index' (int) to reference form elements. Return the corrected JSON array only."),
         HumanMessage(content=(
             f"Original commands:\n{json.dumps(original_commands, indent=2)}\n\n"
             f"User correction: {correction_text}\n\n"
@@ -283,46 +278,52 @@ def fill_page(state: TailorerState) -> TailorerState:
     llm = _make_llm(_LARGE())
     snapshot = state["last_snapshot"]
 
-    # Detect completion page (no fields + thank-you text)
-    fields = (snapshot or {}).get("fields", [])
-    _log.info("[fill_page] url=%s fields=%d page_text_len=%d",
-              (snapshot or {}).get("url", "?"), len(fields), len((snapshot or {}).get("page_text", "")))
-    _log.info("[fill_page] fields_detail=%s",
-              " | ".join(f"{f.get('id')}({f.get('type')})" for f in fields))
-    if not fields:
+    elements = (snapshot or {}).get("elements", "")
+    _log.info("[fill_page] url=%s elements_len=%d", (snapshot or {}).get("url", "?"), len(elements))
+
+    if not elements:
         page_text = (snapshot or {}).get("page_text", "").lower()
-        if any(kw in page_text for kw in _COMPLETION_KEYWORDS):
+        title = (snapshot or {}).get("title", "").lower()
+        if any(kw in page_text or kw in title for kw in _COMPLETION_KEYWORDS):
             _log.info("[fill_page] completion page detected")
             return {**state, "status": "done"}
-        _log.info("[fill_page] no fields on page, treating as completion")
+        _log.info("[fill_page] no elements, treating as completion")
         return {**state, "status": "done"}
 
     already_filled = state.get("filled_fields") or {}
     all_commands = _map_fields_sync(llm, snapshot, state)
-    _log.info("[fill_page] _map_fields_sync returned %d commands: %s", len(all_commands), json.dumps(all_commands))
-    commands = [c for c in all_commands if c["field_id"] not in already_filled]
-    _log.info("[fill_page] after skipping already-filled: %d commands", len(commands))
+    _log.info("[fill_page] _map_fields_sync returned %d commands", len(all_commands))
+
+    commands = [c for c in all_commands if str(c.get("index")) not in already_filled]
+
     if state["pending_correction"]:
         commands = _apply_correction_sync(llm, state["pending_correction"], commands, state)
 
-    uncertain = [c["field_id"] for c in commands if c.get("uncertain")]
+    # Only uncertain fields and file uploads are surfaced to the user
+    confirm_commands = [
+        c for c in commands
+        if c.get("uncertain") or c.get("action") == "file_upload"
+        or c.get("value") in ("__CV__", "__COVER_LETTER__")
+    ]
+
     page_label = f"page {state['current_page'] + 1}"
 
     response = interrupt({
         "type": "fill_and_confirm",
         "commands": commands,
-        "summary": f"Filled {len(commands)} fields on {page_label}",
-        "uncertain_fields": uncertain,
+        "confirm_commands": confirm_commands,
+        "summary": f"Filling {page_label} — check uncertain fields below",
+        "uncertain_fields": [str(c["index"]) for c in commands if c.get("uncertain")],
     })
 
     rtype = (response or {}).get("type")
     if rtype == "user_approved":
-        updated_fields = {**state["filled_fields"], **{c["field_id"]: c["value"] for c in commands}}
+        updated_fields = {**already_filled, **{str(c.get("index", "")): c.get("value", "") for c in commands}}
         return {**state, "filled_fields": updated_fields, "last_snapshot": None, "pending_correction": None, "status": "navigating"}
     elif rtype == "user_correction":
         return {**state, "pending_correction": response["text"], "status": "filling_correction"}
     elif rtype == "user_manual_edit":
-        updated_fields = {**state["filled_fields"], response["field_id"]: response["value"]}
+        updated_fields = {**already_filled, str(response.get("index", "")): response.get("value", "")}
         return {**state, "filled_fields": updated_fields, "pending_correction": None, "status": "filling_correction"}
     return {**state, "status": "failed"}
 

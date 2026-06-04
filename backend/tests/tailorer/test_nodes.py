@@ -39,25 +39,6 @@ def test_make_state_has_new_fields():
     assert 'last_snapshot' in hints
 
 
-def test_build_fill_commands_maps_profile_fields():
-    import json
-    from unittest.mock import patch, MagicMock
-
-    mock_resp = MagicMock()
-    mock_resp.content = json.dumps([
-        {"field_id": "first_name", "value": "Lorenzo", "uncertain": False}
-    ])
-
-    with patch("backend.tailorer.nodes.ChatOpenAI") as MockLLM:
-        instance = MockLLM.return_value
-        instance.invoke.return_value = mock_resp
-        from backend.tailorer.nodes import _map_fields_sync
-        state = _make_state()
-        snapshot = {"fields": [{"id": "first_name", "label": "First Name", "type": "text", "value": ""}]}
-        cmds = _map_fields_sync(instance, snapshot, state)
-    assert cmds[0]["field_id"] == "first_name"
-    assert cmds[0]["value"] == "Lorenzo"
-
 
 def test_decide_next_navigation_returns_batched_actions():
     """_decide_next_navigation returns a dict with current_state + action array."""
@@ -92,6 +73,82 @@ def test_decide_next_navigation_returns_batched_actions():
     assert "action" in result
     assert isinstance(result["action"], list)
     assert result["action"][0]["action"] == "click_element"
+
+
+def test_map_fields_sync_returns_index_based_commands():
+    """_map_fields_sync returns commands with index (int) not field_id (str)."""
+    import json
+    from unittest.mock import patch, MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.content = json.dumps([
+        {"index": 2, "value": "Lorenzo", "action": "input_text", "uncertain": False},
+        {"index": 7, "value": "__CV__", "action": "file_upload", "uncertain": False},
+        {"index": 9, "value": "???", "action": "input_text", "uncertain": True},
+    ])
+
+    with patch("backend.tailorer.nodes.ChatOpenAI") as MockLLM:
+        instance = MockLLM.return_value
+        instance.invoke.return_value = mock_resp
+        import importlib
+        from backend.tailorer import nodes as nodes_module
+        importlib.reload(nodes_module)
+        state = _make_state()
+        snapshot = {
+            "url": "https://greenhouse.io/apply",
+            "elements": "[2]<input type=text placeholder='First name' />\n[7]<input type=file />\n[9]<input type=text placeholder='Work auth' />",
+            "scroll_y": 0, "scroll_height": 1000, "viewport_height": 800,
+        }
+        cmds = nodes_module._map_fields_sync(instance, snapshot, state)
+
+    assert cmds[0]["index"] == 2
+    assert cmds[0]["action"] == "input_text"
+    assert cmds[1]["value"] == "__CV__"
+    assert cmds[2]["uncertain"] is True
+    assert "field_id" not in cmds[0]
+
+
+def test_fill_page_confirm_shows_only_uncertain_and_files():
+    """fill_page interrupt shows only uncertain fields and file upload commands."""
+    import json
+    import os
+    import importlib
+    from unittest.mock import patch, MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.content = json.dumps([
+        {"index": 2, "value": "Lorenzo", "action": "input_text", "uncertain": False},
+        {"index": 7, "value": "__CV__", "action": "file_upload", "uncertain": False},
+        {"index": 9, "value": "???", "action": "input_text", "uncertain": True},
+    ])
+
+    from backend.tailorer import nodes as nodes_module
+    importlib.reload(nodes_module)
+
+    with patch.dict(os.environ, {"GROQ_API_KEY": "test-key", "GROQ_MODEL_LARGE": "test-model"}), \
+         patch.object(nodes_module, "ChatOpenAI") as MockLLM, \
+         patch.object(nodes_module, "interrupt") as mock_interrupt:
+        instance = MockLLM.return_value
+        instance.invoke.return_value = mock_resp
+        mock_interrupt.return_value = {"type": "user_approved"}
+        state = _make_state(
+            last_snapshot={
+                "url": "https://greenhouse.io/apply",
+                "elements": "[2]<input type=text />\n[7]<input type=file />\n[9]<input type=text />",
+                "scroll_y": 0, "scroll_height": 1000, "viewport_height": 800,
+            },
+            filled_fields={},
+        )
+        nodes_module.fill_page(state)
+
+    interrupt_call = mock_interrupt.call_args[0][0]
+    assert interrupt_call["type"] == "fill_and_confirm"
+    # confirm_commands shows only uncertain + file (not index 2)
+    confirm_cmds = interrupt_call["confirm_commands"]
+    shown_indices = {c["index"] for c in confirm_cmds}
+    assert 2 not in shown_indices   # certain text field — NOT shown
+    assert 7 in shown_indices       # file upload — shown
+    assert 9 in shown_indices       # uncertain — shown
 
 
 def test_navigate_to_apply_stores_nav_memory():
