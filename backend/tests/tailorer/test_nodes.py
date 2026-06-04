@@ -21,6 +21,11 @@ def _make_state(**overrides):
         "pending_correction": None,
         "retry_count": 0,
         "status": "navigating",
+        "nav_phase": "start",
+        "nav_snapshot": None,
+        "nav_action": None,
+        "nav_history": [],
+        "nav_memory": "",
     }
     return {**base, **overrides}
 
@@ -42,6 +47,15 @@ def test_find_best_link_returns_none_when_no_match():
     snapshot = {"links": [{"label": "About", "href": "https://stripe.com/about"}]}
     result = _find_best_link_in_snapshot(snapshot, ["careers", "jobs"])
     assert result is None
+
+
+def test_make_state_has_new_fields():
+    from backend.tailorer.state import TailorerState
+    # Verify new fields exist in the TypedDict definition
+    import typing
+    hints = typing.get_type_hints(TailorerState)
+    assert 'nav_memory' in hints
+    assert 'last_snapshot' in hints
 
 
 def test_build_fill_commands_maps_profile_fields():
