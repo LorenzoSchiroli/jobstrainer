@@ -1,6 +1,10 @@
 import uuid as _uuid
 import json
+import logging
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.types import Command
@@ -66,7 +70,10 @@ async def _get_user_from_token(token: str, session: AsyncSession) -> User:
     return user
 
 
-async def _handle_interrupt(ws: WebSocket, interrupt_val: dict) -> dict:
+_API_BASE = "http://localhost:8000"
+
+
+async def _handle_interrupt(ws: WebSocket, interrupt_val: dict, thread_id: str = "", token: str = "") -> dict:
     """Route one interrupt payload to the extension and return the response."""
     itype = interrupt_val.get("type")
 
@@ -78,15 +85,43 @@ async def _handle_interrupt(ws: WebSocket, interrupt_val: dict) -> dict:
         await ws.send_json({"type": "request_snapshot"})
         return await ws.receive_json()
 
+    elif itype == "execute_actions":
+        await ws.send_json({"type": "execute_actions", "actions": interrupt_val.get("actions", [])})
+        return await ws.receive_json()
+
     elif itype == "fill_and_confirm":
-        for cmd in interrupt_val.get("commands", []):
+        all_cmds = interrupt_val.get("commands", [])
+        # Use confirm_commands subset if provided (uncertain + file only), else all
+        confirm_cmds = interrupt_val.get("confirm_commands", all_cmds)
+
+        file_cmds = [c for c in confirm_cmds if c.get("action") == "file_upload" or c.get("value") in ("__CV__", "__COVER_LETTER__")]
+        regular_cmds = [c for c in all_cmds if c.get("action") != "file_upload" and c.get("value") not in ("__CV__", "__COVER_LETTER__")]
+
+        for cmd in regular_cmds:
             await ws.send_json(cmd)
+
+        file_links = []
+        for fc in file_cmds:
+            file_type = "cv" if fc.get("value") == "__CV__" else "cover_letter"
+            label = "tailored_cv.docx" if file_type == "cv" else "cover_letter.docx"
+            url = f"{_API_BASE}/tailorer/files/{thread_id}/{file_type}?token={quote(token)}"
+            file_links.append({"field_id": fc["index"], "label": label, "url": url})
+
+        uncertain = [f'[{c["index"]}]' for c in confirm_cmds if c.get("uncertain")]
+
         await ws.send_json({
             "type": "show_confirm",
             "summary": interrupt_val.get("summary", ""),
-            "uncertain_fields": interrupt_val.get("uncertain_fields", []),
+            "uncertain_fields": uncertain,
+            "file_links": file_links,
         })
-        return await ws.receive_json()
+        response = await ws.receive_json()
+
+        if response.get("type") == "user_approved":
+            for cmd in file_cmds:
+                await ws.send_json(cmd)
+
+        return response
 
     elif itype == "show_confirm":
         await ws.send_json(interrupt_val)
@@ -169,6 +204,10 @@ async def tailorer_ws(
         "pending_correction": None,
         "retry_count": 0,
         "status": "navigating",
+        "nav_phase": "start",
+        "nav_snapshot": None,
+        "nav_action": None,
+        "nav_history": [],
     }
 
     config = {"configurable": {"thread_id": thread_id}}
@@ -179,36 +218,54 @@ async def tailorer_ws(
 
     try:
         current_input = initial_state
+        iteration = 0
         while True:
+            iteration += 1
+            logger.info("[tailorer] iteration=%d invoking graph", iteration)
             await graph.ainvoke(current_input, config)
 
             state_snapshot = await graph.aget_state(config)
+            logger.info("[tailorer] iteration=%d next=%s status=%s", iteration, state_snapshot.next, state_snapshot.values.get("status") if state_snapshot.values else "?")
+
             if not state_snapshot.next:
-                try:
-                    app_record = Application(user_id=user.id, job_id=job_id)
-                    session.add(app_record)
-                    await session.commit()
-                except Exception:
-                    await session.rollback()
-                await websocket.send_json({"type": "done", "message": "Application submitted!"})
+                final_status = state_snapshot.values.get("status") if state_snapshot.values else None
+                logger.info("[tailorer] graph finished — final status=%s", final_status)
+                if final_status == "done":
+                    try:
+                        app_record = Application(user_id=user.id, job_id=job_id)
+                        session.add(app_record)
+                        await session.commit()
+                    except Exception:
+                        await session.rollback()
+                    await websocket.send_json({"type": "done", "message": "Application submitted!"})
+                else:
+                    await websocket.send_json({"type": "error", "message": f"Agent stopped unexpectedly (status: {final_status})."})
                 break
 
             interrupts = [i for task in state_snapshot.tasks for i in task.interrupts]
+            logger.info("[tailorer] iteration=%d interrupts=%s", iteration, [i.value for i in interrupts])
             if not interrupts:
+                logger.warning("[tailorer] no interrupts but graph not done — breaking")
                 break
 
-            resume_val = await _handle_interrupt(websocket, interrupts[0].value)
+            logger.info("[tailorer] handling interrupt: %s", interrupts[0].value)
+            resume_val = await _handle_interrupt(websocket, interrupts[0].value, thread_id=thread_id, token=token)
+            logger.info("[tailorer] resume_val type=%s", resume_val.get("type") if isinstance(resume_val, dict) else type(resume_val))
             current_input = Command(resume=resume_val)
 
     except WebSocketDisconnect:
-        pass
+        logger.info("[tailorer] WebSocket disconnected")
     except Exception as e:
+        logger.exception("[tailorer] unhandled exception: %s", e)
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @router.get("/files/{thread_id}/{file_type}")
