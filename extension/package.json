@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "build": "mkdir -p dist && cp manifest.json dist/ && (cp -r public/* dist/ 2>/dev/null || true) && ENTRY=sw vite build && vite build",
+    "build": "mkdir -p dist/content dist/icons && cp manifest.json dist/ && cp content/frontend_bridge.js dist/content/ && cp icons/* dist/icons/ && (cp -r public/* dist/ 2>/dev/null || true) && ENTRY=sw vite build && vite build",
     "build:watch": "ENTRY=sw vite build --watch",
     "test": "vitest run"
   },

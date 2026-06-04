@@ -27,13 +27,12 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    root: resolve(__dirname, 'sidepanel'),
     plugins: [react()],
+    publicDir: false,
     build: {
-      outDir: 'dist/sidepanel',
+      outDir: resolve(__dirname, 'dist/sidepanel'),
       emptyOutDir: false,
-      rollupOptions: {
-        input: resolve(__dirname, 'sidepanel/index.html'),
-      },
     },
     resolve: {
       alias: { '@sidepanel': resolve(__dirname, 'sidepanel/src') },
