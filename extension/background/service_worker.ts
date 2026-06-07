@@ -147,8 +147,28 @@ function openSession(tabId: number, job_id: string, token: string): void {
   };
 
   ws.onmessage = async (event) => {
-    try { await handleAgentMessage(tabId, JSON.parse(event.data)); } catch (e) {
+    let msg: any;
+    try {
+      msg = JSON.parse(event.data);
+      await handleAgentMessage(tabId, msg);
+    } catch (e) {
       console.error('[tailorer] handleAgentMessage error', e);
+      // Message types that require a snapshot response — if we swallow the error
+      // without responding, the backend's interrupt() blocks forever.
+      const needsResponse = msg && ['navigate', 'request_snapshot', 'execute_actions'].includes(msg.type);
+      const s = sessions[tabId];
+      if (needsResponse && s?.ws.readyState === WebSocket.OPEN) {
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        const url = tab?.url ?? '';
+        s.ws.send(JSON.stringify({
+          url,
+          title: tab?.title ?? '',
+          elements: '',
+          scroll_y: 0,
+          scroll_height: 0,
+          viewport_height: 0,
+        }));
+      }
     }
   };
 
@@ -185,11 +205,15 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
 
   if (msg.type === 'navigate') {
     s.currentStatus = 'navigating';
-    appendLog(tabId, { kind: 'step', text: `Navigating to ${safeHostname(msg.url)}…`, done: false });
+    await s.page.detach();
+    // Register listener BEFORE triggering navigation to avoid the race where
+    // the page finishes loading before we start listening.
+    const navDone = waitForNavCompleted(tabId);
     await chrome.tabs.update(tabId, { url: msg.url });
-    await waitForTabLoad(tabId);
+    await navDone;
     await s.page.attach();
     const snap = await s.page.snapshot();
+    appendLog(tabId, { kind: 'step', text: `Navigated to ${safeHostname(msg.url)}`, done: true });
     s.ws.send(JSON.stringify(snap));
     return;
   }
@@ -207,7 +231,9 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
     for (const action of (msg.actions as any[])) {
       const navigated = await executeAction(tabId, s, action);
       if (navigated) {
-        await waitForTabLoad(tabId);
+        // Navigation is already complete (waited inside executeAction).
+        // Just reconnect Puppeteer to the new page.
+        await s.page.detach();
         await s.page.attach();
         break;
       }
@@ -291,8 +317,9 @@ async function executeAction(tabId: number, s: Session, action: any): Promise<bo
   const act: string = action.action;
   if (act === 'click_element') {
     appendLog(tabId, { kind: 'step', text: `Clicking [${action.index}]`, done: true });
-    await s.page.clickElement(action.index);
-    return true;
+    // Register navigation listeners BEFORE the click (nanobrowser pattern) to avoid the
+    // race where the page finishes loading before we start listening.
+    return await clickAndDetectNavigation(tabId, () => s.page.clickElement(action.index));
   }
   if (act === 'input_text') { await s.page.typeText(action.index, action.text ?? ''); return false; }
   if (act === 'select_option') { await s.page.selectOption(action.index, action.text ?? ''); return false; }
@@ -301,10 +328,17 @@ async function executeAction(tabId: number, s: Session, action: any): Promise<bo
   if (act === 'next_page') { await s.page.scrollDown(); return false; }
   if (act === 'previous_page') { await s.page.scrollUp(); return false; }
   if (act === 'send_keys') { await s.page.sendKeys(action.keys ?? ''); return false; }
-  if (act === 'go_back') { await s.page.goBack(); return true; }
+  if (act === 'go_back') {
+    const navDone = waitForNavCompleted(tabId);
+    await s.page.goBack();
+    await navDone;
+    return true;
+  }
   if (act === 'go_to_url') {
     appendLog(tabId, { kind: 'step', text: `Navigating to ${safeHostname(action.url)}`, done: true });
+    const navDone = waitForNavCompleted(tabId);
     await s.page.navigate(action.url);
+    await navDone;
     return true;
   }
   if (act === 'wait') { await s.page.wait(action.seconds ?? 2); return false; }
@@ -312,19 +346,89 @@ async function executeAction(tabId: number, s: Session, action: any): Promise<bo
   return false;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Navigation helpers ─────────────────────────────────────────────────────
 
-function waitForTabLoad(tabId: number): Promise<void> {
-  return new Promise((resolve) => {
-    const listener = (updatedTabId: number, info: chrome.tabs.TabChangeInfo) => {
-      if (updatedTabId === tabId && info.status === 'complete') {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
+// Waits for webNavigation.onCompleted on the main frame. Must be called BEFORE
+// the action that triggers navigation to avoid missing fast navigations.
+function waitForNavCompleted(tabId: number, timeoutMs = 8000): Promise<void> {
+  return new Promise(resolve => {
+    const onCompleted = (details: { tabId: number; frameId: number }) => {
+      if (details.tabId !== tabId || details.frameId !== 0) return;
+      chrome.webNavigation.onCompleted.removeListener(onCompleted as any);
+      resolve();
     };
-    chrome.tabs.onUpdated.addListener(listener);
-    setTimeout(resolve, 8000);
+    chrome.webNavigation.onCompleted.addListener(onCompleted as any);
+    setTimeout(() => {
+      chrome.webNavigation.onCompleted.removeListener(onCompleted as any);
+      resolve();
+    }, timeoutMs);
   });
+}
+
+// Clicks an element and detects whether a navigation was committed.
+// Registers webNavigation listeners BEFORE the click so fast navigations are
+// never missed (the core race condition fix).
+async function clickAndDetectNavigation(tabId: number, clickFn: () => Promise<void>): Promise<boolean> {
+  let committed = false;
+  let resolveCommit!: () => void;
+  let resolveComplete!: () => void;
+
+  const commitPromise = new Promise<void>(r => { resolveCommit = r; });
+  const completePromise = new Promise<void>(r => { resolveComplete = r; });
+
+  const cleanup = () => {
+    chrome.webNavigation.onCommitted.removeListener(onCommitted as any);
+    chrome.webNavigation.onCompleted.removeListener(onCompleted as any);
+    chrome.webNavigation.onHistoryStateUpdated.removeListener(onHistoryStateUpdated as any);
+  };
+
+  const onCommitted = (details: { tabId: number; frameId: number }) => {
+    if (details.tabId !== tabId || details.frameId !== 0) return;
+    committed = true;
+    chrome.webNavigation.onCommitted.removeListener(onCommitted as any);
+    resolveCommit();
+  };
+  const onCompleted = (details: { tabId: number; frameId: number }) => {
+    if (details.tabId !== tabId || details.frameId !== 0) return;
+    chrome.webNavigation.onCompleted.removeListener(onCompleted as any);
+    resolveComplete();
+  };
+  // SPA route change via history.pushState/replaceState. There is no separate
+  // "completed" event for these, so treat it as both committed and complete —
+  // snapshot()'s settle wait handles the actual content render.
+  const onHistoryStateUpdated = (details: { tabId: number; frameId: number }) => {
+    if (details.tabId !== tabId || details.frameId !== 0) return;
+    committed = true;
+    chrome.webNavigation.onHistoryStateUpdated.removeListener(onHistoryStateUpdated as any);
+    resolveCommit();
+    resolveComplete();
+  };
+
+  // Register BEFORE the click
+  chrome.webNavigation.onCommitted.addListener(onCommitted as any);
+  chrome.webNavigation.onCompleted.addListener(onCompleted as any);
+  chrome.webNavigation.onHistoryStateUpdated.addListener(onHistoryStateUpdated as any);
+
+  await clickFn();
+
+  // Wait up to 1s to see if a navigation was committed
+  const didCommit = await Promise.race([
+    commitPromise.then(() => true as boolean),
+    new Promise<boolean>(r => setTimeout(() => r(false), 1000)),
+  ]);
+
+  if (!didCommit) {
+    cleanup();
+    return false; // no navigation and no SPA route change — in-place DOM update only
+  }
+
+  // Navigation committed — wait for it to fully complete (up to 8s)
+  await Promise.race([
+    completePromise,
+    new Promise<void>(r => setTimeout(r, 8000)),
+  ]);
+  cleanup();
+  return true;
 }
 
 function safeHostname(url: string): string {
