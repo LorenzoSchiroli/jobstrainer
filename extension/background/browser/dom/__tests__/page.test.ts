@@ -111,7 +111,6 @@ describe('Page._getElementNode', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('returns node from cache when present', async () => {
-    const connectMock = await getConnectMock();
     const { default: Page } = await import('../../page');
     const { DOMElementNode } = await import('../views');
 
@@ -215,5 +214,64 @@ describe('Page._locateHandle', () => {
     // @ts-expect-error private method access for test
     const result = await p._locateHandle(buttonNode);
     expect(result).toBe(buttonHandle);
+  });
+
+  it('traverses nested iframes in top-to-bottom order', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const topPage = makePuppeteerPage();
+    const browser = makeBrowser(topPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    // Structure: outerIframe > innerIframe > button
+    const outerIframe = new DOMElementNode({
+      tagName: 'iframe', xpath: '/iframe[1]', attributes: { id: 'outer' }, children: [],
+      isVisible: true, isInteractive: false, isTopElement: true, isInViewport: true,
+      highlightIndex: null, parent: null,
+    });
+    const innerIframe = new DOMElementNode({
+      tagName: 'iframe', xpath: '/iframe[1]', attributes: { id: 'inner' }, children: [],
+      isVisible: true, isInteractive: false, isTopElement: true, isInViewport: true,
+      highlightIndex: null, parent: outerIframe,
+    });
+    const buttonNode = new DOMElementNode({
+      tagName: 'button', xpath: '/button', attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 8, parent: innerIframe,
+    });
+    outerIframe.children.push(innerIframe);
+    innerIframe.children.push(buttonNode);
+
+    const buttonHandle = makeElementHandle();
+
+    // innerFrame: the frame inside the inner iframe
+    const innerFrameMock = {
+      $: vi.fn().mockResolvedValue(buttonHandle),
+    };
+    // outerFrame: the frame inside the outer iframe — its $ is called for the inner iframe
+    const innerIframeHandle = makeElementHandle({
+      contentFrame: vi.fn().mockResolvedValue(innerFrameMock),
+    });
+    const outerFrameMock = {
+      $: vi.fn().mockResolvedValue(innerIframeHandle),
+    };
+    // top-level page $ is called for the outer iframe
+    const outerIframeHandle = makeElementHandle({
+      contentFrame: vi.fn().mockResolvedValue(outerFrameMock),
+    });
+    topPage.$ = vi.fn().mockResolvedValue(outerIframeHandle);
+
+    // @ts-expect-error private method access for test
+    const result = await p._locateHandle(buttonNode);
+
+    expect(result).toBe(buttonHandle);
+    // Verify traversal order: top page → outer frame → inner frame
+    expect(topPage.$).toHaveBeenCalledTimes(1); // outer iframe looked up from top page
+    expect(outerFrameMock.$).toHaveBeenCalledTimes(1); // inner iframe looked up from outer frame
+    expect(innerFrameMock.$).toHaveBeenCalledTimes(1); // button looked up from inner frame
   });
 });
