@@ -328,6 +328,9 @@ export default class Page {
   }
 
   async navigate(url: string): Promise<void> {
+    // Detach before navigating — cross-origin navigations corrupt the live CDP
+    // session if Puppeteer is still attached when chrome.tabs.update fires.
+    await this.detach();
     await chrome.tabs.update(this._tabId, { url });
   }
 
