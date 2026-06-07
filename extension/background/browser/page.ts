@@ -161,6 +161,30 @@ export default class Page {
     }
   }
 
+  private async _scrollIntoViewIfNeeded(element: ElementHandle, timeoutMs = 1000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const isVisible: boolean = await element.evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') {
+          return false;
+        }
+        const inViewport =
+          rect.top >= 0 && rect.left >= 0 &&
+          rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+          rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+        if (!inViewport) {
+          el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+        }
+        return inViewport;
+      });
+      if (isVisible) return;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
   // Settle the page after a navigation/action: wait for the network to go quiet,
   // then enforce a minimum wait floor. Failures are non-fatal — we still snapshot.
   async waitForPageAndFramesLoad(): Promise<void> {
@@ -222,10 +246,22 @@ export default class Page {
 
   // Uses Puppeteer's CDP-based click (dispatches real mousedown/mouseup/click events),
   // which is required for SPA frameworks like React that rely on the full mouse event sequence.
+  // Falls back to a direct DOM click if the CDP click times out or is rejected.
   async clickElement(index: number): Promise<void> {
     const node = await this._getElementNode(index);
     const el = await this._locateHandle(node);
-    await el.click();
+    await this._scrollIntoViewIfNeeded(el);
+    try {
+      await Promise.race([
+        el.click(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('click timeout')), 2000)
+        ),
+      ]);
+    } catch {
+      // CDP click timed out or was rejected — dispatch directly on the DOM node.
+      await el.evaluate((node: Element) => (node as HTMLElement).click());
+    }
   }
 
   async typeText(index: number, text: string): Promise<void> {

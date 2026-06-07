@@ -275,3 +275,122 @@ describe('Page._locateHandle', () => {
     expect(innerFrameMock.$).toHaveBeenCalledTimes(1); // button looked up from inner frame
   });
 });
+
+// ── _scrollIntoViewIfNeeded ───────────────────────────────────────────────
+
+describe('Page._scrollIntoViewIfNeeded', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('returns immediately when element is already in viewport', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    const el = makeElementHandle({ evaluate: vi.fn().mockResolvedValue(true) });
+
+    // @ts-expect-error private method access for test
+    await p._scrollIntoViewIfNeeded(el as any);
+
+    expect(el.evaluate).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls evaluate again after off-screen result until in-viewport', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    // First call: off-screen; second call: in-viewport
+    const el = makeElementHandle({
+      evaluate: vi.fn()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true),
+    });
+
+    // @ts-expect-error private method access for test
+    await p._scrollIntoViewIfNeeded(el as any);
+
+    expect(el.evaluate).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── clickElement fallback ─────────────────────────────────────────────────
+
+describe('Page.clickElement', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('falls back to evaluate click when CDP click throws', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    const node = new DOMElementNode({
+      tagName: 'button', xpath: '/button', attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 5, parent: null,
+    });
+    // @ts-expect-error private field access for test
+    p._lastSelectorMap = new Map([[5, node]]);
+
+    let evaluateCallCount = 0;
+    const el = makeElementHandle({
+      click: vi.fn().mockRejectedValue(new Error('Node is detached')),
+      evaluate: vi.fn().mockImplementation(() => {
+        evaluateCallCount++;
+        // First call is from _scrollIntoViewIfNeeded (returns true = in viewport)
+        // Second call is from fallback click
+        return Promise.resolve(evaluateCallCount === 1 ? true : undefined);
+      }),
+    });
+    puppeteerPage.$ = vi.fn().mockResolvedValue(el);
+
+    await expect(p.clickElement(5)).resolves.toBeUndefined();
+    // evaluate must have been called at least twice
+    expect(evaluateCallCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('succeeds with primary CDP click when it does not throw', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    const node = new DOMElementNode({
+      tagName: 'button', xpath: '/button', attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 6, parent: null,
+    });
+    // @ts-expect-error private field access for test
+    p._lastSelectorMap = new Map([[6, node]]);
+
+    const clickMock = vi.fn().mockResolvedValue(undefined);
+    const el = makeElementHandle({
+      click: clickMock,
+      evaluate: vi.fn().mockResolvedValue(true), // in viewport
+    });
+    puppeteerPage.$ = vi.fn().mockResolvedValue(el);
+
+    await p.clickElement(6);
+    expect(clickMock).toHaveBeenCalledTimes(1);
+  });
+});
