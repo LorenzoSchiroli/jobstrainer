@@ -97,3 +97,123 @@ describe('Page.detach() safety', () => {
     await expect(page.detach()).resolves.toBeUndefined();
   });
 });
+
+// ── Test helpers used across multiple test suites ─────────────────────────
+
+async function getConnectMock() {
+  const mod = await import('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js');
+  return vi.mocked(mod.connect);
+}
+
+// ── _getElementNode ───────────────────────────────────────────────────────
+
+describe('Page._getElementNode', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('returns node from cache when present', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const node = new DOMElementNode({
+      tagName: 'button', xpath: '/button', attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 7, parent: null,
+    });
+    // @ts-expect-error private field access for test
+    p._lastSelectorMap = new Map([[7, node]]);
+
+    // @ts-expect-error private method access for test
+    const result = await p._getElementNode(7);
+    expect(result).toBe(node);
+  });
+
+  it('throws when index not found in cache and fresh scan', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+
+    const p = new Page(1);
+    // No cache; mock scripting.executeScript to return an empty DOM tree
+    vi.mocked(chrome.scripting.executeScript).mockResolvedValue([{
+      result: { map: { '0': { tagName: 'body', xpath: '', attributes: {}, children: [], isVisible: false, isInteractive: false, isTopElement: false, isInViewport: false } }, rootId: '0' },
+      frameId: 0, documentId: '',
+    }] as any);
+
+    // @ts-expect-error private method access for test
+    await expect(p._getElementNode(99)).rejects.toThrow('Element [99] not found');
+  });
+});
+
+// ── _locateHandle iframe traversal ────────────────────────────────────────
+
+describe('Page._locateHandle', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('queries inside iframe frame when element has iframe ancestor', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    // Build a DOMElementNode inside an iframe parent
+    const iframeNode = new DOMElementNode({
+      tagName: 'iframe', xpath: '/iframe', attributes: {}, children: [],
+      isVisible: true, isInteractive: false, isTopElement: true, isInViewport: true,
+      highlightIndex: null, parent: null,
+    });
+    const buttonNode = new DOMElementNode({
+      tagName: 'button', xpath: '/button', attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 3, parent: iframeNode,
+    });
+    iframeNode.children.push(buttonNode);
+
+    // The top-level page.$() finds the iframe element handle
+    const buttonHandle = makeElementHandle();
+    const fakeIframeHandle = makeElementHandle({
+      contentFrame: vi.fn().mockResolvedValue({
+        $: vi.fn().mockResolvedValue(buttonHandle),
+      }),
+    });
+    puppeteerPage.$ = vi.fn().mockResolvedValueOnce(fakeIframeHandle);
+
+    // @ts-expect-error private method access for test
+    const result = await p._locateHandle(buttonNode);
+    expect(result).toBe(buttonHandle);
+  });
+
+  it('falls back to XPath when CSS selector returns null', async () => {
+    const connectMock = await getConnectMock();
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    connectMock.mockResolvedValue(browser as any);
+    await p.attach();
+
+    const buttonNode = new DOMElementNode({
+      tagName: 'button', xpath: '/html/body/button',
+      attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 5, parent: null,
+    });
+
+    const buttonHandle = makeElementHandle();
+    // CSS returns null; XPath returns the element
+    puppeteerPage.$ = vi.fn()
+      .mockResolvedValueOnce(null)          // CSS miss
+      .mockResolvedValueOnce(buttonHandle); // XPath hit
+
+    // @ts-expect-error private method access for test
+    const result = await p._locateHandle(buttonNode);
+    expect(result).toBe(buttonHandle);
+  });
+});

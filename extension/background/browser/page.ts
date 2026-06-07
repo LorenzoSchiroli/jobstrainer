@@ -8,6 +8,7 @@ import {
 import type { Browser } from 'puppeteer-core/lib/esm/puppeteer/api/Browser.js';
 import type { Page as PuppeteerPage } from 'puppeteer-core/lib/esm/puppeteer/api/Page.js';
 import type { ElementHandle } from 'puppeteer-core/lib/esm/puppeteer/api/ElementHandle.js';
+import type { Frame } from 'puppeteer-core/lib/esm/puppeteer/api/Frame.js';
 import {
   getClickableElements,
   getScrollInfo,
@@ -174,42 +175,62 @@ export default class Page {
     if (remaining > 0) await new Promise(r => setTimeout(r, remaining * 1000));
   }
 
-  // Locate a DOM element by its highlight index using the cached snapshot's selectorMap.
-  // Falls back to a fresh DOM scan if the cache is missing, then tries XPath if CSS fails.
-  private async _locateElement(index: number): Promise<ElementHandle> {
-    const page = this._requirePage();
-
-    // Prefer the cached map so [index] matches what the LLM saw in the snapshot.
-    let elementNode = this._lastSelectorMap?.get(index) ?? null;
-    if (!elementNode) {
+  private async _getElementNode(index: number): Promise<DOMElementNode> {
+    let node = this._lastSelectorMap?.get(index) ?? null;
+    if (!node) {
       const tab = await chrome.tabs.get(this._tabId);
       const domState = await getClickableElements(this._tabId, tab.url ?? '', false);
-      elementNode = domState.selectorMap.get(index) ?? null;
+      node = domState.selectorMap.get(index) ?? null;
     }
-    if (!elementNode) throw new Error(`Element [${index}] not found in DOM state`);
+    if (!node) throw new Error(`Element [${index}] not found in DOM state`);
+    return node;
+  }
 
-    const cssSelector = elementNode.getEnhancedCssSelector();
-    let el: ElementHandle | null = await page.$(cssSelector);
+  private async _locateHandle(node: DOMElementNode): Promise<ElementHandle> {
+    const page = this._requirePage();
 
-    // XPath fallback — more stable than CSS on dynamic React pages.
-    if (!el && elementNode.xpath) {
-      const xpath = elementNode.xpath.startsWith('/') ? elementNode.xpath : `/${elementNode.xpath}`;
-      el = await page.$(`::-p-xpath(${xpath})`);
+    // Walk up the parent chain and collect iframe ancestors (top-to-bottom order).
+    const iframes: DOMElementNode[] = [];
+    let current: DOMElementNode | null = node.parent;
+    while (current) {
+      if (current.tagName === 'iframe') iframes.unshift(current);
+      current = current.parent;
     }
 
-    if (!el) throw new Error(`Element [${index}] could not be located (css: ${cssSelector})`);
+    // Traverse into each iframe frame in order.
+    let frame: PuppeteerPage | Frame = page;
+    for (const iframeNode of iframes) {
+      const iframeSelector = iframeNode.getEnhancedCssSelector();
+      const iframeEl = await frame.$(iframeSelector);
+      if (!iframeEl) throw new Error(`iframe not found: ${iframeSelector}`);
+      const childFrame = await (iframeEl as ElementHandle).contentFrame();
+      if (!childFrame) throw new Error(`iframe frame inaccessible: ${iframeSelector}`);
+      frame = childFrame as Frame;
+    }
+
+    const cssSelector = node.getEnhancedCssSelector();
+    let el: ElementHandle | null = await frame.$(cssSelector);
+
+    if (!el && node.xpath) {
+      const xpath = node.xpath.startsWith('/') ? node.xpath : `/${node.xpath}`;
+      el = await frame.$(`::-p-xpath(${xpath})`);
+    }
+
+    if (!el) throw new Error(`Element not located (css: ${cssSelector})`);
     return el;
   }
 
   // Uses Puppeteer's CDP-based click (dispatches real mousedown/mouseup/click events),
   // which is required for SPA frameworks like React that rely on the full mouse event sequence.
   async clickElement(index: number): Promise<void> {
-    const el = await this._locateElement(index);
+    const node = await this._getElementNode(index);
+    const el = await this._locateHandle(node);
     await el.click();
   }
 
   async typeText(index: number, text: string): Promise<void> {
-    const el = await this._locateElement(index);
+    const node = await this._getElementNode(index);
+    const el = await this._locateHandle(node);
     // Use React's native setter trick so synthetic onChange fires correctly.
     await el.evaluate((node: Element, val: string) => {
       if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLTextAreaElement)) return;
@@ -227,7 +248,8 @@ export default class Page {
   }
 
   async selectOption(index: number, text: string): Promise<void> {
-    const el = await this._locateElement(index);
+    const node = await this._getElementNode(index);
+    const el = await this._locateHandle(node);
     await el.evaluate((node: Element, val: string) => {
       if (!(node instanceof HTMLSelectElement)) return;
       const opt = Array.from(node.options).find(o => o.text === val || o.value === val);
