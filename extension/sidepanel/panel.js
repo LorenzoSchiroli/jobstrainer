@@ -1,5 +1,8 @@
 const API_BASE = 'http://localhost:8000';
 
+// Tracks the agent's current status so _sendUserInput knows what to dispatch.
+let _currentStatus = 'idle';
+
 function _getOrCreateFooter() {
   const log = document.getElementById('tailorer-log');
   if (!log) return null;
@@ -7,9 +10,29 @@ function _getOrCreateFooter() {
   if (footer) return footer;
   footer = document.createElement('div');
   footer.className = 'tailorer-footer';
+
   const statusEl = document.createElement('div');
   statusEl.id = 'tailorer-status';
   statusEl.className = 'tailorer-status tailorer-status--blue';
+
+  // Input area — visible when agent is awaiting user input (awaiting_user / show_stuck).
+  const inputArea = document.createElement('div');
+  inputArea.id = 'tailorer-input-area';
+  inputArea.className = 'tailorer-input-area';
+  inputArea.style.display = 'none';
+  const chatInput = document.createElement('input');
+  chatInput.id = 'tailorer-chat-input';
+  chatInput.className = 'tailorer-chat-input';
+  chatInput.placeholder = 'Type a correction…';
+  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') _sendUserInput(); });
+  const sendBtn = document.createElement('button');
+  sendBtn.id = 'tailorer-send-btn';
+  sendBtn.className = 'tailorer-send-btn';
+  sendBtn.textContent = '➤';
+  sendBtn.addEventListener('click', _sendUserInput);
+  inputArea.append(chatInput, sendBtn);
+
+  // Stop button — visible only while the agent is actively running.
   const stopBtn = document.createElement('button');
   stopBtn.id = 'tailorer-stop-btn';
   stopBtn.className = 'tailorer-stop-btn';
@@ -20,18 +43,59 @@ function _getOrCreateFooter() {
     setStatusBar('error');
     sendMsg({ type: 'stop_session' });
   });
-  footer.append(statusEl, stopBtn);
+
+  footer.append(statusEl, inputArea, stopBtn);
   log.appendChild(footer);
   return footer;
 }
 
 function setStopButton(visible) {
-  if (visible) {
-    _getOrCreateFooter();
-  }
+  if (visible) _getOrCreateFooter();
   const btn = document.getElementById('tailorer-stop-btn');
   if (btn) btn.style.display = visible ? 'inline-block' : 'none';
 }
+
+function setInputArea(visible) {
+  if (visible) _getOrCreateFooter();
+  const area = document.getElementById('tailorer-input-area');
+  if (area) area.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    const input = document.getElementById('tailorer-chat-input');
+    if (input) input.focus();
+  }
+}
+
+// Called from the persistent input bar at the bottom OR when inline block buttons are used.
+function _sendUserInput() {
+  const input = document.getElementById('tailorer-chat-input');
+  if (!input) return;
+  const text = input.value.trim();
+
+  if (_currentStatus === 'awaiting_user') {
+    if (text) {
+      sendMsg({ type: 'user_correction', text });
+      const block = document.querySelector('.tailorer-confirm-block');
+      if (block) block.replaceWith(_makeStepEntry('Corrected', true));
+    } else {
+      sendMsg({ type: 'user_approved' });
+      const block = document.querySelector('.tailorer-confirm-block');
+      if (block) block.replaceWith(_makeStepEntry('Approved', true));
+    }
+  } else if (_currentStatus === 'show_stuck') {
+    sendMsg({ type: 'stuck_unblocked' });
+    const block = document.querySelector('.tailorer-stuck-block');
+    if (block) block.replaceWith(_makeStepEntry('Unblocked', true));
+  } else {
+    return;
+  }
+
+  input.value = '';
+  // Agent is resuming — switch immediately to running mode (stop button shows).
+  setInputArea(false);
+  setStopButton(true);
+}
+
+// ── Status bar + mutual exclusivity ───────────────────────────────────────
 
 const STATUS_CONFIG = {
   connecting:    { text: 'Connecting…',      dot: true,  cls: 'blue'  },
@@ -44,7 +108,11 @@ const STATUS_CONFIG = {
   idle:          { text: 'No active session', dot: false, cls: 'slate' },
 };
 
+const _RUNNING_STATES  = new Set(['connecting', 'navigating', 'filling']);
+const _AWAITING_STATES = new Set(['awaiting_user', 'show_stuck']);
+
 function setStatusBar(status) {
+  _currentStatus = status;
   _getOrCreateFooter();
   const bar = document.getElementById('tailorer-status');
   if (!bar) return;
@@ -59,7 +127,22 @@ function setStatusBar(status) {
   const txt = document.createElement('span');
   txt.textContent = cfg.text;
   bar.appendChild(txt);
+
+  // Mutual exclusivity: running → stop button; awaiting → input area; else → neither.
+  setStopButton(_RUNNING_STATES.has(status));
+  setInputArea(_AWAITING_STATES.has(status));
+
+  if (_AWAITING_STATES.has(status)) {
+    const input = document.getElementById('tailorer-chat-input');
+    if (input) {
+      input.placeholder = status === 'show_stuck'
+        ? 'Press Enter to continue, or type a note…'
+        : 'Type a correction, or press Enter to approve…';
+    }
+  }
 }
+
+// ── Panel states ───────────────────────────────────────────────────────────
 
 function showIdleState() {
   const log = document.getElementById('tailorer-log');
@@ -70,7 +153,6 @@ function showIdleState() {
   el.textContent = 'No active job — browse to a job listing to apply.';
   log.appendChild(el);
   setStatusBar('idle');
-  setStopButton(false);
 }
 
 function showStartButton(job_id, token) {
@@ -88,12 +170,13 @@ function showStartButton(job_id, token) {
   btn.addEventListener('click', () => {
     sendMsg({ type: 'start_session', job_id, token });
     log.innerHTML = '';
-    setStatusBar('connecting');
-    setStopButton(true);
+    setStatusBar('connecting'); // drives stop button visibility
   });
   area.append(hint, btn);
   log.appendChild(area);
 }
+
+// ── Log entries ────────────────────────────────────────────────────────────
 
 function _makeStepEntry(text, done) {
   const el = document.createElement('div');
@@ -142,7 +225,6 @@ function appendLogEntry(entry) {
       }
       el.appendChild(filesDiv);
     }
-
     const btnRow = document.createElement('div');
     btnRow.className = 'tailorer-confirm-btns';
     const approveBtn = document.createElement('button');
@@ -151,6 +233,8 @@ function appendLogEntry(entry) {
     approveBtn.addEventListener('click', () => {
       sendMsg({ type: 'user_approved' });
       el.replaceWith(_makeStepEntry('Confirmed', true));
+      setInputArea(false);
+      setStopButton(true);
     });
     const correctBtn = document.createElement('button');
     correctBtn.className = 'tailorer-btn tailorer-btn--correct';
@@ -158,21 +242,23 @@ function appendLogEntry(entry) {
     const correctionRow = document.createElement('div');
     correctionRow.className = 'tailorer-correction-row';
     correctionRow.style.display = 'none';
-    const input = document.createElement('input');
-    input.className = 'tailorer-correction-input';
-    input.placeholder = 'Describe the correction and press Enter…';
-    input.addEventListener('keydown', (e) => {
+    const corrInput = document.createElement('input');
+    corrInput.className = 'tailorer-correction-input';
+    corrInput.placeholder = 'Describe the correction and press Enter…';
+    corrInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
-      const text = input.value.trim();
+      const text = corrInput.value.trim();
       if (!text) return;
       sendMsg({ type: 'user_correction', text });
       el.replaceWith(_makeStepEntry('Corrected', true));
+      setInputArea(false);
+      setStopButton(true);
     });
     correctBtn.addEventListener('click', () => {
       correctionRow.style.display = correctionRow.style.display === 'none' ? '' : 'none';
-      if (correctionRow.style.display !== 'none') input.focus();
+      if (correctionRow.style.display !== 'none') corrInput.focus();
     });
-    correctionRow.appendChild(input);
+    correctionRow.appendChild(corrInput);
     btnRow.append(approveBtn, correctBtn);
     el.append(btnRow, correctionRow);
 
@@ -188,6 +274,8 @@ function appendLogEntry(entry) {
     unblockBtn.addEventListener('click', () => {
       sendMsg({ type: 'stuck_unblocked' });
       el.replaceWith(_makeStepEntry('Unblocked', true));
+      setInputArea(false);
+      setStopButton(true);
     });
     el.append(msg, unblockBtn);
 
@@ -220,7 +308,6 @@ function appendLogEntry(entry) {
       el.appendChild(downloads);
     }
     setStatusBar('done');
-    setStopButton(false);
 
   } else if (entry.kind === 'error') {
     el = document.createElement('div');
@@ -233,7 +320,6 @@ function appendLogEntry(entry) {
     txt.textContent = entry.message;
     el.append(icon, txt);
     setStatusBar('error');
-    setStopButton(false);
   }
 
   if (!el) return;
@@ -249,9 +335,9 @@ function restorePanel(log, status) {
   logEl.innerHTML = '';
   for (const entry of log) appendLogEntry(entry);
   if (status) setStatusBar(status);
-  const activeStatuses = ['connecting', 'navigating', 'filling', 'awaiting_user', 'show_stuck'];
-  setStopButton(activeStatuses.includes(status));
 }
+
+// ── Messaging ──────────────────────────────────────────────────────────────
 
 function sendMsg(msg) {
   try {
@@ -274,7 +360,6 @@ function _connectWithTab(tabId) {
   _port = port;
   port.onMessage.addListener(_handleMessage);
   port.onDisconnect.addListener(() => {
-    // Only reconnect if this port is still the active one (not superseded by a tab switch)
     if (_port !== port) return;
     _port = null;
     setTimeout(() => _connectWithTab(tabId), 500);

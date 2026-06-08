@@ -21,7 +21,32 @@ body {
   padding: 10px 12px;
   background: #1e3a5f;
   flex-shrink: 0;
+  gap: 8px;
 }
+
+.tailorer-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-top: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.tailorer-stop-btn {
+  margin-left: auto;
+  background: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #991b1b;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  flex-shrink: 0;
+}
+.tailorer-stop-btn:hover { background: #991b1b; }
 
 .tailorer-title {
   font-size: 14px;
@@ -30,14 +55,11 @@ body {
 }
 
 .tailorer-status {
-  padding: 6px 12px;
   font-size: 11px;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  border-bottom: 1px solid #1e293b;
-  min-height: 28px;
+  min-height: 20px;
 }
 .tailorer-status--blue  { background: #172554; color: #7dd3fc; }
 .tailorer-status--amber { background: #451a03; color: #fbbf24; }
@@ -141,8 +163,47 @@ body {
 }
 .tailorer-btn:hover { filter: brightness(1.15); }
 .tailorer-btn--approve { background: #16a34a; }
+.tailorer-btn--correct { background: #475569; }
 .tailorer-btn--unblock { background: #475569; }
+.tailorer-file-links { display: flex; flex-direction: column; gap: 4px; }
+.tailorer-file-link { color: #60a5fa; font-size: 12px; text-decoration: none; }
+.tailorer-file-link:hover { text-decoration: underline; }
+.tailorer-confirm-btns { display: flex; gap: 6px; }
+.tailorer-correction-row { display: flex; }
+.tailorer-correction-row .tailorer-correction-input { width: 100%; }
 .tailorer-btn--start   { background: #2563eb; width: 100%; text-align: center; font-weight: 600; font-size: 13px; padding: 9px; }
+
+.tailorer-input-area {
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tailorer-chat-input {
+  flex: 1;
+  min-width: 0;
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+}
+.tailorer-chat-input::placeholder { color: #475569; }
+.tailorer-chat-input:focus { outline: none; border-color: #3b82f6; }
+.tailorer-send-btn {
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  flex-shrink: 0;
+}
+.tailorer-send-btn:hover { background: #2563eb; }
 
 .tailorer-start-area { padding: 16px 12px; display: flex; flex-direction: column; gap: 10px; }
 .tailorer-start-hint { font-size: 12px; color: #64748b; }
