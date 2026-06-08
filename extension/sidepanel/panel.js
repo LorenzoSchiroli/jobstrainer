@@ -1,5 +1,38 @@
 const API_BASE = 'http://localhost:8000';
 
+function _getOrCreateFooter() {
+  const log = document.getElementById('tailorer-log');
+  if (!log) return null;
+  let footer = log.querySelector('.tailorer-footer');
+  if (footer) return footer;
+  footer = document.createElement('div');
+  footer.className = 'tailorer-footer';
+  const statusEl = document.createElement('div');
+  statusEl.id = 'tailorer-status';
+  statusEl.className = 'tailorer-status tailorer-status--blue';
+  const stopBtn = document.createElement('button');
+  stopBtn.id = 'tailorer-stop-btn';
+  stopBtn.className = 'tailorer-stop-btn';
+  stopBtn.style.display = 'none';
+  stopBtn.textContent = '■ Stop';
+  stopBtn.addEventListener('click', () => {
+    setStopButton(false);
+    setStatusBar('error');
+    sendMsg({ type: 'stop_session' });
+  });
+  footer.append(statusEl, stopBtn);
+  log.appendChild(footer);
+  return footer;
+}
+
+function setStopButton(visible) {
+  if (visible) {
+    _getOrCreateFooter();
+  }
+  const btn = document.getElementById('tailorer-stop-btn');
+  if (btn) btn.style.display = visible ? 'inline-block' : 'none';
+}
+
 const STATUS_CONFIG = {
   connecting:    { text: 'Connecting…',      dot: true,  cls: 'blue'  },
   navigating:    { text: 'Navigating…',       dot: true,  cls: 'blue'  },
@@ -12,6 +45,7 @@ const STATUS_CONFIG = {
 };
 
 function setStatusBar(status) {
+  _getOrCreateFooter();
   const bar = document.getElementById('tailorer-status');
   if (!bar) return;
   const cfg = STATUS_CONFIG[status] || { text: status, dot: true, cls: 'blue' };
@@ -36,6 +70,7 @@ function showIdleState() {
   el.textContent = 'No active job — browse to a job listing to apply.';
   log.appendChild(el);
   setStatusBar('idle');
+  setStopButton(false);
 }
 
 function showStartButton(job_id, token) {
@@ -54,6 +89,7 @@ function showStartButton(job_id, token) {
     sendMsg({ type: 'start_session', job_id, token });
     log.innerHTML = '';
     setStatusBar('connecting');
+    setStopButton(true);
   });
   area.append(hint, btn);
   log.appendChild(area);
@@ -93,9 +129,38 @@ function appendLogEntry(entry) {
       unc.textContent = `Uncertain: ${entry.uncertain_fields.join(', ')}`;
       el.appendChild(unc);
     }
+    if (entry.file_links?.length) {
+      const filesDiv = document.createElement('div');
+      filesDiv.className = 'tailorer-file-links';
+      for (const fl of entry.file_links) {
+        const a = document.createElement('a');
+        a.href = fl.url;
+        a.target = '_blank';
+        a.textContent = `⬇ ${fl.label}`;
+        a.className = 'tailorer-file-link';
+        filesDiv.appendChild(a);
+      }
+      el.appendChild(filesDiv);
+    }
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'tailorer-confirm-btns';
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'tailorer-btn tailorer-btn--approve';
+    approveBtn.textContent = 'Approve ✓';
+    approveBtn.addEventListener('click', () => {
+      sendMsg({ type: 'user_approved' });
+      el.replaceWith(_makeStepEntry('Confirmed', true));
+    });
+    const correctBtn = document.createElement('button');
+    correctBtn.className = 'tailorer-btn tailorer-btn--correct';
+    correctBtn.textContent = 'Correct…';
+    const correctionRow = document.createElement('div');
+    correctionRow.className = 'tailorer-correction-row';
+    correctionRow.style.display = 'none';
     const input = document.createElement('input');
     input.className = 'tailorer-correction-input';
-    input.placeholder = 'Correction? Type + Enter…';
+    input.placeholder = 'Describe the correction and press Enter…';
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       const text = input.value.trim();
@@ -103,14 +168,13 @@ function appendLogEntry(entry) {
       sendMsg({ type: 'user_correction', text });
       el.replaceWith(_makeStepEntry('Corrected', true));
     });
-    const approveBtn = document.createElement('button');
-    approveBtn.className = 'tailorer-btn tailorer-btn--approve';
-    approveBtn.textContent = 'Looks good ✓';
-    approveBtn.addEventListener('click', () => {
-      sendMsg({ type: 'user_approved' });
-      el.replaceWith(_makeStepEntry('Confirmed', true));
+    correctBtn.addEventListener('click', () => {
+      correctionRow.style.display = correctionRow.style.display === 'none' ? '' : 'none';
+      if (correctionRow.style.display !== 'none') input.focus();
     });
-    el.append(input, approveBtn);
+    correctionRow.appendChild(input);
+    btnRow.append(approveBtn, correctBtn);
+    el.append(btnRow, correctionRow);
 
   } else if (entry.kind === 'stuck') {
     el = document.createElement('div');
@@ -156,6 +220,7 @@ function appendLogEntry(entry) {
       el.appendChild(downloads);
     }
     setStatusBar('done');
+    setStopButton(false);
 
   } else if (entry.kind === 'error') {
     el = document.createElement('div');
@@ -168,10 +233,13 @@ function appendLogEntry(entry) {
     txt.textContent = entry.message;
     el.append(icon, txt);
     setStatusBar('error');
+    setStopButton(false);
   }
 
   if (!el) return;
-  log.appendChild(el);
+  const footer = log.querySelector('.tailorer-footer');
+  if (footer) log.insertBefore(el, footer);
+  else log.appendChild(el);
   log.scrollTop = log.scrollHeight;
 }
 
@@ -181,10 +249,16 @@ function restorePanel(log, status) {
   logEl.innerHTML = '';
   for (const entry of log) appendLogEntry(entry);
   if (status) setStatusBar(status);
+  const activeStatuses = ['connecting', 'navigating', 'filling', 'awaiting_user', 'show_stuck'];
+  setStopButton(activeStatuses.includes(status));
 }
 
 function sendMsg(msg) {
-  (_port || globalThis.__testPort)?.postMessage(msg);
+  try {
+    (_port || globalThis.__testPort)?.postMessage(msg);
+  } catch {
+    _port = null; // port was disconnected; onDisconnect will reconnect
+  }
 }
 
 // ── Port connection ────────────────────────────────────────────────────────
@@ -210,7 +284,6 @@ function _connectWithTab(tabId) {
 function _handleMessage(msg) {
   if (msg.type === 'show_apply_button') {
     showStartButton(msg.job_id, msg.token);
-    setStatusBar('connecting');
   } else if (msg.type === 'restore_panel') {
     restorePanel(msg.log || [], msg.status);
   } else if (msg.type === 'append_log') {

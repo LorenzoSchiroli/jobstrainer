@@ -123,7 +123,11 @@ chrome.runtime.onConnect.addListener((port) => {
       return;
     }
     if (msg.type === 'stop_session') {
-      stopSession(tabId, 'Stopped by user.');
+      if (sessions[tabId]) {
+        stopSession(tabId, 'Stopped by user.');
+      } else {
+        sendToPanel(tabId, { type: 'idle' });
+      }
       return;
     }
     const s = sessions[tabId];
@@ -199,7 +203,7 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
     s.thread_id = msg.thread_id;
     s.currentStatus = 'navigating';
     appendLog(tabId, { kind: 'step', text: 'Session started', done: true });
-    sendToPanel(tabId, { type: 'status', status: 'navigating' });
+    sendToPanel(tabId, { type: 'set_status', status: 'navigating' });
     return;
   }
 
@@ -268,14 +272,14 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
       .map((c: any) => `[${c.index}]`);
     s.currentStatus = 'awaiting_user';
     appendLog(tabId, { kind: 'confirm', summary: msg.summary || 'Ready to fill', uncertain_fields: uncertain, file_links: fileLinks });
-    sendToPanel(tabId, { type: 'status', status: 'awaiting_user' });
+    sendToPanel(tabId, { type: 'set_status', status: 'awaiting_user' });
     return;
   }
 
   if (msg.type === 'show_confirm') {
     s.currentStatus = 'awaiting_user';
     appendLog(tabId, { kind: 'confirm', summary: msg.summary, uncertain_fields: msg.uncertain_fields ?? [], file_links: msg.file_links ?? [] });
-    sendToPanel(tabId, { type: 'status', status: 'awaiting_user' });
+    sendToPanel(tabId, { type: 'set_status', status: 'awaiting_user' });
     return;
   }
 
@@ -290,14 +294,14 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
   if (msg.type === 'show_stuck') {
     s.currentStatus = 'show_stuck';
     appendLog(tabId, { kind: 'stuck', message: msg.message });
-    sendToPanel(tabId, { type: 'status', status: 'show_stuck' });
+    sendToPanel(tabId, { type: 'set_status', status: 'show_stuck' });
     return;
   }
 
   if (msg.type === 'done') {
     s.currentStatus = 'done';
     appendLog(tabId, { kind: 'done', message: msg.message, thread_id: s.thread_id ?? '', token: s.token });
-    sendToPanel(tabId, { type: 'status', status: 'done' });
+    sendToPanel(tabId, { type: 'set_status', status: 'done' });
     await s.page.detach();
     delete sessions[tabId];
     return;
@@ -306,7 +310,7 @@ async function handleAgentMessage(tabId: number, msg: any): Promise<void> {
   if (msg.type === 'error') {
     s.currentStatus = 'error';
     appendLog(tabId, { kind: 'error', message: msg.message });
-    sendToPanel(tabId, { type: 'status', status: 'error' });
+    sendToPanel(tabId, { type: 'set_status', status: 'error' });
     await s.page.detach();
     delete sessions[tabId];
     return;
