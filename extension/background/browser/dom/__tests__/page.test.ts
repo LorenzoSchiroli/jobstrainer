@@ -83,6 +83,53 @@ describe('Page.attach() staleness probe', () => {
   });
 });
 
+describe('Page.attach() — stale probe disconnects browser before clearing refs', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('calls browser.disconnect() when staleness probe throws', async () => {
+    const { connect } = await import('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js');
+    const { default: Page } = await import('../../page');
+
+    const stalePuppeteerPage = makePuppeteerPage({
+      evaluate: vi.fn().mockRejectedValue(new Error('Target closed')),
+    });
+    const freshPuppeteerPage = makePuppeteerPage();
+    const staleBrowser = makeBrowser(stalePuppeteerPage);
+    const freshBrowser = makeBrowser(freshPuppeteerPage);
+
+    vi.mocked(connect)
+      .mockResolvedValueOnce(staleBrowser as any)
+      .mockResolvedValueOnce(freshBrowser as any);
+
+    const page = new Page(1);
+    await page.attach();          // sets up stale connection
+    await page.attach();          // probe fails → should disconnect before clearing
+
+    expect(staleBrowser.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw if disconnect() rejects during stale cleanup', async () => {
+    const { connect } = await import('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js');
+    const { default: Page } = await import('../../page');
+
+    const stalePuppeteerPage = makePuppeteerPage({
+      evaluate: vi.fn().mockRejectedValue(new Error('Target closed')),
+    });
+    const freshPuppeteerPage = makePuppeteerPage();
+    const staleBrowser = makeBrowser(stalePuppeteerPage);
+    staleBrowser.disconnect = vi.fn().mockRejectedValue(new Error('Already gone'));
+    const freshBrowser = makeBrowser(freshPuppeteerPage);
+
+    vi.mocked(connect)
+      .mockResolvedValueOnce(staleBrowser as any)
+      .mockResolvedValueOnce(freshBrowser as any);
+
+    const page = new Page(1);
+    await page.attach();
+    await expect(page.attach()).resolves.toBeUndefined();
+  });
+});
+
 describe('Page.detach() safety', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 

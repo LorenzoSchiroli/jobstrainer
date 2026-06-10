@@ -54,7 +54,9 @@ export default class Page {
         return; // Connection healthy — nothing to do.
       } catch {
         // CDP session went stale (e.g. cross-origin navigation).
-        // Fall through to reconnect after clearing stale handles.
+        // Disconnect best-effort so Chrome releases the debugger attachment,
+        // then fall through to reconnect.
+        try { await this._browser!.disconnect(); } catch { /* already gone */ }
         this._browser = null;
         this._page = null;
         this._lastSelectorMap = null;
@@ -164,20 +166,15 @@ export default class Page {
   private async _scrollIntoViewIfNeeded(element: ElementHandle, timeoutMs = 1000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const isVisible: boolean = await element.evaluate(el => {
+      const isVisible = await element.evaluate((el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return false;
         const style = window.getComputedStyle(el);
-        if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') {
-          return false;
-        }
-        const inViewport =
-          rect.top >= 0 && rect.left >= 0 &&
+        if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') return false;
+        const inViewport = rect.top >= 0 && rect.left >= 0 &&
           rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
           rect.right <= (window.innerWidth || document.documentElement.clientWidth);
-        if (!inViewport) {
-          el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
-        }
+        if (!inViewport) el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
         return inViewport;
       });
       if (isVisible) return;
@@ -202,9 +199,13 @@ export default class Page {
   private async _getElementNode(index: number): Promise<DOMElementNode> {
     let node = this._lastSelectorMap?.get(index) ?? null;
     if (!node) {
+      logger.info('[Page] _getElementNode cache miss [%d] — fresh DOM scan', index);
       const tab = await chrome.tabs.get(this._tabId);
       const domState = await getClickableElements(this._tabId, tab.url ?? '', false);
       node = domState.selectorMap.get(index) ?? null;
+      logger.info('[Page] fresh scan map size=%d, found=%s', domState.selectorMap.size, node != null);
+    } else {
+      logger.info('[Page] _getElementNode cache hit [%d] tag=%s', index, node.tagName);
     }
     if (!node) throw new Error(`Element [${index}] not found in DOM state`);
     return node;
@@ -225,22 +226,89 @@ export default class Page {
     let frame: PuppeteerPage | Frame = page;
     for (const iframeNode of iframes) {
       const iframeSelector = iframeNode.getEnhancedCssSelector();
+      logger.info('[Page] traversing iframe: %s', iframeSelector);
       const iframeEl = await frame.$(iframeSelector);
-      if (!iframeEl) throw new Error(`iframe not found: ${iframeSelector}`);
-      const childFrame = await (iframeEl as ElementHandle).contentFrame();
+      if (!iframeEl) {
+        throw new Error(`iframe not found: ${iframeSelector}`);
+      }
+      const childFrame = await iframeEl.contentFrame();
       if (!childFrame) throw new Error(`iframe frame inaccessible: ${iframeSelector}`);
       frame = childFrame as Frame;
     }
 
     const cssSelector = node.getEnhancedCssSelector();
-    let el: ElementHandle | null = await frame.$(cssSelector);
+    logger.info('[Page] _locateHandle css="%s" xpath="%s"', cssSelector, node.xpath);
+
+    let el: ElementHandle | null = null;
+
+    if (cssSelector) {
+      el = await frame.$(cssSelector);
+    }
+    logger.info('[Page] CSS selector match: %s', el != null);
 
     if (!el && node.xpath) {
+      // Only try absolute XPath (starts from html). Relative XPaths (no leading html/)
+      // indicate the element is inside a Shadow DOM — document.evaluate() cannot cross
+      // shadow boundaries, so skip XPath and fall through to the shadow DOM search.
       const xpath = node.xpath.startsWith('/') ? node.xpath : `/${node.xpath}`;
-      el = await frame.$(`::-p-xpath(${xpath})`);
+      const isAbsolute = node.xpath.startsWith('html') || node.xpath.startsWith('/html');
+      if (isAbsolute) {
+        logger.info('[Page] CSS failed — trying absolute XPath: %s', xpath);
+        const xpathHandle = await frame.evaluateHandle((xp: string) => {
+          const result = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+          return result.singleNodeValue;
+        }, xpath);
+        el = xpathHandle.asElement() as ElementHandle | null;
+        if (!el) await xpathHandle.dispose();
+        logger.info('[Page] XPath match: %s', el != null);
+      } else {
+        logger.info('[Page] XPath "%s" is relative — element is in Shadow DOM, skipping XPath', node.xpath);
+      }
     }
 
-    if (!el) throw new Error(`Element not located (css: ${cssSelector})`);
+    // Shadow DOM fallback: buildDomTree.js sets shadowRoot:true on the HOST element
+    // and adds its shadow root children directly to the host's children list.
+    // Walk up the parent chain to find that host, then query within host.shadowRoot.
+    if (!el) {
+      let shadowHost: DOMElementNode | null = null;
+      let ancestor: DOMElementNode | null = node.parent;
+      while (ancestor) {
+        if (ancestor.shadowRoot) { shadowHost = ancestor; break; }
+        ancestor = ancestor.parent;
+      }
+
+      if (shadowHost) {
+        const hostCss = shadowHost.getEnhancedCssSelector();
+        logger.info('[Page] element in shadow DOM — host css="%s" rel-css="%s" rel-xpath="%s"', hostCss, cssSelector, node.xpath);
+
+        if (hostCss) {
+          const relCss = cssSelector;
+          const relXpath = node.xpath ?? '';
+          const shadowHandle = await frame.evaluateHandle((hostSelector: string, relCssSelector: string, relXpathSelector: string) => {
+            const host = document.querySelector(hostSelector);
+            if (!host || !host.shadowRoot) return null;
+            if (relCssSelector) {
+              const e = host.shadowRoot.querySelector(relCssSelector);
+              if (e) return e;
+            }
+            try {
+              const r = document.evaluate(relXpathSelector, host.shadowRoot, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+              return r.singleNodeValue || null;
+            } catch (_) {
+              return null;
+            }
+          }, hostCss, relCss, relXpath);
+          el = shadowHandle.asElement() as ElementHandle | null;
+          if (!el) await shadowHandle.dispose();
+          logger.info('[Page] shadow DOM host query match: %s', el != null);
+        }
+      }
+    }
+
+    if (!el) {
+      logger.error('[Page] _locateHandle FAILED — element not found. css="%s" xpath="%s"', cssSelector, node.xpath);
+      throw new Error(`Element not located (css: ${cssSelector})`);
+    }
     return el;
   }
 
@@ -248,9 +316,13 @@ export default class Page {
   // which is required for SPA frameworks like React that rely on the full mouse event sequence.
   // Falls back to a direct DOM click if the CDP click times out or is rejected.
   async clickElement(index: number): Promise<void> {
+    logger.info('[Page] clickElement [%d] — resolving node', index);
     const node = await this._getElementNode(index);
+    logger.info('[Page] clickElement [%d] — locating handle', index);
     const el = await this._locateHandle(node);
+    logger.info('[Page] clickElement [%d] — scrolling into view', index);
     await this._scrollIntoViewIfNeeded(el);
+    logger.info('[Page] clickElement [%d] — dispatching CDP click', index);
     try {
       await Promise.race([
         el.click(),
@@ -258,9 +330,12 @@ export default class Page {
           setTimeout(() => reject(new Error('click timeout')), 2000)
         ),
       ]);
-    } catch {
+      logger.info('[Page] clickElement [%d] — CDP click OK', index);
+    } catch (e) {
+      logger.info('[Page] clickElement [%d] — CDP click failed (%s), falling back to DOM click', index, (e as Error).message);
       // CDP click timed out or was rejected — dispatch directly on the DOM node.
       await el.evaluate((node: Element) => (node as HTMLElement).click());
+      logger.info('[Page] clickElement [%d] — DOM fallback click dispatched', index);
     }
   }
 
@@ -272,12 +347,11 @@ export default class Page {
       if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLTextAreaElement)) return;
       node.focus();
       node.select();
-      const proto = node instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      const proto = node instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      const setter = desc?.set;
       if (setter) setter.call(node, val);
-      else (node as HTMLInputElement).value = val;
+      else node.value = val;
       node.dispatchEvent(new Event('input', { bubbles: true }));
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, text);
@@ -288,7 +362,7 @@ export default class Page {
     const el = await this._locateHandle(node);
     await el.evaluate((node: Element, val: string) => {
       if (!(node instanceof HTMLSelectElement)) return;
-      const opt = Array.from(node.options).find(o => o.text === val || o.value === val);
+      const opt = Array.from(node.options).find((o) => o.text === val || o.value === val);
       if (opt) node.value = opt.value;
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, text);
