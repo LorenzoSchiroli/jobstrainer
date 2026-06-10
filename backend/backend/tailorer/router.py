@@ -1,6 +1,7 @@
 import uuid as _uuid
 import json
 import logging
+from typing import Any, Callable
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 
@@ -73,69 +74,101 @@ async def _get_user_from_token(token: str, session: AsyncSession) -> User:
 _API_BASE = "http://localhost:8000"
 
 
-async def _handle_interrupt(ws: WebSocket, interrupt_val: dict, thread_id: str = "", token: str = "") -> dict:
-    """Route one interrupt payload to the extension and return the response."""
-    itype = interrupt_val.get("type")
+async def _handle_navigate(ws: WebSocket, val: dict, **_kw: Any) -> dict:
+    await ws.send_json({"type": "navigate", "url": val["url"]})
+    return await ws.receive_json()
 
-    if itype == "navigate":
-        await ws.send_json({"type": "navigate", "url": interrupt_val["url"]})
-        return await ws.receive_json()
 
-    elif itype == "request_snapshot":
-        await ws.send_json({"type": "request_snapshot"})
-        return await ws.receive_json()
+async def _handle_request_snapshot(ws: WebSocket, _val: dict, **_kw: Any) -> dict:
+    await ws.send_json({"type": "request_snapshot"})
+    return await ws.receive_json()
 
-    elif itype == "execute_actions":
-        await ws.send_json({"type": "execute_actions", "actions": interrupt_val.get("actions", [])})
-        return await ws.receive_json()
 
-    elif itype == "fill_and_confirm":
-        all_cmds = interrupt_val.get("commands", [])
-        # Use confirm_commands subset if provided (uncertain + file only), else all
-        confirm_cmds = interrupt_val.get("confirm_commands", all_cmds)
+async def _handle_execute_actions(ws: WebSocket, val: dict, **_kw: Any) -> dict:
+    await ws.send_json({"type": "execute_actions", "actions": val.get("actions", [])})
+    return await ws.receive_json()
 
-        file_cmds = [c for c in confirm_cmds if c.get("action") == "file_upload" or c.get("value") in ("__CV__", "__COVER_LETTER__")]
-        regular_cmds = [c for c in all_cmds if c.get("action") != "file_upload" and c.get("value") not in ("__CV__", "__COVER_LETTER__")]
 
-        for cmd in regular_cmds:
+async def _handle_fill_and_confirm(
+    ws: WebSocket, val: dict, thread_id: str = "", token: str = "", **_kw: Any
+) -> dict:
+    all_cmds = val.get("commands", [])
+    confirm_cmds = val.get("confirm_commands", all_cmds)
+
+    file_cmds = [
+        c for c in confirm_cmds
+        if c.get("action") == "file_upload" or c.get("value") in ("__CV__", "__COVER_LETTER__")
+    ]
+    regular_cmds = [
+        c for c in all_cmds
+        if c.get("action") != "file_upload" and c.get("value") not in ("__CV__", "__COVER_LETTER__")
+    ]
+
+    for cmd in regular_cmds:
+        await ws.send_json(cmd)
+
+    file_links = [
+        {
+            "field_id": fc["index"],
+            "label": "tailored_cv.docx" if fc.get("value") == "__CV__" else "cover_letter.docx",
+            "url": (
+                f"{_API_BASE}/tailorer/files/{thread_id}/"
+                f"{'cv' if fc.get('value') == '__CV__' else 'cover_letter'}"
+                f"?token={quote(token)}"
+            ),
+        }
+        for fc in file_cmds
+    ]
+    uncertain = [f'[{c["index"]}]' for c in confirm_cmds if c.get("uncertain")]
+
+    await ws.send_json({
+        "type": "show_confirm",
+        "summary": val.get("summary", ""),
+        "uncertain_fields": uncertain,
+        "file_links": file_links,
+    })
+    response = await ws.receive_json()
+
+    if response.get("type") == "user_approved":
+        for cmd in file_cmds:
             await ws.send_json(cmd)
 
-        file_links = []
-        for fc in file_cmds:
-            file_type = "cv" if fc.get("value") == "__CV__" else "cover_letter"
-            label = "tailored_cv.docx" if file_type == "cv" else "cover_letter.docx"
-            url = f"{_API_BASE}/tailorer/files/{thread_id}/{file_type}?token={quote(token)}"
-            file_links.append({"field_id": fc["index"], "label": label, "url": url})
+    return response
 
-        uncertain = [f'[{c["index"]}]' for c in confirm_cmds if c.get("uncertain")]
 
-        await ws.send_json({
-            "type": "show_confirm",
-            "summary": interrupt_val.get("summary", ""),
-            "uncertain_fields": uncertain,
-            "file_links": file_links,
-        })
-        response = await ws.receive_json()
+async def _handle_show_confirm(ws: WebSocket, val: dict, **_kw: Any) -> dict:
+    await ws.send_json(val)
+    return await ws.receive_json()
 
-        if response.get("type") == "user_approved":
-            for cmd in file_cmds:
-                await ws.send_json(cmd)
 
-        return response
+async def _handle_navigate_next(ws: WebSocket, _val: dict, **_kw: Any) -> dict:
+    await ws.send_json({"type": "navigate_next"})
+    return await ws.receive_json()
 
-    elif itype == "show_confirm":
-        await ws.send_json(interrupt_val)
-        return await ws.receive_json()
 
-    elif itype == "navigate_next":
-        await ws.send_json({"type": "navigate_next"})
-        return await ws.receive_json()
+async def _handle_show_stuck(ws: WebSocket, val: dict, **_kw: Any) -> dict:
+    await ws.send_json({"type": "show_stuck", "message": val["message"]})
+    return await ws.receive_json()
 
-    elif itype == "show_stuck":
-        await ws.send_json({"type": "show_stuck", "message": interrupt_val["message"]})
-        return await ws.receive_json()
 
-    return {"type": "unknown"}
+_INTERRUPT_HANDLERS: dict[str, Callable[..., Any]] = {
+    "navigate":          _handle_navigate,
+    "request_snapshot":  _handle_request_snapshot,
+    "execute_actions":   _handle_execute_actions,
+    "fill_and_confirm":  _handle_fill_and_confirm,
+    "show_confirm":      _handle_show_confirm,
+    "navigate_next":     _handle_navigate_next,
+    "show_stuck":        _handle_show_stuck,
+}
+
+
+async def _handle_interrupt(
+    ws: WebSocket, interrupt_val: dict, thread_id: str = "", token: str = ""
+) -> dict:
+    handler = _INTERRUPT_HANDLERS.get(interrupt_val.get("type", ""))
+    if not handler:
+        return {"type": "unknown"}
+    return await handler(ws, interrupt_val, thread_id=thread_id, token=token)
 
 
 @router.websocket("/ws/{job_id}")
@@ -208,6 +241,7 @@ async def tailorer_ws(
         "nav_snapshot": None,
         "nav_action": None,
         "nav_history": [],
+        "no_progress_count": 0,
     }
 
     config = {"configurable": {"thread_id": thread_id}}
