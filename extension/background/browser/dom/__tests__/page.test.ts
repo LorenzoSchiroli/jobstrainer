@@ -10,8 +10,17 @@ const makeElementHandle = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+// Wraps an ElementHandle (or null) in a Puppeteer JSHandle-shaped mock.
+// evaluateHandle() returns JSHandle, not ElementHandle directly — callers
+// must call .asElement() to get the ElementHandle (or null if not an element).
+const makeJsHandle = (element: ReturnType<typeof makeElementHandle> | null) => ({
+  asElement: vi.fn().mockReturnValue(element),
+  dispose: vi.fn().mockResolvedValue(undefined),
+});
+
 const makePuppeteerPage = (overrides: Record<string, unknown> = {}) => ({
   evaluate: vi.fn().mockResolvedValue(undefined),
+  evaluateHandle: vi.fn().mockResolvedValue(makeJsHandle(null)),
   $: vi.fn().mockResolvedValue(null),
   on: vi.fn(),
   off: vi.fn(),
@@ -173,14 +182,16 @@ describe('Page._locateHandle', () => {
     });
     iframeNode.children.push(buttonNode);
 
-    // The top-level page.$() finds the iframe element handle
+    // page.evaluateHandle() locates the iframe element; its contentFrame gives
+    // a child frame whose evaluateHandle() then locates the button.
     const buttonHandle = makeElementHandle();
-    const fakeIframeHandle = makeElementHandle({
-      contentFrame: vi.fn().mockResolvedValue({
-        $: vi.fn().mockResolvedValue(buttonHandle),
-      }),
+    const childFrame = {
+      evaluateHandle: vi.fn().mockResolvedValue(makeJsHandle(buttonHandle)),
+    };
+    const fakeIframeEl = makeElementHandle({
+      contentFrame: vi.fn().mockResolvedValue(childFrame),
     });
-    puppeteerPage.$ = vi.fn().mockResolvedValueOnce(fakeIframeHandle);
+    puppeteerPage.evaluateHandle = vi.fn().mockResolvedValue(makeJsHandle(fakeIframeEl));
 
     // @ts-expect-error private method access for test
     const result = await p._locateHandle(buttonNode);
@@ -206,10 +217,11 @@ describe('Page._locateHandle', () => {
     });
 
     const buttonHandle = makeElementHandle();
-    // CSS returns null; XPath returns the element
-    puppeteerPage.$ = vi.fn()
-      .mockResolvedValueOnce(null)          // CSS miss
-      .mockResolvedValueOnce(buttonHandle); // XPath hit
+    // First evaluateHandle call: CSS miss → JSHandle whose asElement() returns null
+    // Second evaluateHandle call: XPath hit → JSHandle wrapping the button
+    puppeteerPage.evaluateHandle = vi.fn()
+      .mockResolvedValueOnce(makeJsHandle(null))
+      .mockResolvedValueOnce(makeJsHandle(buttonHandle));
 
     // @ts-expect-error private method access for test
     const result = await p._locateHandle(buttonNode);
@@ -248,31 +260,31 @@ describe('Page._locateHandle', () => {
 
     const buttonHandle = makeElementHandle();
 
-    // innerFrame: the frame inside the inner iframe
+    // innerFrame: evaluateHandle finds the button element
     const innerFrameMock = {
-      $: vi.fn().mockResolvedValue(buttonHandle),
+      evaluateHandle: vi.fn().mockResolvedValue(makeJsHandle(buttonHandle)),
     };
-    // outerFrame: the frame inside the outer iframe — its $ is called for the inner iframe
-    const innerIframeHandle = makeElementHandle({
+    // outerFrame: evaluateHandle finds the inner iframe element handle
+    const innerIframeEl = makeElementHandle({
       contentFrame: vi.fn().mockResolvedValue(innerFrameMock),
     });
     const outerFrameMock = {
-      $: vi.fn().mockResolvedValue(innerIframeHandle),
+      evaluateHandle: vi.fn().mockResolvedValue(makeJsHandle(innerIframeEl)),
     };
-    // top-level page $ is called for the outer iframe
-    const outerIframeHandle = makeElementHandle({
+    // top-level page: evaluateHandle finds the outer iframe element handle
+    const outerIframeEl = makeElementHandle({
       contentFrame: vi.fn().mockResolvedValue(outerFrameMock),
     });
-    topPage.$ = vi.fn().mockResolvedValue(outerIframeHandle);
+    topPage.evaluateHandle = vi.fn().mockResolvedValue(makeJsHandle(outerIframeEl));
 
     // @ts-expect-error private method access for test
     const result = await p._locateHandle(buttonNode);
 
     expect(result).toBe(buttonHandle);
     // Verify traversal order: top page → outer frame → inner frame
-    expect(topPage.$).toHaveBeenCalledTimes(1); // outer iframe looked up from top page
-    expect(outerFrameMock.$).toHaveBeenCalledTimes(1); // inner iframe looked up from outer frame
-    expect(innerFrameMock.$).toHaveBeenCalledTimes(1); // button looked up from inner frame
+    expect(topPage.evaluateHandle).toHaveBeenCalledTimes(1);    // outer iframe from top page
+    expect(outerFrameMock.evaluateHandle).toHaveBeenCalledTimes(1); // inner iframe from outer frame
+    expect(innerFrameMock.evaluateHandle).toHaveBeenCalledTimes(1); // button from inner frame
   });
 });
 
@@ -357,7 +369,7 @@ describe('Page.clickElement', () => {
         return Promise.resolve(evaluateCallCount === 1 ? true : undefined);
       }),
     });
-    puppeteerPage.$ = vi.fn().mockResolvedValue(el);
+    puppeteerPage.evaluateHandle = vi.fn().mockResolvedValue(makeJsHandle(el));
 
     await expect(p.clickElement(5)).resolves.toBeUndefined();
     // evaluate must have been called at least twice
@@ -388,7 +400,7 @@ describe('Page.clickElement', () => {
       click: clickMock,
       evaluate: vi.fn().mockResolvedValue(true), // in viewport
     });
-    puppeteerPage.$ = vi.fn().mockResolvedValue(el);
+    puppeteerPage.evaluateHandle = vi.fn().mockResolvedValue(makeJsHandle(el));
 
     await p.clickElement(6);
     expect(clickMock).toHaveBeenCalledTimes(1);
