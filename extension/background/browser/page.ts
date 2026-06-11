@@ -317,7 +317,7 @@ export default class Page {
       } catch (snapErr) {
         logger.error('[Page] snapshot refresh failed during locate retry', snapErr);
       }
-      const freshNode = this._lastSelectorMap?.get(node.highlightIndex ?? -1) ?? null;
+      const freshNode = (this._lastSelectorMap as Map<number, DOMElementNode> | null)?.get(node.highlightIndex ?? -1) ?? null;
       if (freshNode && freshNode !== node) {
         logger.info('[Page] retrying locate with fresh node for index=%d', node.highlightIndex);
         return this._locateHandle(freshNode);
