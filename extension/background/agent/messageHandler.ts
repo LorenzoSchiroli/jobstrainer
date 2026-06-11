@@ -45,6 +45,13 @@ const HANDLERS: Record<string, Handler> = {
     session.currentStatus = 'navigating';
     await session.page.attach();
     for (const action of msg.actions as Record<string, unknown>[]) {
+      const actionName = action.action as string;
+      const indexSuffix = action.index != null ? ` [${action.index}]` : '';
+      sessionManager.appendLog(tabId, {
+        kind: 'step',
+        text: `Action: ${actionName}${indexSuffix}`,
+        done: true,
+      });
       const { navigated } = await executeAction(session.page, action, tabId);
       if (navigated) {
         await session.page.detach();
