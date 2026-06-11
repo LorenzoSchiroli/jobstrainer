@@ -122,3 +122,40 @@ describe('optimistic handlers — setStatusBar navigating', () => {
     expect(document.getElementById('tailorer-status')?.textContent).toContain('Navigating');
   });
 });
+
+describe('appendLogEntry done/error — disables stale confirm/stuck cards', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+    globalThis.__testPort = { postMessage: vi.fn() };
+  });
+
+  it('done entry disables buttons in pre-existing confirm blocks', () => {
+    globalThis.appendLogEntry({ kind: 'confirm', summary: 'Fill form', uncertain_fields: [], file_links: [] });
+    globalThis.appendLogEntry({ kind: 'done', message: 'All done', thread_id: 't1', token: 'tok' });
+    const btns = document.querySelectorAll('.tailorer-confirm-block button');
+    btns.forEach(btn => expect(btn.disabled).toBe(true));
+  });
+
+  it('done entry disables inputs in pre-existing confirm blocks', () => {
+    globalThis.appendLogEntry({ kind: 'confirm', summary: 'Fill form', uncertain_fields: [], file_links: [] });
+    globalThis.appendLogEntry({ kind: 'done', message: 'All done', thread_id: 't1', token: 'tok' });
+    const inputs = document.querySelectorAll('.tailorer-confirm-block input');
+    inputs.forEach(inp => expect(inp.disabled).toBe(true));
+  });
+
+  it('error entry disables buttons in pre-existing stuck blocks', () => {
+    globalThis.appendLogEntry({ kind: 'stuck', message: 'Stuck here' });
+    globalThis.appendLogEntry({ kind: 'error', message: 'Failed' });
+    const btns = document.querySelectorAll('.tailorer-stuck-block button');
+    btns.forEach(btn => expect(btn.disabled).toBe(true));
+  });
+
+  it('error entry disables buttons in pre-existing confirm blocks', () => {
+    globalThis.appendLogEntry({ kind: 'confirm', summary: 'Fill form', uncertain_fields: [], file_links: [] });
+    globalThis.appendLogEntry({ kind: 'error', message: 'Failed' });
+    const btns = document.querySelectorAll('.tailorer-confirm-block button');
+    btns.forEach(btn => expect(btn.disabled).toBe(true));
+  });
+});

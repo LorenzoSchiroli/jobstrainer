@@ -184,6 +184,12 @@ function _makeStepEntry(text, done) {
   return el;
 }
 
+function _disableStaleInteractiveCards(log) {
+  log.querySelectorAll('.tailorer-confirm-block, .tailorer-stuck-block').forEach(card => {
+    card.querySelectorAll('button, input').forEach(el => { el.disabled = true; });
+  });
+}
+
 function appendLogEntry(entry) {
   const log = document.getElementById('tailorer-log');
   if (!log) return;
@@ -262,6 +268,7 @@ function appendLogEntry(entry) {
     el.append(msg, unblockBtn);
 
   } else if (entry.kind === 'done') {
+    _disableStaleInteractiveCards(log);
     el = document.createElement('div');
     el.className = 'tailorer-entry tailorer-entry--done-final';
     const icon = document.createElement('span');
@@ -291,6 +298,7 @@ function appendLogEntry(entry) {
     }
 
   } else if (entry.kind === 'error') {
+    _disableStaleInteractiveCards(log);
     el = document.createElement('div');
     el.className = 'tailorer-entry tailorer-entry--error';
     const icon = document.createElement('span');
