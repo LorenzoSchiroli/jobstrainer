@@ -89,7 +89,7 @@ chrome.runtime.onConnect.addListener((port) => {
       if (sessionManager.has(tabId)) {
         sessionManager.stop(tabId, 'Stopped by user.');
       } else {
-        sessionManager.sendToPanel(tabId, { type: 'idle' });
+        sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'idle' });
       }
       return;
     }
