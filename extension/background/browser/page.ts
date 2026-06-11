@@ -86,6 +86,10 @@ export default class Page {
       this._page = null;
       this._lastSelectorMap = null;
     }
+    // ExtensionTransport.close() fire-and-forgets chrome.debugger.detach().
+    // A brief settle gives Chrome time to finish detaching before any
+    // subsequent attach() call, preventing "Another debugger attached" races.
+    await new Promise(r => setTimeout(r, 50));
   }
 
   async snapshot(): Promise<PageSnapshot> {

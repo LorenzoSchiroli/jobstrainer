@@ -154,6 +154,33 @@ describe('Page.detach() safety', () => {
   });
 });
 
+describe('Page.detach() — settle delay', () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('waits ~50 ms after disconnect before resolving', async () => {
+    const { connect } = await import('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js');
+    const { default: Page } = await import('../../page');
+
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    vi.mocked(connect).mockResolvedValue(browser as any);
+
+    const page = new Page(1);
+    await page.attach();
+
+    let resolved = false;
+    const detachPromise = page.detach().then(() => { resolved = true; });
+
+    await vi.advanceTimersByTimeAsync(49);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2);
+    await detachPromise;
+    expect(resolved).toBe(true);
+  });
+});
+
 // ── Test helpers used across multiple test suites ─────────────────────────
 
 async function getConnectMock() {
