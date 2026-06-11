@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { dirname } from 'path';
@@ -15,6 +15,13 @@ function loadPanel() {
   // eslint-disable-next-line no-new-func
   new Function(src)();
 }
+
+const PANEL_GLOBALS = ['setStatusBar', 'showIdleState', 'showStartButton', 'appendLogEntry', 'restorePanel', '_handleMessage'];
+
+afterEach(() => {
+  PANEL_GLOBALS.forEach(k => { delete globalThis[k]; });
+  delete globalThis.__testPort;
+});
 
 describe('panel bootstrap', () => {
   beforeEach(() => {
