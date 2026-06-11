@@ -228,3 +228,31 @@ describe('optimistic handlers — send append_optimistic_log', () => {
     expect(optimisticCall[0].entry).toMatchObject({ kind: 'step', text: 'Unblocked', done: true });
   });
 });
+
+describe('_sendUserInput — empty Enter does nothing', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+    globalThis.__testPort = { postMessage: vi.fn() };
+    globalThis.setStatusBar('awaiting_user');
+  });
+
+  it('does not send any message when input is empty', () => {
+    const chatInput = document.getElementById('tailorer-chat-input');
+    expect(chatInput).not.toBeNull();
+    chatInput.value = '';
+    chatInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(globalThis.__testPort.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('sends user_correction when input has text', () => {
+    const chatInput = document.getElementById('tailorer-chat-input');
+    chatInput.value = 'please fix the email field';
+    chatInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const calls = globalThis.__testPort.postMessage.mock.calls;
+    const correctionCall = calls.find(([msg]) => msg.type === 'user_correction');
+    expect(correctionCall).toBeDefined();
+    expect(correctionCall[0].text).toBe('please fix the email field');
+  });
+});
