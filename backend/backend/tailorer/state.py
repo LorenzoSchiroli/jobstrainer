@@ -30,3 +30,4 @@ class TailorerState(TypedDict):
     nav_action: dict | None     # LLM decision to execute (avoids double LLM call on replay)
     nav_history: list           # list of visited URLs to detect loops
     nav_memory: str       # running memory string maintained across navigate_to_apply steps
+    no_progress_count: int  # consecutive actions that left URL+elements unchanged; resets on progress

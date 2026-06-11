@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import os
 import re
 
@@ -8,6 +9,7 @@ from docx import Document
 from groq import AsyncGroq
 
 _LARGE = lambda: os.environ["GROQ_MODEL_LARGE"]
+_log = logging.getLogger(__name__)
 
 
 def _parse_cover_letter_response(raw: str) -> tuple[str, str, str]:
@@ -107,7 +109,12 @@ async def generate_tailored_documents(
         messages=[{"role": "user", "content": cv_mod_prompt}],
     )
     raw_mods = re.sub(r"```(?:json)?\s*|\s*```", "", cv_resp.choices[0].message.content.strip())
-    modifications = json.loads(raw_mods)
+    _log.info("[tailor] raw_mods (first 500): %s", raw_mods[:500])
+    try:
+        modifications = json.loads(raw_mods)
+    except json.JSONDecodeError:
+        _log.warning("[tailor] failed to parse CV modifications, using original CV")
+        modifications = []
     tailored_cv_bytes = _apply_cv_modifications(cv_bytes, modifications)
 
     return tailored_cv_bytes, cl_bytes, cl_text
