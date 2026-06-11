@@ -63,7 +63,12 @@ chrome.runtime.onConnect.addListener((port) => {
   if (pending) {
     port.postMessage({ type: 'show_apply_button', job_id: pending.job_id, token: pending.token });
   } else if (session) {
-    port.postMessage({ type: 'restore_panel', log: session.log, status: session.currentStatus });
+    const wsAlive = session.ws.readyState === WebSocket.OPEN;
+    port.postMessage({
+      type: 'restore_panel',
+      log: session.log,
+      status: wsAlive ? session.currentStatus : 'error',
+    });
   } else {
     chrome.storage.local.get('activeSessions', ({ activeSessions }) => {
       const saved = (activeSessions as any[] || []).find((s: any) => s.tabId === tabId);

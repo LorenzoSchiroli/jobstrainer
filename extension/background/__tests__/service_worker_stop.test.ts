@@ -57,3 +57,25 @@ describe('stop_session — no live session', () => {
     expect(mockSendToPanel).not.toHaveBeenCalled();
   });
 });
+
+describe('restore_panel — dead WS gets error status', () => {
+  function buildRestoreMsg(ws: { readyState: number }, currentStatus: string) {
+    const status = ws.readyState === WebSocket.OPEN ? currentStatus : 'error';
+    return { type: 'restore_panel', log: [], status };
+  }
+
+  it('uses error status when WS is closed', () => {
+    const msg = buildRestoreMsg({ readyState: WebSocket.CLOSED }, 'navigating');
+    expect(msg.status).toBe('error');
+  });
+
+  it('uses error status when WS is connecting', () => {
+    const msg = buildRestoreMsg({ readyState: WebSocket.CONNECTING }, 'filling');
+    expect(msg.status).toBe('error');
+  });
+
+  it('preserves currentStatus when WS is open', () => {
+    const msg = buildRestoreMsg({ readyState: WebSocket.OPEN }, 'awaiting_user');
+    expect(msg.status).toBe('awaiting_user');
+  });
+});
