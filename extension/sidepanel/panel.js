@@ -219,19 +219,6 @@ function appendLogEntry(entry) {
       unc.textContent = `Uncertain: ${entry.uncertain_fields.join(', ')}`;
       el.appendChild(unc);
     }
-    if (entry.file_links?.length) {
-      const filesDiv = document.createElement('div');
-      filesDiv.className = 'tailorer-file-links';
-      for (const fl of entry.file_links) {
-        const a = document.createElement('a');
-        a.href = fl.url;
-        a.target = '_blank';
-        a.textContent = `⬇ ${fl.label}`;
-        a.className = 'tailorer-file-link';
-        filesDiv.appendChild(a);
-      }
-      el.appendChild(filesDiv);
-    }
     const btnRow = document.createElement('div');
     btnRow.className = 'tailorer-confirm-btns';
     const approveBtn = document.createElement('button');

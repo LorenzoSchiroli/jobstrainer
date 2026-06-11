@@ -256,3 +256,22 @@ describe('_sendUserInput — empty Enter does nothing', () => {
     expect(correctionCall[0].text).toBe('please fix the email field');
   });
 });
+
+describe('confirm card — no file links rendered', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+  });
+
+  it('does not render .tailorer-file-links inside confirm card', () => {
+    globalThis.appendLogEntry({
+      kind: 'confirm',
+      summary: 'Fill form',
+      uncertain_fields: [],
+      file_links: [{ url: 'http://localhost:8000/tailorer/files/t1/cv?token=tok', label: 'tailored_cv.docx' }],
+    });
+    const links = document.querySelector('.tailorer-confirm-block .tailorer-file-links');
+    expect(links).toBeNull();
+  });
+});
