@@ -190,6 +190,14 @@ function _disableStaleInteractiveCards(log) {
   });
 }
 
+function _clearPendingSpinners(log) {
+  log.querySelectorAll('.tailorer-entry--pending').forEach(el => {
+    el.classList.replace('tailorer-entry--pending', 'tailorer-entry--done');
+    const icon = el.querySelector('.tailorer-entry-icon');
+    if (icon) icon.textContent = '✓';
+  });
+}
+
 function appendLogEntry(entry) {
   const log = document.getElementById('tailorer-log');
   if (!log) return;
@@ -269,6 +277,7 @@ function appendLogEntry(entry) {
 
   } else if (entry.kind === 'done') {
     _disableStaleInteractiveCards(log);
+    _clearPendingSpinners(log);
     el = document.createElement('div');
     el.className = 'tailorer-entry tailorer-entry--done-final';
     const icon = document.createElement('span');
@@ -299,6 +308,7 @@ function appendLogEntry(entry) {
 
   } else if (entry.kind === 'error') {
     _disableStaleInteractiveCards(log);
+    _clearPendingSpinners(log);
     el = document.createElement('div');
     el.className = 'tailorer-entry tailorer-entry--error';
     const icon = document.createElement('span');

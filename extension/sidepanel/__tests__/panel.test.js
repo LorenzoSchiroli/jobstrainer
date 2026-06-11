@@ -159,3 +159,32 @@ describe('appendLogEntry done/error — disables stale confirm/stuck cards', () 
     btns.forEach(btn => expect(btn.disabled).toBe(true));
   });
 });
+
+describe('appendLogEntry done/error — clears pending spinners', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+  });
+
+  it('done entry removes tailorer-entry--pending class from all pending steps', () => {
+    globalThis.appendLogEntry({ kind: 'step', text: 'Submitting page…', done: false });
+    globalThis.appendLogEntry({ kind: 'done', message: 'All done', thread_id: 't1', token: 'tok' });
+    const pending = document.querySelectorAll('.tailorer-entry--pending');
+    expect(pending.length).toBe(0);
+  });
+
+  it('done entry adds tailorer-entry--done to formerly-pending steps', () => {
+    globalThis.appendLogEntry({ kind: 'step', text: 'Submitting page…', done: false });
+    globalThis.appendLogEntry({ kind: 'done', message: 'All done', thread_id: 't1', token: 'tok' });
+    const steps = document.querySelectorAll('.tailorer-entry--done');
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('error entry clears pending spinners', () => {
+    globalThis.appendLogEntry({ kind: 'step', text: 'Submitting page…', done: false });
+    globalThis.appendLogEntry({ kind: 'error', message: 'Failed' });
+    const pending = document.querySelectorAll('.tailorer-entry--pending');
+    expect(pending.length).toBe(0);
+  });
+});
