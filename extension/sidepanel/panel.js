@@ -70,17 +70,12 @@ function _sendUserInput() {
   const input = document.getElementById('tailorer-chat-input');
   if (!input) return;
   const text = input.value.trim();
+  if (!text) return;
 
   if (_currentStatus === 'awaiting_user') {
-    if (text) {
-      sendMsg({ type: 'user_correction', text });
-      const block = document.querySelector('.tailorer-confirm-block');
-      if (block) block.replaceWith(_makeStepEntry('Corrected', true));
-    } else {
-      sendMsg({ type: 'user_approved' });
-      const block = document.querySelector('.tailorer-confirm-block');
-      if (block) block.replaceWith(_makeStepEntry('Approved', true));
-    }
+    sendMsg({ type: 'user_correction', text });
+    const block = document.querySelector('.tailorer-confirm-block');
+    if (block) block.replaceWith(_makeStepEntry('Corrected', true));
   } else if (_currentStatus === 'show_stuck') {
     sendMsg({ type: 'stuck_unblocked' });
     const block = document.querySelector('.tailorer-stuck-block');
@@ -90,9 +85,7 @@ function _sendUserInput() {
   }
 
   input.value = '';
-  // Agent is resuming — switch immediately to running mode (stop button shows).
-  setInputArea(false);
-  setStopButton(true);
+  setStatusBar('navigating');
 }
 
 // ── Status bar + mutual exclusivity ───────────────────────────────────────
@@ -233,15 +226,10 @@ function appendLogEntry(entry) {
     approveBtn.addEventListener('click', () => {
       sendMsg({ type: 'user_approved' });
       el.replaceWith(_makeStepEntry('Confirmed', true));
-      setInputArea(false);
-      setStopButton(true);
+      setStatusBar('navigating');
     });
-    const correctBtn = document.createElement('button');
-    correctBtn.className = 'tailorer-btn tailorer-btn--correct';
-    correctBtn.textContent = 'Correct…';
     const correctionRow = document.createElement('div');
     correctionRow.className = 'tailorer-correction-row';
-    correctionRow.style.display = 'none';
     const corrInput = document.createElement('input');
     corrInput.className = 'tailorer-correction-input';
     corrInput.placeholder = 'Describe the correction and press Enter…';
@@ -251,15 +239,10 @@ function appendLogEntry(entry) {
       if (!text) return;
       sendMsg({ type: 'user_correction', text });
       el.replaceWith(_makeStepEntry('Corrected', true));
-      setInputArea(false);
-      setStopButton(true);
-    });
-    correctBtn.addEventListener('click', () => {
-      correctionRow.style.display = correctionRow.style.display === 'none' ? '' : 'none';
-      if (correctionRow.style.display !== 'none') corrInput.focus();
+      setStatusBar('navigating');
     });
     correctionRow.appendChild(corrInput);
-    btnRow.append(approveBtn, correctBtn);
+    btnRow.appendChild(approveBtn);
     el.append(btnRow, correctionRow);
 
   } else if (entry.kind === 'stuck') {
@@ -274,8 +257,7 @@ function appendLogEntry(entry) {
     unblockBtn.addEventListener('click', () => {
       sendMsg({ type: 'stuck_unblocked' });
       el.replaceWith(_makeStepEntry('Unblocked', true));
-      setInputArea(false);
-      setStopButton(true);
+      setStatusBar('navigating');
     });
     el.append(msg, unblockBtn);
 
@@ -307,7 +289,6 @@ function appendLogEntry(entry) {
       downloads.append(cvLink, clLink);
       el.appendChild(downloads);
     }
-    setStatusBar('done');
 
   } else if (entry.kind === 'error') {
     el = document.createElement('div');
@@ -319,7 +300,6 @@ function appendLogEntry(entry) {
     txt.className = 'tailorer-entry-text';
     txt.textContent = entry.message;
     el.append(icon, txt);
-    setStatusBar('error');
   }
 
   if (!el) return;
@@ -392,6 +372,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.connect) {
   });
 } else {
   globalThis.setStatusBar = setStatusBar;
+  globalThis.setStopButton = setStopButton;
+  globalThis.setInputArea = setInputArea;
   globalThis.showIdleState = showIdleState;
   globalThis.showStartButton = showStartButton;
   globalThis.appendLogEntry = appendLogEntry;
