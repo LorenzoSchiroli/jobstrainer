@@ -17,17 +17,27 @@ export default defineConfig(({ mode }) => {
           fileName: () => 'background/service_worker.js',
         },
         rollupOptions: {
-          output: { inlineDynamicImports: true },
+          external: ['chrome'],
+          output: {
+            inlineDynamicImports: true,
+            globals: { chrome: 'chrome' },
+          },
         },
       },
       resolve: {
-        alias: { '@background': resolve(__dirname, 'background') },
+        alias: {
+          '@background': resolve(__dirname, 'background'),
+          '@puppeteer/browsers': resolve(__dirname, 'stubs/puppeteer-browsers.ts'),
+        },
+        conditions: ['browser', 'module', 'import', 'default'],
+        mainFields: ['browser', 'module', 'main'],
       },
     };
   }
 
   return {
     root: resolve(__dirname, 'sidepanel'),
+    base: './',
     plugins: [react()],
     publicDir: false,
     build: {
