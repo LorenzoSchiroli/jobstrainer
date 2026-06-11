@@ -188,3 +188,43 @@ describe('appendLogEntry done/error — clears pending spinners', () => {
     expect(pending.length).toBe(0);
   });
 });
+
+describe('optimistic handlers — send append_optimistic_log', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+    globalThis.__testPort = { postMessage: vi.fn() };
+    globalThis.setStatusBar('awaiting_user');
+  });
+
+  it('approve button sends append_optimistic_log with Confirmed step', () => {
+    globalThis.appendLogEntry({ kind: 'confirm', summary: 'Fill form', uncertain_fields: [], file_links: [] });
+    document.querySelector('.tailorer-btn--approve').click();
+    const calls = globalThis.__testPort.postMessage.mock.calls;
+    const optimisticCall = calls.find(([msg]) => msg.type === 'append_optimistic_log');
+    expect(optimisticCall).toBeDefined();
+    expect(optimisticCall[0].entry).toMatchObject({ kind: 'step', text: 'Confirmed', done: true });
+  });
+
+  it('correction Enter sends append_optimistic_log with Corrected step', () => {
+    globalThis.appendLogEntry({ kind: 'confirm', summary: 'Fill form', uncertain_fields: [], file_links: [] });
+    const input = document.querySelector('.tailorer-correction-input');
+    input.value = 'please fix this';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const calls = globalThis.__testPort.postMessage.mock.calls;
+    const optimisticCall = calls.find(([msg]) => msg.type === 'append_optimistic_log');
+    expect(optimisticCall).toBeDefined();
+    expect(optimisticCall[0].entry).toMatchObject({ kind: 'step', text: 'Corrected', done: true });
+  });
+
+  it('unblock button sends append_optimistic_log with Unblocked step', () => {
+    globalThis.setStatusBar('show_stuck');
+    globalThis.appendLogEntry({ kind: 'stuck', message: 'Need help' });
+    document.querySelector('.tailorer-btn--unblock').click();
+    const calls = globalThis.__testPort.postMessage.mock.calls;
+    const optimisticCall = calls.find(([msg]) => msg.type === 'append_optimistic_log');
+    expect(optimisticCall).toBeDefined();
+    expect(optimisticCall[0].entry).toMatchObject({ kind: 'step', text: 'Unblocked', done: true });
+  });
+});

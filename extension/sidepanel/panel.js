@@ -239,6 +239,7 @@ function appendLogEntry(entry) {
     approveBtn.textContent = 'Approve ✓';
     approveBtn.addEventListener('click', () => {
       sendMsg({ type: 'user_approved' });
+      sendMsg({ type: 'append_optimistic_log', entry: { kind: 'step', text: 'Confirmed', done: true } });
       el.replaceWith(_makeStepEntry('Confirmed', true));
       setStatusBar('navigating');
     });
@@ -252,6 +253,7 @@ function appendLogEntry(entry) {
       const text = corrInput.value.trim();
       if (!text) return;
       sendMsg({ type: 'user_correction', text });
+      sendMsg({ type: 'append_optimistic_log', entry: { kind: 'step', text: 'Corrected', done: true } });
       el.replaceWith(_makeStepEntry('Corrected', true));
       setStatusBar('navigating');
     });
@@ -270,6 +272,7 @@ function appendLogEntry(entry) {
     unblockBtn.textContent = 'Done, continue ▶';
     unblockBtn.addEventListener('click', () => {
       sendMsg({ type: 'stuck_unblocked' });
+      sendMsg({ type: 'append_optimistic_log', entry: { kind: 'step', text: 'Unblocked', done: true } });
       el.replaceWith(_makeStepEntry('Unblocked', true));
       setStatusBar('navigating');
     });

@@ -98,6 +98,11 @@ chrome.runtime.onConnect.addListener((port) => {
       }
       return;
     }
+    if (msg.type === 'append_optimistic_log') {
+      const s = sessionManager.get(tabId);
+      if (s) s.log.push(msg.entry as any);
+      return;
+    }
     const session = sessionManager.get(tabId);
     if (!session?.ws || session.ws.readyState !== WebSocket.OPEN) return;
     if (['user_approved', 'user_correction', 'stuck_unblocked', 'user_manual_edit'].includes(msg.type)) {
