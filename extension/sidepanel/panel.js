@@ -365,6 +365,8 @@ function _handleMessage(msg) {
     setStatusBar(msg.status);
   } else if (msg.type === 'idle') {
     showIdleState();
+  } else {
+    console.warn('[panel] unknown message type:', msg.type);
   }
 }
 
@@ -386,4 +388,5 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.connect) {
   globalThis.showStartButton = showStartButton;
   globalThis.appendLogEntry = appendLogEntry;
   globalThis.restorePanel = restorePanel;
+  globalThis._handleMessage = _handleMessage;
 }

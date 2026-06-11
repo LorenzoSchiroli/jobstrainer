@@ -275,3 +275,22 @@ describe('confirm card — no file links rendered', () => {
     expect(links).toBeNull();
   });
 });
+
+describe('_handleMessage — warns on unknown message type', () => {
+  beforeEach(() => {
+    globalThis.chrome = undefined;
+    setupDOM();
+    loadPanel();
+  });
+
+  it('calls console.warn for unknown message types', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(typeof globalThis._handleMessage).toBe('function');
+    globalThis._handleMessage({ type: 'totally_unknown_type_xyz' });
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[panel] unknown message type:',
+      'totally_unknown_type_xyz'
+    );
+    warnSpy.mockRestore();
+  });
+});
