@@ -4,7 +4,7 @@
 
 **Goal:** Replace the injected Shadow DOM panel with the browser's native side panel (Chrome Side Panel API + Firefox Sidebar Action) so the panel appears alongside the page rather than overlapping it.
 
-**Architecture:** A `sidepanel/panel.html` extension page replaces the `content/side_panel.js` content script. The panel connects to the service worker via a named `chrome.runtime` port keyed by tab ID; the service worker stores one port per tab and uses `port.postMessage` instead of `chrome.tabs.sendMessage` for all panel messages. Content scripts (`dom_inspector.js`, `form_filler.js`) continue to inject into the page unchanged. Because the panel is a persistent extension page it survives page navigations without re-injection.
+**Architecture:** A `sidepanel/panel.html` extension page replaces the `content/side_panel.js` content script. The panel connects to the service worker via a named `chrome.runtime` port keyed by tab ID. Chrome auto-opens the side panel from `onCreated` (user-gesture context). Firefox cannot auto-open the sidebar programmatically, so a lightweight `content/firefox_trigger.js` content script injects a small sticky `⚡ Open Tailorer` button into the job page; clicking it sends `open_sidebar` to the service worker which calls `browser.sidebarAction.open()` — Firefox propagates the user-gesture flag through `runtime.sendMessage` for click-originated messages, making this work. Content scripts (`dom_inspector.js`, `form_filler.js`) continue to inject unchanged. The panel survives page navigations without re-injection.
 
 **Tech Stack:** Vanilla JS, WebExtension MV3, Chrome Side Panel API (`chrome.sidePanel`), Firefox Sidebar Action (`sidebar_action`), Jest (jsdom) for unit tests.
 
@@ -17,9 +17,10 @@
 | Create | `extension/sidepanel/panel.html` | Native panel HTML shell |
 | Create | `extension/sidepanel/panel.css` | Panel styles (no Shadow DOM, no toggle tab) |
 | Create | `extension/sidepanel/panel.js` | Rendering + port-based SW communication |
+| Create | `extension/content/firefox_trigger.js` | Firefox-only: sticky button that opens the native sidebar |
 | Create | `extension/tests/panel.test.js` | Jest tests for panel.js |
 | Modify | `extension/manifest.json` | Add `sidePanel` + `sidebar_action`, remove `web_accessible_resources` |
-| Modify | `extension/background/service_worker.js` | Port registry, open panel, route panel messages via ports |
+| Modify | `extension/background/service_worker.js` | Port registry, open panel, Firefox trigger injection, message routing |
 | Modify | `extension/tests/setup.js` | Remove Shadow DOM stub |
 | Delete | `extension/content/side_panel.js` | Replaced by sidepanel/panel.js |
 | Delete | `extension/content/side_panel.css` | Replaced by sidepanel/panel.css |
@@ -91,9 +92,9 @@ Full replacement:
 
 Changes from current:
 - Added `"sidePanel"` to permissions (Chrome)
-- Added `"side_panel"` key → `sidepanel/panel.html` (Chrome; Firefox ignores it)
-- Added `"sidebar_action"` key → `sidepanel/panel.html` (Firefox; Chrome ignores it)
-- Removed `"web_accessible_resources"` — CSS is now bundled with the panel page, no cross-origin fetch needed
+- Added `"side_panel"` → `sidepanel/panel.html` (Chrome; Firefox ignores it)
+- Added `"sidebar_action"` → `sidepanel/panel.html` (Firefox; Chrome ignores it)
+- Removed `"web_accessible_resources"` — CSS is bundled with the panel page
 
 - [ ] **Step 2: Commit**
 
@@ -134,7 +135,7 @@ git commit -m "feat(extension): add native side panel to manifest (Chrome + Fire
 
 - [ ] **Step 2: Create `extension/sidepanel/panel.css`**
 
-No Shadow DOM scoping needed. No toggle-tab or host-positioning rules. `body` fills the panel area.
+No Shadow DOM scoping, no toggle-tab, no host-positioning. `body` fills the panel area.
 
 ```css
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -318,7 +319,7 @@ git commit -m "feat(extension): native side panel HTML + CSS"
 - Create: `extension/sidepanel/panel.js`
 - Create: `extension/tests/panel.test.js`
 
-The rendering logic is the same as the old `content/side_panel.js` minus Shadow DOM. `sendMsg(msg)` uses `_port` in the browser and `globalThis.__testPort` in tests — no `chrome.runtime.sendMessage` needed.
+`sendMsg(msg)` uses the live port in the browser and `globalThis.__testPort` in tests — no chrome.runtime.sendMessage needed.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -359,9 +360,8 @@ test('showIdleState renders idle message', () => {
 
 test('showStartButton renders Start Agent button', () => {
   showStartButton('job-1', 'tok-1');
-  const btn = document.querySelector('.tailorer-btn--start');
-  expect(btn).not.toBeNull();
-  expect(btn.textContent).toContain('Start Agent');
+  expect(document.querySelector('.tailorer-btn--start')).not.toBeNull();
+  expect(document.querySelector('.tailorer-btn--start').textContent).toContain('Start Agent');
 });
 
 test('showStartButton click sends start_session via port', () => {
@@ -675,7 +675,6 @@ function restorePanel(log, status) {
   if (status) setStatusBar(status);
 }
 
-// sendMsg uses the live port in browser context; __testPort in Jest
 function sendMsg(msg) {
   (_port || globalThis.__testPort)?.postMessage(msg);
 }
@@ -693,7 +692,7 @@ function _connectWithTab(tabId) {
   _port.onMessage.addListener(_handleMessage);
   _port.onDisconnect.addListener(() => {
     _port = null;
-    // Reconnect after short delay — service worker may have been killed (MV3 sleep)
+    // Reconnect after short delay in case service worker was killed (MV3 sleep)
     setTimeout(() => _connectWithTab(tabId), 500);
   });
 }
@@ -748,22 +747,81 @@ git commit -m "feat(extension): native side panel rendering + tests"
 
 ---
 
-### Task 4: `service_worker.js` — ports, panel opening, message routing
+### Task 4: `content/firefox_trigger.js` — Firefox sidebar open button
+
+**Files:**
+- Create: `extension/content/firefox_trigger.js`
+
+Firefox cannot open the native sidebar programmatically without a user gesture. This script injects a small sticky button into the job page. Clicking it sends `open_sidebar` to the service worker, which calls `browser.sidebarAction.open()`. Firefox propagates the user-gesture flag from a content script click through `runtime.sendMessage`, so this works.
+
+No tests: the script is a one-liner event listener on a single injected element. Not injected via manifest `content_scripts` — the service worker injects it dynamically only on Firefox, only for tabs with a pending job or session.
+
+- [ ] **Step 1: Create `extension/content/firefox_trigger.js`**
+
+```js
+(function () {
+  if (document.getElementById('tailorer-ff-trigger')) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'tailorer-ff-trigger';
+  Object.assign(btn.style, {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    zIndex: '2147483647',
+    background: '#2563eb',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '20px',
+    padding: '9px 16px',
+    fontSize: '13px',
+    fontFamily: 'system-ui, sans-serif',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.35)',
+  });
+  btn.textContent = '⚡ Open Tailorer';
+  btn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'open_sidebar' });
+    btn.remove();
+  });
+  document.body.appendChild(btn);
+})();
+```
+
+The button removes itself after the click so the user is not prompted again once the sidebar is open.
+
+- [ ] **Step 2: Verify the file exists**
+
+```bash
+ls extension/content/firefox_trigger.js
+```
+
+Expected: file listed.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add extension/content/firefox_trigger.js
+git commit -m "feat(extension): Firefox trigger button to open native sidebar"
+```
+
+---
+
+### Task 5: `service_worker.js` — ports, panel opening, message routing
 
 **Files:**
 - Modify: `extension/background/service_worker.js`
 
-This task rewires the service worker to use ports instead of `tabs.sendMessage` for panel communication and to open the native side panel when a job tab is detected.
-
 - [ ] **Step 1: Add `panelPorts` registry and `sendToPanel` helper**
 
-After the `injectedTabs` declaration (line 5), add:
+After the `injectedTabs` declaration (line 5 of the file), add:
 
 ```js
 const panelPorts = {}; // tabId -> port
 ```
 
-After the `requestSnapshotAndSend` function at the bottom, add:
+After the `requestSnapshotAndSend` function at the bottom of the file, add:
 
 ```js
 function sendToPanel(tabId, msg) {
@@ -771,20 +829,151 @@ function sendToPanel(tabId, msg) {
 }
 ```
 
-- [ ] **Step 2: Configure Chrome side panel behavior at startup**
+- [ ] **Step 2: Add Chrome side panel behavior at startup**
 
-Add at the very top level of the service worker (after the `const` declarations):
+After the `const` declarations block, before any listeners, add:
 
 ```js
-// Make the action button open the side panel (Chrome only)
-if (typeof chrome !== 'undefined' && chrome.sidePanel?.setPanelBehavior) {
+if (chrome.sidePanel?.setPanelBehavior) {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 }
 ```
 
-- [ ] **Step 3: Add `onConnect` listener for panel ports**
+- [ ] **Step 3: Update `onCreated` — auto-open Chrome side panel**
 
-Add a new section after the `chrome.runtime.onMessage` block:
+Replace the entire `onCreated` listener with:
+
+```js
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.openerTabId) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.openerTabId },
+        func: () => ({
+          pending: localStorage.getItem('tailorer_pending'),
+          token: localStorage.getItem('access_token'),
+        }),
+      });
+      const { pending, token } = result.result;
+      if (pending && token) {
+        const { job_id } = JSON.parse(pending);
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.openerTabId },
+          func: () => localStorage.removeItem('tailorer_pending'),
+        });
+        pendingJobs[tab.id] = { job_id, token };
+        // Auto-open side panel in Chrome while we are still in the user-gesture context
+        if (chrome.sidePanel?.open) {
+          chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+        }
+        return;
+      }
+    } catch (_) {}
+  }
+
+  if (pendingNextTab) {
+    pendingJobs[tab.id] = pendingNextTab;
+    pendingNextTab = null;
+  }
+});
+```
+
+- [ ] **Step 4: Replace `onUpdated` entirely**
+
+Full replacement — removes `side_panel.js` injection, injects `firefox_trigger.js` on Firefox, uses `sendToPanel`:
+
+```js
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.url) injectedTabs.delete(tabId);
+
+  if (changeInfo.status !== 'complete') return;
+  if (!pendingJobs[tabId] && !sessions[tabId]) return;
+
+  if (!injectedTabs.has(tabId)) {
+    try {
+      const files = ['content/dom_inspector.js', 'content/form_filler.js'];
+      // On Firefox (no chrome.sidePanel), inject the trigger button instead of auto-opening
+      if (!chrome.sidePanel) files.push('content/firefox_trigger.js');
+      await chrome.scripting.executeScript({ target: { tabId }, files });
+      injectedTabs.add(tabId);
+    } catch (_) {
+      return;
+    }
+  }
+
+  // Fallback open attempt for Chrome (onCreated may have been the primary attempt)
+  if (chrome.sidePanel?.open) {
+    chrome.sidePanel.open({ tabId }).catch(() => {});
+  }
+
+  if (pendingJobs[tabId]) {
+    const { job_id, token } = pendingJobs[tabId];
+    sendToPanel(tabId, { type: 'show_apply_button', job_id, token });
+    return;
+  }
+
+  const session = sessions[tabId];
+  if (!session) return;
+
+  const wasNavigating = session.pendingNavigate;
+  if (wasNavigating) {
+    session.pendingNavigate = false;
+    const last = session.log[session.log.length - 1];
+    if (last?.kind === 'step' && !last.done) last.done = true;
+  }
+
+  sendToPanel(tabId, {
+    type: 'restore_panel',
+    log: session.log,
+    status: session.currentStatus,
+  });
+
+  if (wasNavigating) {
+    requestSnapshotAndSend(tabId);
+  }
+});
+```
+
+- [ ] **Step 5: Replace `onRemoved` — add `panelPorts` cleanup**
+
+```js
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (sessions[tabId]) {
+    sessions[tabId].ws?.close();
+    delete sessions[tabId];
+  }
+  delete pendingJobs[tabId];
+  delete panelPorts[tabId];
+  injectedTabs.delete(tabId);
+});
+```
+
+- [ ] **Step 6: Replace `onMessage` — add `open_sidebar`, remove panel action handlers**
+
+Panel action messages (`start_session`, `user_approved`, etc.) are now handled in the port listener (Step 7). `onMessage` handles only content script messages.
+
+```js
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  const tabId = sender.tab?.id;
+  if (!tabId) return;
+
+  if (msg.type === 'register_pending') {
+    pendingNextTab = { job_id: msg.job_id, token: msg.token };
+    return;
+  }
+
+  // Firefox only: user clicked the trigger button in the page
+  if (msg.type === 'open_sidebar') {
+    if (typeof browser !== 'undefined' && browser.sidebarAction?.open) {
+      browser.sidebarAction.open().catch(() => {});
+    }
+  }
+});
+```
+
+- [ ] **Step 7: Add `onConnect` listener for panel ports**
+
+Add a new section after `chrome.runtime.onMessage`:
 
 ```js
 // ── Panel port connections ─────────────────────────────────────────────────
@@ -799,7 +988,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (panelPorts[tabId] === port) delete panelPorts[tabId];
   });
 
-  // Send current state to newly connected panel
+  // Send current state to the newly connected panel
   if (pendingJobs[tabId]) {
     const { job_id, token } = pendingJobs[tabId];
     port.postMessage({ type: 'show_apply_button', job_id, token });
@@ -837,96 +1026,7 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 ```
 
-- [ ] **Step 4: Update `onUpdated` — remove side_panel.js injection, open native panel, use `sendToPanel`**
-
-Full replacement of the `onUpdated` listener:
-
-```js
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.url) injectedTabs.delete(tabId);
-
-  if (changeInfo.status !== 'complete') return;
-  if (!pendingJobs[tabId] && !sessions[tabId]) return;
-
-  if (!injectedTabs.has(tabId)) {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content/dom_inspector.js', 'content/form_filler.js'],
-      });
-      injectedTabs.add(tabId);
-    } catch (_) {
-      return;
-    }
-  }
-
-  // Open native side panel in Chrome (Firefox sidebar is opened manually via browser UI)
-  if (chrome.sidePanel?.open) {
-    chrome.sidePanel.open({ tabId }).catch(() => {});
-  }
-
-  if (pendingJobs[tabId]) {
-    const { job_id, token } = pendingJobs[tabId];
-    sendToPanel(tabId, { type: 'show_apply_button', job_id, token });
-    return;
-  }
-
-  const session = sessions[tabId];
-  if (!session) return;
-
-  const wasNavigating = session.pendingNavigate;
-  if (wasNavigating) {
-    session.pendingNavigate = false;
-    const last = session.log[session.log.length - 1];
-    if (last?.kind === 'step' && !last.done) last.done = true;
-  }
-
-  sendToPanel(tabId, {
-    type: 'restore_panel',
-    log: session.log,
-    status: session.currentStatus,
-  });
-
-  if (wasNavigating) {
-    requestSnapshotAndSend(tabId);
-  }
-});
-```
-
-- [ ] **Step 5: Update `onRemoved` — clean up panel port**
-
-Full replacement of the `onRemoved` listener:
-
-```js
-chrome.tabs.onRemoved.addListener((tabId) => {
-  if (sessions[tabId]) {
-    sessions[tabId].ws?.close();
-    delete sessions[tabId];
-  }
-  delete pendingJobs[tabId];
-  delete panelPorts[tabId];
-  injectedTabs.delete(tabId);
-});
-```
-
-- [ ] **Step 6: Update `onMessage` — remove panel action handlers (now handled by port)**
-
-The `onMessage` listener now only handles `register_pending` from `frontend_bridge.js`. Replace the entire listener:
-
-```js
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  const tabId = sender.tab?.id;
-  if (!tabId) return;
-
-  if (msg.type === 'register_pending') {
-    pendingNextTab = { job_id: msg.job_id, token: msg.token };
-  }
-});
-```
-
-- [ ] **Step 7: Replace `chrome.tabs.sendMessage` panel calls in `handleAgentMessage` with `sendToPanel`**
-
-Full replacement of `handleAgentMessage`:
+- [ ] **Step 8: Replace `handleAgentMessage` — use `sendToPanel` everywhere**
 
 ```js
 async function handleAgentMessage(tabId, msg) {
@@ -1026,7 +1126,7 @@ async function handleAgentMessage(tabId, msg) {
 }
 ```
 
-- [ ] **Step 8: Update `ws.onclose` to use `sendToPanel`**
+- [ ] **Step 9: Update `ws.onclose` permanent failure to use `sendToPanel`**
 
 In `openSession`, replace the permanent-failure block:
 
@@ -1040,7 +1140,7 @@ In `openSession`, replace the permanent-failure block:
     }
 ```
 
-- [ ] **Step 9: Run tests**
+- [ ] **Step 10: Run tests**
 
 ```bash
 cd extension && npm test
@@ -1048,16 +1148,16 @@ cd extension && npm test
 
 Expected: all tests pass (panel.test.js + dom_inspector.test.js + form_filler.test.js).
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add extension/background/service_worker.js
-git commit -m "feat(extension): service worker port management + native side panel opening"
+git commit -m "feat(extension): service worker port management, Firefox trigger, native panel opening"
 ```
 
 ---
 
-### Task 5: Cleanup
+### Task 6: Cleanup
 
 **Files:**
 - Modify: `extension/tests/setup.js`
@@ -1095,7 +1195,7 @@ rm extension/tests/side_panel.test.js
 cd extension && npm test
 ```
 
-Expected: all tests pass. Side_panel tests are gone; panel tests pass.
+Expected: all tests pass. Side_panel suite gone; panel suite and others green.
 
 - [ ] **Step 4: Commit**
 
@@ -1107,8 +1207,11 @@ git commit -m "chore(extension): remove Shadow DOM content script, clean up setu
 
 ---
 
-## Browser behaviour notes (no code required)
+## Browser behaviour summary
 
-**Chrome**: The service worker calls `chrome.sidePanel.open({ tabId })` in `onUpdated`. This works when the tab was opened via a user gesture (clicking a job link). If it fails (e.g. tab opened programmatically), the user can click the extension icon to open the panel — `setPanelBehavior({ openPanelOnActionClick: true })` ensures that click opens the panel instead of a popup.
-
-**Firefox**: `browser.sidebarAction.open()` requires a user gesture and cannot be called from `onUpdated`. Firefox users open the sidebar via the browser's View → Sidebar menu, keyboard shortcut, or the sidebar toggle button. Once open, the panel stays open and updates automatically as the user switches tabs.
+| | Chrome | Firefox |
+|---|---|---|
+| Panel opens | Automatically via `chrome.sidePanel.open()` from `onCreated` (user-gesture context from link click) | User clicks the injected `⚡ Open Tailorer` button → `browser.sidebarAction.open()` |
+| Panel persists across navigations | Yes — extension page, not a content script | Yes |
+| Tab switching | Panel updates via `onActivated` listener in panel.js | Same |
+| Action button | Opens side panel (`setPanelBehavior`) | Opens sidebar (browser default) |

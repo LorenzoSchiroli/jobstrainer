@@ -70,6 +70,7 @@ services:
       ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
       ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
       BACKEND_URL: http://backend:8000
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./data:/app/ingestion/data
     depends_on:
