@@ -95,45 +95,18 @@ async def _handle_fill_and_confirm(
     all_cmds = val.get("commands", [])
     confirm_cmds = val.get("confirm_commands", all_cmds)
 
-    file_cmds = [
-        c for c in confirm_cmds
-        if c.get("action") == "file_upload" or c.get("value") in ("__CV__", "__COVER_LETTER__")
-    ]
-    regular_cmds = [
-        c for c in all_cmds
-        if c.get("action") != "file_upload" and c.get("value") not in ("__CV__", "__COVER_LETTER__")
-    ]
-
-    for cmd in regular_cmds:
-        await ws.send_json(cmd)
-
-    file_links = [
-        {
-            "field_id": fc["index"],
-            "label": "tailored_cv.docx" if fc.get("value") == "__CV__" else "cover_letter.docx",
-            "url": (
-                f"{_API_BASE}/tailorer/files/{thread_id}/"
-                f"{'cv' if fc.get('value') == '__CV__' else 'cover_letter'}"
-                f"?token={quote(token)}"
-            ),
-        }
-        for fc in file_cmds
-    ]
-    uncertain = [f'[{c["index"]}]' for c in confirm_cmds if c.get("uncertain")]
-
+    # Send a single batched message so the extension dispatcher can route it
+    # via msg.type. Individual bare objects (no type key) are silently dropped.
     await ws.send_json({
-        "type": "show_confirm",
+        "type": "fill_and_confirm",
+        "commands": all_cmds,
+        "confirm_commands": confirm_cmds,
         "summary": val.get("summary", ""),
-        "uncertain_fields": uncertain,
-        "file_links": file_links,
+        "thread_id": thread_id,
+        "token": token,
     })
-    response = await ws.receive_json()
 
-    if response.get("type") == "user_approved":
-        for cmd in file_cmds:
-            await ws.send_json(cmd)
-
-    return response
+    return await ws.receive_json()
 
 
 async def _handle_show_confirm(ws: WebSocket, val: dict, **_kw: Any) -> dict:

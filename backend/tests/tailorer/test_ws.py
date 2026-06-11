@@ -42,8 +42,9 @@ async def test_handle_interrupt_execute_actions_returns_snapshot():
 
 
 @pytest.mark.asyncio
-async def test_handle_interrupt_fill_and_confirm_sends_index_commands():
-    """fill_and_confirm sends index-based commands and show_confirm with file_links."""
+async def test_handle_interrupt_fill_and_confirm_sends_batched_message():
+    """fill_and_confirm must send a single {type: fill_and_confirm, commands: [...]} message
+    (not individual bare objects) so the extension dispatcher can route it."""
     from backend.tailorer.router import _handle_interrupt
 
     ws = AsyncMock()
@@ -53,6 +54,7 @@ async def test_handle_interrupt_fill_and_confirm_sends_index_commands():
         "type": "fill_and_confirm",
         "commands": [
             {"index": 2, "value": "John", "action": "input_text", "uncertain": False},
+            {"index": 3, "value": "Doe", "action": "input_text", "uncertain": False},
             {"index": 7, "value": "__CV__", "action": "file_upload"},
         ],
         "summary": "Filling page 1",
@@ -61,12 +63,24 @@ async def test_handle_interrupt_fill_and_confirm_sends_index_commands():
     result = await _handle_interrupt(ws, interrupt_val, thread_id="t1", token="tok")
 
     calls = [c[0][0] for c in ws.send_json.call_args_list]
-    # Regular fill command sent first
-    assert any(c.get("action") == "input_text" for c in calls)
-    # show_confirm sent with file_links
-    confirm_call = next(c for c in calls if c.get("type") == "show_confirm")
-    assert len(confirm_call["file_links"]) == 1
-    assert confirm_call["file_links"][0]["field_id"] == 7
+
+    # There must be exactly one fill_and_confirm message
+    fill_calls = [c for c in calls if c.get("type") == "fill_and_confirm"]
+    assert len(fill_calls) == 1, f"Expected 1 fill_and_confirm message, got {len(fill_calls)}"
+
+    fill_msg = fill_calls[0]
+    # commands list must contain all commands
+    assert "commands" in fill_msg
+    regular = [c for c in fill_msg["commands"] if c.get("action") != "file_upload"
+               and c.get("value") not in ("__CV__", "__COVER_LETTER__")]
+    assert len(regular) == 2
+    assert regular[0]["index"] == 2
+    assert regular[1]["index"] == 3
+
+    # No bare {action: "input_text"} objects must be sent as top-level messages
+    bare_fills = [c for c in calls if c.get("action") in ("input_text", "select_option")]
+    assert bare_fills == [], f"Unexpected bare fill commands sent: {bare_fills}"
+
     assert result == {"type": "user_approved"}
 
 
