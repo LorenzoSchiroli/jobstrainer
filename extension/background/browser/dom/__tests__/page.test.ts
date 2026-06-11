@@ -44,6 +44,15 @@ vi.mock('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js', () => ({
   ExtensionTransport: { connectTab: vi.fn().mockResolvedValue({}) },
 }));
 
+vi.mock('../service', () => ({
+  getClickableElements: vi.fn().mockResolvedValue({
+    selectorMap: new Map(),
+    elementTree: { clickableElementsToString: () => '' },
+  }),
+  getScrollInfo: vi.fn().mockResolvedValue([0, 800, 3000]),
+  injectBuildDomTreeScripts: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.stubGlobal('chrome', {
   tabs: {
     get: vi.fn().mockResolvedValue({ url: 'https://example.com', title: 'Example' }),
@@ -478,5 +487,61 @@ describe('Page.clickElement', () => {
 
     await p.clickElement(6);
     expect(clickMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── _locateHandle stale snapshot retry ───────────────────────────────────
+
+describe('Page._locateHandle — stale snapshot retry', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('invalidates cache and retries locate on first miss', async () => {
+    const { connect } = await import('puppeteer-core/lib/esm/puppeteer/puppeteer-core-browser.js');
+    const { default: Page } = await import('../../page');
+    const { DOMElementNode } = await import('../views');
+    const domService = await import('../service');
+
+    const p = new Page(1);
+    const puppeteerPage = makePuppeteerPage();
+    const browser = makeBrowser(puppeteerPage);
+    vi.mocked(connect).mockResolvedValue(browser as any);
+    await p.attach();
+
+    const staleNode = new DOMElementNode({
+      tagName: 'button', xpath: 'html/body/div[3]/button',
+      attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 4, parent: null,
+    });
+
+    const freshNode = new DOMElementNode({
+      tagName: 'button', xpath: 'html/body/div[1]/button',
+      attributes: {}, children: [],
+      isVisible: true, isInteractive: true, isTopElement: true, isInViewport: true,
+      highlightIndex: 4, parent: null,
+    });
+
+    // @ts-expect-error private
+    p._lastSelectorMap = new Map([[4, staleNode]]);
+
+    const freshButtonHandle = makeElementHandle();
+
+    // Stale locate fails (CSS via frame.$, XPath via evaluateHandle — both return null).
+    // Fresh locate: CSS via frame.$ returns null, XPath via evaluateHandle succeeds.
+    // frame.$ already returns null by default (makePuppeteerPage default).
+    puppeteerPage.evaluateHandle = vi.fn()
+      .mockResolvedValueOnce(makeJsHandle(null))           // stale XPath miss
+      .mockResolvedValueOnce(makeJsHandle(freshButtonHandle)); // fresh XPath hit
+
+    vi.spyOn(domService, 'getClickableElements').mockResolvedValue({
+      selectorMap: new Map([[4, freshNode]]),
+      elementTree: { clickableElementsToString: () => '[4]<button>Apply</button>' } as any,
+    });
+    vi.spyOn(domService, 'getScrollInfo').mockResolvedValue([0, 800, 3000]);
+
+    // @ts-expect-error private
+    const result = await p._locateHandle(staleNode);
+    expect(result).toBe(freshButtonHandle);
+    expect(domService.getClickableElements).toHaveBeenCalled();
   });
 });

@@ -310,7 +310,19 @@ export default class Page {
     }
 
     if (!el) {
-      logger.error('[Page] _locateHandle FAILED — element not found. css="%s" xpath="%s"', cssSelector, node.xpath);
+      logger.info('[Page] _locateHandle FAILED on first attempt — refreshing snapshot and retrying once');
+      this._lastSelectorMap = null;
+      try {
+        await this.snapshot();
+      } catch (snapErr) {
+        logger.error('[Page] snapshot refresh failed during locate retry', snapErr);
+      }
+      const freshNode = this._lastSelectorMap?.get(node.highlightIndex ?? -1) ?? null;
+      if (freshNode && freshNode !== node) {
+        logger.info('[Page] retrying locate with fresh node for index=%d', node.highlightIndex);
+        return this._locateHandle(freshNode);
+      }
+      logger.error('[Page] _locateHandle FAILED after retry. css="%s" xpath="%s"', cssSelector, node.xpath);
       throw new Error(`Element not located (css: ${cssSelector})`);
     }
     return el;
