@@ -30,6 +30,7 @@ _LLM_PROMPT = (
     "Use null only if there is truly no signal.\n"
     "IMPORTANT: employment_type values: full-time, part-time, contract, internship, stage, freelance. "
     "If the role is a standard permanent position with no indication of contract, part-time, or temporary work, infer full-time. "
+    "If both full-time and part-time apply, use full-time. "
     "Use null only if the type is genuinely ambiguous.\n"
     "IMPORTANT: location_type values: on-site, remote, hybrid. "
     "If only an office city is mentioned without specifying remote or hybrid, assume on-site.\n"

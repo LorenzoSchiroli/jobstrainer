@@ -49,5 +49,5 @@ def enrich_all(query: str, hours: int, client: Groq, sources=None) -> list[Enric
         except Exception as e:
             logger.warning("Failed to enrich offer: %s", e)
     elapsed = time.monotonic() - t0
-    print(f"\nCompleted in {elapsed:.1f}s — {len(results)} offers enriched.")
+    logger.info("Enrichment completed in %.1fs — %d offers enriched.", elapsed, len(results))
     return results

@@ -1,5 +1,8 @@
+import logging
 from sentence_transformers import SentenceTransformer
 from ingestion.offer.models import OfferSummary
+
+logger = logging.getLogger(__name__)
 
 _model: SentenceTransformer | None = None
 
@@ -7,7 +10,9 @@ _model: SentenceTransformer | None = None
 def get_embedder() -> SentenceTransformer:
     global _model
     if _model is None:
+        logger.info("Loading embedding model (BAAI/bge-small-en-v1.5)...")
         _model = SentenceTransformer("BAAI/bge-small-en-v1.5")
+        logger.info("Embedding model ready.")
     return _model
 
 

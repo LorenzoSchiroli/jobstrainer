@@ -125,8 +125,7 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
             executor.submit(_search, q, n): source
             for source, (q, n) in queries.items()
         }
-        # LinkedIn uses DDGS only to avoid consuming Serper credits
-        futures[executor.submit(_search_ddgs, f'site:linkedin.com/company "{name}"{suffix}', 3)] = "linkedin"
+        futures[executor.submit(_search, f'site:linkedin.com/company "{name}"{suffix}', 3)] = "linkedin"
         results = {}
         for f in as_completed(futures):
             source = futures[f]
@@ -168,7 +167,7 @@ def search_company_urls(name: str, location: str) -> tuple[dict[str, str], list[
     logger.debug("%s financial: %s → selected: %s", engine,
                  ", ".join(h["href"] for h in financial_hits) or "(none)",
                  urls.get("financial", "(none)"))
-    logger.debug("DDG linkedin: %s",
-                 ", ".join(h["href"] for h in results.get("linkedin", [])) or "(none)")
+    logger.debug("%s linkedin: %s",
+                 engine, ", ".join(h["href"] for h in results.get("linkedin", [])) or "(none)")
 
     return urls, snippets, financial_snippets
