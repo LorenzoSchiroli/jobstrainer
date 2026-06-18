@@ -112,8 +112,7 @@ export default function App() {
       <div style={{ borderTop: '1px solid #1e293b', padding: '6px 10px 4px', flexShrink: 0 }}>
         <button
           onClick={() => handleSend('fill the form')}
-          disabled={isActive}
-          style={{ width: '100%', background: isActive ? '#1e293b' : '#0ea5e9', color: isActive ? '#334155' : '#fff', border: 'none', borderRadius: 6, padding: '7px', fontWeight: 600, fontSize: 12, cursor: isActive ? 'not-allowed' : 'pointer', marginBottom: 6 }}
+          style={{ width: '100%', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6, padding: '7px', fontWeight: 600, fontSize: 12, cursor: 'pointer', marginBottom: 6 }}
         >Fill</button>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
           <input
