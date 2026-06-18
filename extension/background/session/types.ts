@@ -8,9 +8,7 @@ export interface FileLink {
 
 export type LogEntry =
   | { kind: 'step'; text: string; done: boolean }
-  | { kind: 'confirm'; summary: string; uncertain_fields: string[]; file_links: FileLink[] }
-  | { kind: 'stuck'; message: string }
-  | { kind: 'done'; message: string; thread_id: string; token: string }
+  | { kind: 'summary'; filled_count: number; uncertain_fields: string[]; file_links: FileLink[] }
   | { kind: 'error'; message: string };
 
 export interface PendingJob {
