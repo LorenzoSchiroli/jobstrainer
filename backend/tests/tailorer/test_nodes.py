@@ -318,16 +318,12 @@ def test_deciding_caps_at_max_nav_steps():
 
 def test_nav_system_prompt_prioritises_search_over_scroll():
     """NAV_SYSTEM_PROMPT must instruct the agent to search before scrolling/paginating."""
-    from backend.tailorer.llm import NAV_SYSTEM_PROMPT
-    lower = NAV_SYSTEM_PROMPT.lower()
-    # Extract only the Rules section (after "# Rules\n")
-    rules_start = lower.find("# rules\n")
-    assert rules_start != -1, "Rules section not found"
-    rules_section = lower[rules_start:]
-    assert "search" in rules_section, "Rules section must mention search input"
-    search_pos = rules_section.index("search")
-    for kw in ("scroll_to_bottom", "scroll_down"):
-        kw_pos = rules_section.find(kw)
-        assert kw_pos == -1 or kw_pos > search_pos, (
-            f"'{kw}' rule appears before search rule — agent will paginate instead of search"
-        )
+    # NOTE: NAV_SYSTEM_PROMPT removed in Task 2; this test removed in Task 3
+    pytest.skip("NAV_SYSTEM_PROMPT removed in Task 2; see Task 3 for new fill-only design")
+
+
+def test_fill_system_prompt_declarative_format():
+    from backend.tailorer.llm import FILL_SYSTEM_PROMPT
+    assert "generate" in FILL_SYSTEM_PROMPT
+    assert "__CV__" in FILL_SYSTEM_PROMPT
+    assert "input_text" not in FILL_SYSTEM_PROMPT  # old action-name format removed

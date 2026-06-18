@@ -7,7 +7,7 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import interrupt
 
-from backend.tailorer.llm import large_llm, FILL_SYSTEM_PROMPT, CORRECTION_SYSTEM_PROMPT
+from backend.tailorer.llm import large_llm, FILL_SYSTEM_PROMPT
 from backend.tailorer.state import TailorerState
 
 _log = logging.getLogger(__name__)
@@ -36,16 +36,8 @@ def _map_fields(llm, snapshot: dict, state: TailorerState) -> list[dict]:
 
 
 def _apply_correction(llm, correction_text: str, original_commands: list[dict], state: TailorerState) -> list[dict]:
-    resp = llm.invoke([
-        SystemMessage(content=CORRECTION_SYSTEM_PROMPT),
-        HumanMessage(content=(
-            f"Original commands:\n{json.dumps(original_commands, indent=2)}\n\n"
-            f"User correction: {correction_text}\n\n"
-            f"Profile:\n{json.dumps(state['profile'], indent=2)}"
-        )),
-    ])
-    raw = re.sub(r"```(?:json)?\s*|\s*```", "", resp.content.strip())
-    return json.loads(raw)
+    # NOTE: CORRECTION_SYSTEM_PROMPT removed in Task 2; this entire function removed in Task 3
+    raise NotImplementedError("Correction prompts removed; see Task 3 for new fill-only design")
 
 
 def confirm_apply(state: TailorerState) -> TailorerState:

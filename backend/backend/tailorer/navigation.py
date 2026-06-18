@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import interrupt
 
-from backend.tailorer.llm import large_llm, NAV_SYSTEM_PROMPT
+from backend.tailorer.llm import large_llm
 from backend.tailorer.state import TailorerState
 
 _log = logging.getLogger(__name__)
@@ -50,18 +50,8 @@ def _decide_next_navigation(
 
     _log.info("[_decide_next_navigation] url=%s scroll=%d/%d", current_url, scroll_y, scroll_height)
 
-    resp = llm.invoke([
-        SystemMessage(content=NAV_SYSTEM_PROMPT),
-        HumanMessage(content=(
-            f"Goal: find and open the application form for: \"{job_title}\"\n"
-            f"Current URL: {current_url}\n"
-            f"Navigation history: {history_str}\n"
-            f"Memory: {nav_memory or 'none'}\n"
-            f"Can scroll down: {can_scroll_down}\n\n"
-            f"Interactive elements:\n{elements}"
-            f"{hint_str}"
-        )),
-    ])
+    # NOTE: NAV_SYSTEM_PROMPT removed in Task 2; this entire function removed in Task 3
+    raise NotImplementedError("Navigation prompts removed; see Task 3 for new fill-only design")
     raw = re.sub(r"```(?:json)?\s*|\s*```", "", resp.content.strip())
     _log.info("[_decide_next_navigation] raw=%s", raw)
     return json.loads(raw)
