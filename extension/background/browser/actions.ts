@@ -25,10 +25,6 @@ const ACTIONS: Record<string, ActionFn> = {
   select_option: (page, a) =>
     done(() => page.selectOption(a.index as number, ((a.text ?? a.value) ?? '') as string)),
 
-  scroll_to_bottom: (page) => done(() => page.scrollToBottom()),
-  scroll_to_top:    (page) => done(() => page.scrollToTop()),
-  scroll_down:      (page) => done(() => page.scrollDown()),
-  scroll_up:        (page) => done(() => page.scrollUp()),
   send_keys:        (page, a) => done(() => page.sendKeys((a.keys ?? '') as string)),
   wait:             (page, a) => done(() => page.wait((a.seconds ?? 2) as number)),
 

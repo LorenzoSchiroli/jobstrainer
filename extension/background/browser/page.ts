@@ -404,8 +404,6 @@ export default class Page {
         await el.evaluate((node: Element, val: boolean) => {
           const input = node as HTMLInputElement;
           if (input.checked !== val) {
-            input.checked = val;
-            input.dispatchEvent(new Event('change', { bubbles: true }));
             input.click();
           }
         }, checked);
@@ -415,23 +413,27 @@ export default class Page {
         await el.evaluate((node: Element, val: string) => {
           const select = node as HTMLSelectElement;
           const opt = Array.from(select.options).find((o) => o.text === val || o.value === val);
-          if (opt) select.value = opt.value;
-          select.dispatchEvent(new Event('change', { bubbles: true }));
+          if (opt) {
+            select.value = opt.value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }, value);
         break;
       case 'combobox': {
         await el.click();
         await new Promise((r) => setTimeout(r, 250));
         const page = this._requirePage();
-        await page.evaluate((val: string) => {
+        const matched = await page.evaluate((val: string) => {
           const candidates = document.querySelectorAll('[role="option"], [data-value], li');
           for (const opt of candidates) {
             if ((opt as HTMLElement).innerText?.trim() === val) {
               (opt as HTMLElement).click();
-              return;
+              return true;
             }
           }
+          return false;
         }, value);
+        if (!matched) logger.error('[Page] combobox: no option matched value="%s"', value);
         break;
       }
       case 'file':
@@ -515,24 +517,18 @@ export default class Page {
     const filename = value === '__CV__' ? 'tailored_cv.docx' : 'cover_letter.docx';
     const url = `http://localhost:8000/tailorer/files/${threadId}/${fileType}?token=${encodeURIComponent(token)}`;
 
-    const downloadId = await new Promise<number>((resolve, reject) => {
-      chrome.downloads.download(
-        { url, filename: `tailorer/${filename}`, conflictAction: 'overwrite' },
-        (id) => {
-          if (chrome.runtime.lastError) reject(new Error(String(chrome.runtime.lastError.message)));
-          else resolve(id!);
-        },
-      );
-    });
-
+    // Register the onChanged listener before starting the download to avoid
+    // a race where a fast download completes before the listener is installed.
     const absolutePath = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Download timeout')), 30_000);
+      let trackedId: number | null = null;
+
       const listener = (delta: chrome.downloads.DownloadDelta) => {
-        if (delta.id !== downloadId) return;
+        if (trackedId === null || delta.id !== trackedId) return;
         if (delta.state?.current === 'complete') {
           clearTimeout(timer);
           chrome.downloads.onChanged.removeListener(listener);
-          chrome.downloads.search({ id: downloadId }, (items) => {
+          chrome.downloads.search({ id: trackedId }, (items) => {
             const path = items[0]?.filename;
             if (path) resolve(path);
             else reject(new Error('Download path not found'));
@@ -544,6 +540,19 @@ export default class Page {
         }
       };
       chrome.downloads.onChanged.addListener(listener);
+
+      chrome.downloads.download(
+        { url, filename: `tailorer/${filename}`, conflictAction: 'overwrite' },
+        (id) => {
+          if (chrome.runtime.lastError) {
+            clearTimeout(timer);
+            chrome.downloads.onChanged.removeListener(listener);
+            reject(new Error(String(chrome.runtime.lastError.message)));
+          } else {
+            trackedId = id!;
+          }
+        },
+      );
     });
 
     await el.uploadFile(absolutePath);

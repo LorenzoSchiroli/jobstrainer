@@ -71,8 +71,7 @@ export class SessionManager {
         if (needsResponse && ws.readyState === WebSocket.OPEN) {
           const tab = await chrome.tabs.get(tabId).catch(() => null);
           ws.send(JSON.stringify({
-            url: tab?.url ?? '', title: tab?.title ?? '',
-            elements: '', scroll_y: 0, scroll_height: 0, viewport_height: 0,
+            url: tab?.url ?? '', title: tab?.title ?? '', elements: '',
           }));
         }
       }
