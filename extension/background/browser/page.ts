@@ -517,11 +517,13 @@ export default class Page {
     const filename = value === '__CV__' ? 'tailored_cv.docx' : 'cover_letter.docx';
     const url = `http://localhost:8000/tailorer/files/${threadId}/${fileType}?token=${encodeURIComponent(token)}`;
 
+    // Hoisted so it's in scope for cleanup after the Promise resolves.
+    let trackedId: number | null = null;
+
     // Register the onChanged listener before starting the download to avoid
     // a race where a fast download completes before the listener is installed.
     const absolutePath = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Download timeout')), 30_000);
-      let trackedId: number | null = null;
 
       const listener = (delta: chrome.downloads.DownloadDelta) => {
         if (trackedId === null || delta.id !== trackedId) return;
@@ -557,8 +559,10 @@ export default class Page {
 
     await el.uploadFile(absolutePath);
 
-    chrome.downloads.removeFile(downloadId, () => {});
-    chrome.downloads.erase({ id: downloadId }, () => {});
+    if (trackedId !== null) {
+      chrome.downloads.removeFile(trackedId, () => {});
+      chrome.downloads.erase({ id: trackedId }, () => {});
+    }
   }
 
   private async _addAntiDetectionScripts(): Promise<void> {
