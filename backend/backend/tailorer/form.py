@@ -34,7 +34,7 @@ async def node_map(state: TailorerState) -> TailorerState:
     cl_status = "already generated" if state.get("cl_bytes") else "not yet generated"
     feedback = f"\nUser instruction this round: {state['last_feedback']}" if state.get("last_feedback") else ""
 
-    resp = llm.invoke([
+    resp = await llm.ainvoke([
         SystemMessage(content=FILL_SYSTEM_PROMPT),
         HumanMessage(content=(
             f"Profile:\n{json.dumps(state['profile'], indent=2)}\n\n"
@@ -109,7 +109,7 @@ def node_apply(state: TailorerState) -> TailorerState:
     mismatches: list[dict] = []
     for cmd in state["fill_commands"]:
         idx = str(cmd.get("index", ""))
-        intended = str(cmd.get("value", ""))
+        intended = str(cmd.get("value", "")).strip()
         if intended in ("__CV__", "__COVER_LETTER__"):
             continue
         actual = str(field_values.get(idx, "")).strip()
@@ -122,12 +122,15 @@ def node_apply(state: TailorerState) -> TailorerState:
         _log.info("[node_apply] %d mismatches, retry %d/%d", len(mismatches), new_retry, _MAX_RETRIES)
         return {**state, "last_snapshot": post_snapshot, "retry_count": new_retry, "status": "applying"}
 
-    if mismatches:
-        for cmd in mismatches:
-            cmd["uncertain"] = True
+    mismatch_indices = {id(cmd) for cmd in mismatches}
+    final_commands = [
+        {**cmd, "uncertain": True} if id(cmd) in mismatch_indices else cmd
+        for cmd in state["fill_commands"]
+    ]
 
     return {
         **state,
+        "fill_commands": final_commands,
         "last_snapshot": post_snapshot,
         "retry_count": new_retry,
         "status": "filled",

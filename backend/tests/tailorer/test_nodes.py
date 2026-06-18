@@ -41,7 +41,7 @@ def test_node_map_returns_fill_commands():
     ])
     with patch.dict(os.environ, {"GROQ_API_KEY": "k", "GROQ_MODEL_LARGE": "m"}), \
          patch("backend.tailorer.llm.ChatOpenAI") as MockLLM:
-        MockLLM.return_value.invoke.return_value = mock_resp
+        MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
         from backend.tailorer import form as form_module
         importlib.reload(form_module)
         import asyncio
@@ -69,7 +69,7 @@ def test_node_map_generates_documents_when_requested():
 
     with patch.dict(os.environ, {"GROQ_API_KEY": "k", "GROQ_MODEL_LARGE": "m"}), \
          patch("backend.tailorer.llm.ChatOpenAI") as MockLLM:
-        MockLLM.return_value.invoke.return_value = mock_resp
+        MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
         from backend.tailorer import form as form_module
         importlib.reload(form_module)
         import asyncio
@@ -91,7 +91,7 @@ def test_node_map_falls_back_on_json_error():
     mock_resp.content = "not json"
     with patch.dict(os.environ, {"GROQ_API_KEY": "k", "GROQ_MODEL_LARGE": "m"}), \
          patch("backend.tailorer.llm.ChatOpenAI") as MockLLM:
-        MockLLM.return_value.invoke.return_value = mock_resp
+        MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
         from backend.tailorer import form as form_module
         importlib.reload(form_module)
         import asyncio
