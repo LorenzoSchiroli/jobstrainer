@@ -11,7 +11,6 @@ import type { ElementHandle } from 'puppeteer-core/lib/esm/puppeteer/api/Element
 import type { Frame } from 'puppeteer-core/lib/esm/puppeteer/api/Frame.js';
 import {
   getClickableElements,
-  getScrollInfo,
   injectBuildDomTreeScripts,
 } from './dom/service';
 import { type DOMState, DOMElementNode } from './dom/views';
@@ -27,9 +26,6 @@ export interface PageSnapshot {
   url: string;
   title: string;
   elements: string;
-  scroll_y: number;
-  scroll_height: number;
-  viewport_height: number;
 }
 
 export default class Page {
@@ -101,12 +97,11 @@ export default class Page {
     const tab = await chrome.tabs.get(this._tabId);
     const url = tab.url ?? '';
     const title = tab.title ?? '';
-    const domState: DOMState = await getClickableElements(this._tabId, url, true);
+    const domState: DOMState = await getClickableElements(this._tabId, url, true, -1, -1);
     // Cache so clickElement uses the same indices the LLM will see in this snapshot.
     this._lastSelectorMap = domState.selectorMap;
     const elements = domState.elementTree.clickableElementsToString();
-    const [scroll_y, viewport_height, scroll_height] = await getScrollInfo(this._tabId);
-    return { url, title, elements, scroll_y, viewport_height, scroll_height };
+    return { url, title, elements };
   }
 
   private _requirePage(): PuppeteerPage {
@@ -384,32 +379,114 @@ export default class Page {
     }, text);
   }
 
-  async scrollDown(): Promise<void> {
-    await chrome.scripting.executeScript({
-      target: { tabId: this._tabId },
-      func: () => window.scrollBy(0, window.innerHeight * 0.9),
+  async applyFill(index: number, value: string, threadId = '', token = ''): Promise<void> {
+    const node = await this._getElementNode(index);
+    const el = await this._locateHandle(node);
+    await this._scrollIntoViewIfNeeded(el);
+
+    const kind = await el.evaluate((node: Element): string => {
+      const tag = node.tagName.toLowerCase();
+      const type = ((node as HTMLInputElement).type ?? '').toLowerCase();
+      const role = (node.getAttribute('role') ?? '').toLowerCase();
+      const hasPopup = node.hasAttribute('aria-haspopup');
+      const ce = node.getAttribute('contenteditable');
+      if (tag === 'input' && (type === 'checkbox' || type === 'radio')) return 'checkbox';
+      if (tag === 'select') return 'select';
+      if (tag === 'input' && type === 'file') return 'file';
+      if (role === 'combobox' || role === 'listbox' || hasPopup) return 'combobox';
+      if (ce === 'true' || ce === '') return 'contenteditable';
+      return 'text';
     });
+
+    switch (kind) {
+      case 'checkbox': {
+        const checked = ['true', '1', 'yes'].includes(value.toLowerCase());
+        await el.evaluate((node: Element, val: boolean) => {
+          const input = node as HTMLInputElement;
+          if (input.checked !== val) {
+            input.checked = val;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.click();
+          }
+        }, checked);
+        break;
+      }
+      case 'select':
+        await el.evaluate((node: Element, val: string) => {
+          const select = node as HTMLSelectElement;
+          const opt = Array.from(select.options).find((o) => o.text === val || o.value === val);
+          if (opt) select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value);
+        break;
+      case 'combobox': {
+        await el.click();
+        await new Promise((r) => setTimeout(r, 250));
+        const page = this._requirePage();
+        await page.evaluate((val: string) => {
+          const candidates = document.querySelectorAll('[role="option"], [data-value], li');
+          for (const opt of candidates) {
+            if ((opt as HTMLElement).innerText?.trim() === val) {
+              (opt as HTMLElement).click();
+              return;
+            }
+          }
+        }, value);
+        break;
+      }
+      case 'file':
+        try {
+          await this._uploadFile(el, value, threadId, token);
+        } catch (e) {
+          logger.error('[Page] file upload failed — caller should fall back to download link', e);
+          throw e;
+        }
+        break;
+      case 'contenteditable':
+        await el.evaluate((node: Element, val: string) => {
+          const el = node as HTMLElement;
+          el.focus();
+          el.textContent = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value);
+        break;
+      default: {
+        // React-safe native setter
+        await el.evaluate((node: Element, val: string) => {
+          if (!(node instanceof HTMLInputElement) && !(node instanceof HTMLTextAreaElement)) return;
+          node.focus();
+          node.select();
+          const proto = node instanceof HTMLTextAreaElement
+            ? HTMLTextAreaElement.prototype
+            : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (setter) setter.call(node, val);
+          else node.value = val;
+          node.dispatchEvent(new Event('input', { bubbles: true }));
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value);
+        break;
+      }
+    }
   }
 
-  async scrollUp(): Promise<void> {
-    await chrome.scripting.executeScript({
-      target: { tabId: this._tabId },
-      func: () => window.scrollBy(0, -window.innerHeight * 0.9),
-    });
-  }
-
-  async scrollToTop(): Promise<void> {
-    await chrome.scripting.executeScript({
-      target: { tabId: this._tabId },
-      func: () => window.scrollTo(0, 0),
-    });
-  }
-
-  async scrollToBottom(): Promise<void> {
-    await chrome.scripting.executeScript({
-      target: { tabId: this._tabId },
-      func: () => window.scrollTo(0, document.body.scrollHeight),
-    });
+  async readFieldValue(index: number): Promise<string> {
+    try {
+      const node = await this._getElementNode(index);
+      const el = await this._locateHandle(node);
+      return await el.evaluate((node: Element): string => {
+        const tag = node.tagName.toLowerCase();
+        const type = ((node as HTMLInputElement).type ?? '').toLowerCase();
+        if (tag === 'input' && (type === 'checkbox' || type === 'radio')) {
+          return (node as HTMLInputElement).checked ? 'true' : 'false';
+        }
+        if ('value' in node) return (node as HTMLInputElement).value ?? '';
+        return (node as HTMLElement).textContent?.trim() ?? '';
+      });
+    } catch {
+      return '';
+    }
   }
 
   async sendKeys(keys: string): Promise<void> {
@@ -431,6 +508,48 @@ export default class Page {
 
   async wait(seconds: number): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+  }
+
+  private async _uploadFile(el: ElementHandle, value: string, threadId: string, token: string): Promise<void> {
+    const fileType = value === '__CV__' ? 'cv' : 'cover_letter';
+    const filename = value === '__CV__' ? 'tailored_cv.docx' : 'cover_letter.docx';
+    const url = `http://localhost:8000/tailorer/files/${threadId}/${fileType}?token=${encodeURIComponent(token)}`;
+
+    const downloadId = await new Promise<number>((resolve, reject) => {
+      chrome.downloads.download(
+        { url, filename: `tailorer/${filename}`, conflictAction: 'overwrite' },
+        (id) => {
+          if (chrome.runtime.lastError) reject(new Error(String(chrome.runtime.lastError.message)));
+          else resolve(id!);
+        },
+      );
+    });
+
+    const absolutePath = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Download timeout')), 30_000);
+      const listener = (delta: chrome.downloads.DownloadDelta) => {
+        if (delta.id !== downloadId) return;
+        if (delta.state?.current === 'complete') {
+          clearTimeout(timer);
+          chrome.downloads.onChanged.removeListener(listener);
+          chrome.downloads.search({ id: downloadId }, (items) => {
+            const path = items[0]?.filename;
+            if (path) resolve(path);
+            else reject(new Error('Download path not found'));
+          });
+        } else if (delta.state?.current === 'interrupted') {
+          clearTimeout(timer);
+          chrome.downloads.onChanged.removeListener(listener);
+          reject(new Error('Download interrupted'));
+        }
+      };
+      chrome.downloads.onChanged.addListener(listener);
+    });
+
+    await el.uploadFile(absolutePath);
+
+    chrome.downloads.removeFile(downloadId, () => {});
+    chrome.downloads.erase({ id: downloadId }, () => {});
   }
 
   private async _addAntiDetectionScripts(): Promise<void> {
