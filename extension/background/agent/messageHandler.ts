@@ -1,13 +1,7 @@
 import { sessionManager } from '../session/manager';
-import { executeAction } from '../browser/actions';
-import { waitForNavCompleted } from '../browser/navigation';
-import type { Session, LogEntry } from '../session/types';
+import type { Session } from '../session/types';
 
 const API_BASE = 'http://localhost:8000';
-
-function safeHostname(url: string): string {
-  try { return new URL(url).hostname; } catch { return url; }
-}
 
 type Handler = (
   tabId: number,
@@ -16,133 +10,89 @@ type Handler = (
 ) => Promise<void>;
 
 const HANDLERS: Record<string, Handler> = {
-  session_started: async (tabId, session, msg) => {
+  session_started: async (_tabId, session, msg) => {
     session.thread_id = msg.thread_id as string;
-    session.currentStatus = 'navigating';
-    sessionManager.appendLog(tabId, { kind: 'step', text: 'Session started', done: true });
-    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'navigating' });
+    session.currentStatus = 'idle';
   },
 
-  navigate: async (tabId, session, msg) => {
-    session.currentStatus = 'navigating';
-    await session.page.detach();
-    const navDone = waitForNavCompleted(tabId);
-    await chrome.tabs.update(tabId, { url: msg.url as string });
-    await navDone;
-    await session.page.attach();
-    const snap = await session.page.snapshot();
-    sessionManager.appendLog(tabId, { kind: 'step', text: `Navigated to ${safeHostname(msg.url as string)}`, done: true });
-    session.ws.send(JSON.stringify(snap));
-  },
-
-  request_snapshot: async (_tabId, session) => {
-    await session.page.attach();
-    const snap = await session.page.snapshot();
-    session.ws.send(JSON.stringify(snap));
-  },
-
-  execute_actions: async (tabId, session, msg) => {
-    session.currentStatus = 'navigating';
-    await session.page.attach();
-    for (const action of msg.actions as Record<string, unknown>[]) {
-      const actionName = action.action as string;
-      const indexSuffix = action.index != null ? ` [${action.index}]` : '';
-      sessionManager.appendLog(tabId, {
-        kind: 'step',
-        text: `Action: ${actionName}${indexSuffix}`,
-        done: true,
-      });
-      const { navigated } = await executeAction(session.page, action, tabId);
-      if (navigated) {
-        await session.page.detach();
-        await session.page.attach();
-        break;
-      }
-    }
-    const snap = await session.page.snapshot();
-    session.ws.send(JSON.stringify(snap));
-  },
-
-  fill_and_confirm: async (tabId, session, msg) => {
+  apply_fills: async (tabId, session, msg) => {
     session.currentStatus = 'filling';
     await session.page.attach();
+
     const commands = msg.commands as Record<string, unknown>[];
+    const threadId = (msg.thread_id as string) ?? session.thread_id ?? '';
+    const token = (msg.token as string) ?? session.token;
+
+    sessionManager.appendLog(tabId, { kind: 'step', text: `Filling ${commands.length} fields…`, done: false });
+
+    const fieldValues: Record<string, string> = {};
+    const fileFailedIndices = new Set<string>();
 
     for (const cmd of commands) {
-      if (cmd.action === 'file_upload' || cmd.value === '__CV__' || cmd.value === '__COVER_LETTER__') continue;
+      const idx = cmd.index as number;
+      const value = cmd.value as string;
       try {
-        if (cmd.action === 'input_text') {
-          await session.page.typeText(cmd.index as number, cmd.value as string);
-        } else if (cmd.action === 'select_option') {
-          await session.page.selectOption(cmd.index as number, ((cmd.text ?? cmd.value) as string));
-        }
+        await session.page.applyFill(idx, value, threadId, token);
+        fieldValues[String(idx)] = await session.page.readFieldValue(idx);
       } catch (e) {
-        console.warn('[tailorer] fill cmd failed', cmd, e);
+        console.warn('[tailorer] applyFill failed', cmd, e);
+        if (value === '__CV__' || value === '__COVER_LETTER__') {
+          fileFailedIndices.add(String(idx));
+        }
+        fieldValues[String(idx)] = '';
       }
     }
 
-    const fileLinks = commands
-      .filter(c => c.action === 'file_upload' || c.value === '__CV__' || c.value === '__COVER_LETTER__')
-      .map(c => ({
+    // Persist file commands + failures so the filled handler can build download links
+    (session as any)._lastFileCommands = commands.filter(
+      (c) => c.value === '__CV__' || c.value === '__COVER_LETTER__',
+    );
+    (session as any)._lastFileFailedIndices = fileFailedIndices;
+
+    const snap = await session.page.snapshot();
+
+    sessionManager.appendLog(tabId, { kind: 'step', text: `Filling ${commands.length} fields…`, done: true });
+
+    session.ws.send(JSON.stringify({
+      type: 'fill_result',
+      snapshot: snap,
+      field_values: fieldValues,
+    }));
+  },
+
+  filled: async (tabId, session, msg) => {
+    session.currentStatus = 'idle';
+    const filledCount = (msg.filled_count as number) ?? 0;
+    const uncertainFields = (msg.uncertain_fields as string[]) ?? [];
+
+    // Build download links for file commands where upload failed
+    const lastFileCmds: Array<Record<string, unknown>> = (session as any)._lastFileCommands ?? [];
+    const failedIds: Set<string> = (session as any)._lastFileFailedIndices ?? new Set();
+    const fileLinks = lastFileCmds
+      .filter((c) => failedIds.has(String(c.index)))
+      .map((c) => ({
         field_id: c.index as number,
         label: c.value === '__CV__' ? 'tailored_cv.docx' : 'cover_letter.docx',
         url: `${API_BASE}/tailorer/files/${session.thread_id}/${c.value === '__CV__' ? 'cv' : 'cover_letter'}?token=${encodeURIComponent(session.token)}`,
       }));
 
-    const confirmCmds = (msg.confirm_commands ?? commands) as Record<string, unknown>[];
-    const uncertain = confirmCmds.filter(c => c.uncertain).map(c => `[${c.index}]`);
-
-    session.currentStatus = 'awaiting_user';
     sessionManager.appendLog(tabId, {
-      kind: 'confirm',
-      summary: (msg.summary as string) || 'Ready to fill',
-      uncertain_fields: uncertain,
+      kind: 'summary',
+      filled_count: filledCount,
+      uncertain_fields: uncertainFields,
       file_links: fileLinks,
     });
-    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'awaiting_user' });
+    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'idle' });
   },
 
-  show_confirm: async (tabId, session, msg) => {
-    session.currentStatus = 'awaiting_user';
-    sessionManager.appendLog(tabId, {
-      kind: 'confirm',
-      summary: msg.summary as string,
-      uncertain_fields: (msg.uncertain_fields as string[]) ?? [],
-      file_links: (msg.file_links as any[]) ?? [],
-    });
-    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'awaiting_user' });
-  },
-
-  navigate_next: async (tabId, session) => {
-    session.currentStatus = 'navigating';
-    sessionManager.appendLog(tabId, { kind: 'step', text: 'Submitting page…', done: false });
-    await new Promise(r => setTimeout(r, 1000));
-    session.ws.send(JSON.stringify({ submitted: true }));
-  },
-
-  show_stuck: async (tabId, session, msg) => {
-    session.currentStatus = 'show_stuck';
-    sessionManager.appendLog(tabId, { kind: 'stuck', message: msg.message as string });
-    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'show_stuck' });
-  },
-
-  done: async (tabId, session, msg) => {
-    session.currentStatus = 'done';
-    sessionManager.appendLog(tabId, {
-      kind: 'done',
-      message: msg.message as string,
-      thread_id: session.thread_id ?? '',
-      token: session.token,
-    });
-    sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'done' });
-    sessionManager.removeSession(tabId);
+  application_recorded: async (tabId, _session, _msg) => {
+    sessionManager.appendLog(tabId, { kind: 'step', text: 'Application recorded', done: true });
   },
 
   error: async (tabId, session, msg) => {
     session.currentStatus = 'error';
     sessionManager.appendLog(tabId, { kind: 'error', message: msg.message as string });
     sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'error' });
-    sessionManager.removeSession(tabId);
   },
 };
 
@@ -153,6 +103,9 @@ export async function handleAgentMessage(
   const session = sessionManager.get(tabId);
   if (!session) return;
   const handler = HANDLERS[msg.type as string];
-  if (!handler) return;
+  if (!handler) {
+    console.warn('[tailorer] unhandled message type:', msg.type);
+    return;
+  }
   await handler(tabId, session, msg);
 }
