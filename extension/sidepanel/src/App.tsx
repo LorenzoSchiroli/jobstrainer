@@ -19,6 +19,7 @@ export default function App() {
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const isWaiting = status === 'awaiting_user' || status === 'show_stuck';
+  const isActive = status === 'connecting' || status === 'navigating' || status === 'filling' || isWaiting;
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
@@ -31,7 +32,7 @@ export default function App() {
         if (msg.type === 'show_apply_button') { setPendingJob({ job_id: msg.job_id, token: msg.token }); return; }
         if (msg.type === 'restore_panel') { setLog(msg.log ?? []); setStatus(msg.status ?? 'idle'); return; }
         if (msg.type === 'append_log') { setLog(prev => [...prev, msg.entry]); return; }
-        if (msg.type === 'status') { setStatus(msg.status); return; }
+        if (msg.type === 'set_status') { setStatus(msg.status); return; }
       });
 
       port.onDisconnect.addListener(() => { portRef.current = null; });
@@ -132,7 +133,8 @@ export default function App() {
         >▶</button>
         <button
           onClick={() => sendMsg({ type: 'stop_session' })}
-          style={{ background: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', borderRadius: 5, padding: '6px 10px', fontSize: 11, cursor: 'pointer', flexShrink: 0 }}
+          disabled={!isActive}
+          style={{ background: isActive ? '#7f1d1d' : '#1e293b', color: isActive ? '#fca5a5' : '#334155', border: `1px solid ${isActive ? '#991b1b' : '#1e293b'}`, borderRadius: 5, padding: '6px 10px', fontSize: 11, cursor: isActive ? 'pointer' : 'not-allowed', flexShrink: 0 }}
         >■ Stop</button>
       </div>
 
