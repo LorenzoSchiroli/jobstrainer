@@ -10,7 +10,8 @@
     "alarms",
     "storage",
     "debugger",
-    "webNavigation"
+    "webNavigation",
+    "downloads"
   ],
   "host_permissions": [
     "http://localhost:8000/*",
