@@ -1,25 +1,18 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import LogEntry from './components/LogEntry';
-import ConfirmBlock from './components/ConfirmBlock';
 import StatusBar from './components/StatusBar';
-
-type LogItem =
-  | { kind: 'step'; text: string; done: boolean }
-  | { kind: 'confirm'; summary: string; uncertain_fields: string[]; file_links: { field_id: number; label: string; url: string }[] }
-  | { kind: 'stuck'; message: string }
-  | { kind: 'done'; message: string; thread_id: string; token: string }
-  | { kind: 'error'; message: string };
+import type { LogEntry as LogItem } from '../../background/session/types';
 
 export default function App() {
   const [log, setLog] = useState<LogItem[]>([]);
   const [status, setStatus] = useState('idle');
-  const [pendingJob, setPendingJob] = useState<{ job_id: string; token: string } | null>(null);
+  const [jobContext, setJobContext] = useState<{ job_id: string; token: string } | null>(null);
   const [inputText, setInputText] = useState('');
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const isWaiting = status === 'awaiting_user' || status === 'show_stuck';
-  const isActive = status === 'connecting' || status === 'navigating' || status === 'filling' || isWaiting;
+  const isActive = ['connecting', 'filling'].includes(status);
+  const hasJob = jobContext !== null || status !== 'idle';
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
@@ -28,11 +21,15 @@ export default function App() {
       portRef.current = port;
 
       port.onMessage.addListener((msg: any) => {
-        if (msg.type === 'idle') { setStatus('idle'); setLog([]); return; }
-        if (msg.type === 'show_apply_button') { setPendingJob({ job_id: msg.job_id, token: msg.token }); return; }
+        if (msg.type === 'idle') { setStatus('idle'); setLog([]); setJobContext(null); return; }
+        if (msg.type === 'show_job_context') { setJobContext({ job_id: msg.job_id, token: msg.token }); return; }
         if (msg.type === 'restore_panel') { setLog(msg.log ?? []); setStatus(msg.status ?? 'idle'); return; }
         if (msg.type === 'append_log') { setLog(prev => [...prev, msg.entry]); return; }
         if (msg.type === 'set_status') { setStatus(msg.status); return; }
+        if (msg.type === 'error_toast') {
+          setLog(prev => [...prev, { kind: 'error', message: msg.message }]);
+          return;
+        }
       });
 
       port.onDisconnect.addListener(() => { portRef.current = null; });
@@ -43,29 +40,19 @@ export default function App() {
 
   const sendMsg = useCallback((msg: any) => { portRef.current?.postMessage(msg); }, []);
 
-  const handleStart = useCallback(() => {
-    if (!pendingJob) return;
-    setPendingJob(null);
-    setLog([]);
-    setStatus('connecting');
-    sendMsg({ type: 'start_session', job_id: pendingJob.job_id, token: pendingJob.token });
-  }, [pendingJob, sendMsg]);
-
-  const handleSend = useCallback(() => {
-    const text = inputText.trim();
-    if (!text || !isWaiting) return;
+  const handleSend = useCallback((overrideText?: string) => {
+    const text = (overrideText ?? inputText).trim();
+    if (!text) return;
     setInputText('');
-    if (status === 'show_stuck') {
-      sendMsg({ type: 'stuck_unblocked', text });
-    } else {
-      const lower = text.toLowerCase();
-      if (lower === 'ok' || lower === 'yes' || lower === 'approve') {
-        sendMsg({ type: 'user_approved' });
-      } else {
-        sendMsg({ type: 'user_correction', text });
-      }
-    }
-  }, [inputText, isWaiting, status, sendMsg]);
+    setLog(prev => [...prev, { kind: 'step', text, done: false }]);
+    sendMsg({ type: 'start_or_fill', text });
+  }, [inputText, sendMsg]);
+
+  const handleNewSession = useCallback(() => {
+    setLog([]);
+    setStatus('idle');
+    sendMsg({ type: 'new_session' });
+  }, [sendMsg]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f172a', color: '#f1f5f9', fontFamily: 'system-ui, sans-serif', fontSize: 12 }}>
@@ -73,8 +60,12 @@ export default function App() {
       <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(14,165,233,0.2)', flexShrink: 0 }}>
         <div style={{ width: 22, height: 22, background: '#0ea5e9', borderRadius: '50%' }} />
         <span style={{ fontWeight: 700, color: '#7dd3fc', fontSize: 13 }}>Tailorer</span>
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <StatusBar status={status} />
+          <button
+            onClick={handleNewSession}
+            style={{ background: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 5, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}
+          >New Session</button>
         </div>
       </div>
 
@@ -82,16 +73,7 @@ export default function App() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {status === 'idle' && log.length === 0 && (
           <div style={{ color: '#475569', textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
-            No active job — browse to a job listing to apply.
-          </div>
-        )}
-
-        {pendingJob && (
-          <div style={{ padding: '12px 0' }}>
-            <div style={{ color: '#94a3b8', marginBottom: 10 }}>Job detected — ready to apply</div>
-            <button onClick={handleStart} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', width: '100%' }}>
-              ⚡ Start Agent
-            </button>
+            {hasJob ? 'Navigate to the application form, then click Fill.' : 'No active job — browse to a job listing.'}
           </div>
         )}
 
@@ -103,9 +85,19 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {log.map((entry, i) => {
                   if (entry.kind === 'step') return <LogEntry key={i} text={entry.text} done={entry.done} />;
-                  if (entry.kind === 'confirm') return <ConfirmBlock key={i} summary={entry.summary} uncertain_fields={entry.uncertain_fields} file_links={entry.file_links} />;
-                  if (entry.kind === 'stuck') return <div key={i} style={{ color: '#fca5a5', background: '#1c1f2e', borderLeft: '3px solid #ef4444', borderRadius: 4, padding: '8px 10px' }}>{entry.message}</div>;
-                  if (entry.kind === 'done') return <div key={i} style={{ color: '#86efac', fontWeight: 600 }}>✓ {entry.message}</div>;
+                  if (entry.kind === 'summary') return (
+                    <div key={i} style={{ background: '#1e293b', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
+                      <div style={{ color: '#86efac', fontWeight: 600, marginBottom: 4 }}>✓ Filled {entry.filled_count} field{entry.filled_count !== 1 ? 's' : ''}</div>
+                      {entry.uncertain_fields.length > 0 && (
+                        <div style={{ color: '#fcd34d' }}>Uncertain: fields [{entry.uncertain_fields.join(', ')}] — check manually</div>
+                      )}
+                      {entry.file_links.map((fl, j) => (
+                        <div key={j} style={{ marginTop: 4 }}>
+                          <a href={fl.url} download={fl.label} style={{ color: '#38bdf8', textDecoration: 'none' }}>↓ {fl.label}</a>
+                        </div>
+                      ))}
+                    </div>
+                  );
                   if (entry.kind === 'error') return <div key={i} style={{ color: '#fca5a5' }}>✗ {entry.message}</div>;
                   return null;
                 })}
@@ -116,26 +108,32 @@ export default function App() {
         <div ref={logEndRef} />
       </div>
 
-      {/* Bottom bar */}
-      <div style={{ borderTop: '1px solid #1e293b', padding: '8px 10px', display: 'flex', gap: 7, alignItems: 'center', flexShrink: 0 }}>
-        <input
-          value={inputText}
-          onChange={e => setInputText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
-          disabled={!isWaiting}
-          placeholder={isWaiting ? 'ok / describe a correction / …' : 'Waiting for agent…'}
-          style={{ flex: 1, background: isWaiting ? '#1e293b' : '#0f172a', border: `1px solid ${isWaiting ? '#334155' : '#1e293b'}`, borderRadius: 6, padding: '6px 9px', color: isWaiting ? '#f1f5f9' : '#334155', fontSize: 12, fontFamily: 'system-ui', outline: 'none', cursor: isWaiting ? 'text' : 'not-allowed' }}
-        />
+      {/* Fill shortcut + input bar */}
+      <div style={{ borderTop: '1px solid #1e293b', padding: '6px 10px 4px', flexShrink: 0 }}>
         <button
-          onClick={handleSend}
-          disabled={!isWaiting || !inputText.trim()}
-          style={{ background: isWaiting && inputText.trim() ? '#0ea5e9' : '#1e293b', color: isWaiting && inputText.trim() ? '#fff' : '#334155', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: isWaiting && inputText.trim() ? 'pointer' : 'not-allowed', flexShrink: 0 }}
-        >▶</button>
-        <button
-          onClick={() => sendMsg({ type: 'stop_session' })}
-          disabled={!isActive}
-          style={{ background: isActive ? '#7f1d1d' : '#1e293b', color: isActive ? '#fca5a5' : '#334155', border: `1px solid ${isActive ? '#991b1b' : '#1e293b'}`, borderRadius: 5, padding: '6px 10px', fontSize: 11, cursor: isActive ? 'pointer' : 'not-allowed', flexShrink: 0 }}
-        >■ Stop</button>
+          onClick={() => handleSend('fill the form')}
+          disabled={isActive}
+          style={{ width: '100%', background: isActive ? '#1e293b' : '#0ea5e9', color: isActive ? '#334155' : '#fff', border: 'none', borderRadius: 6, padding: '7px', fontWeight: 600, fontSize: 12, cursor: isActive ? 'not-allowed' : 'pointer', marginBottom: 6 }}
+        >Fill</button>
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          <input
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSend()}
+            placeholder={isActive ? 'Filling…' : 'Type an instruction or correction…'}
+            style={{ flex: 1, background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '6px 9px', color: '#f1f5f9', fontSize: 12, fontFamily: 'system-ui', outline: 'none' }}
+          />
+          <button
+            onClick={() => handleSend()}
+            disabled={!inputText.trim() || isActive}
+            style={{ background: inputText.trim() && !isActive ? '#0ea5e9' : '#1e293b', color: inputText.trim() && !isActive ? '#fff' : '#334155', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: inputText.trim() && !isActive ? 'pointer' : 'not-allowed', flexShrink: 0 }}
+          >▶</button>
+          <button
+            onClick={() => sendMsg({ type: 'stop_session' })}
+            disabled={!isActive}
+            style={{ background: isActive ? '#7f1d1d' : '#1e293b', color: isActive ? '#fca5a5' : '#334155', border: `1px solid ${isActive ? '#991b1b' : '#1e293b'}`, borderRadius: 5, padding: '6px 10px', fontSize: 11, cursor: isActive ? 'pointer' : 'not-allowed', flexShrink: 0 }}
+          >■ Stop</button>
+        </div>
       </div>
 
       <style>{`
