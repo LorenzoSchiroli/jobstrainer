@@ -74,7 +74,7 @@ def test_node_map_generates_documents_when_requested():
         importlib.reload(form_module)
         import asyncio
         from unittest.mock import patch as p2
-        with p2("backend.tailorer.form.generate_tailored_documents", side_effect=fake_generate), \
+        with p2("backend.tailorer.tailor.generate_tailored_documents", side_effect=fake_generate), \
              p2("groq.AsyncGroq"):
             state = _make_state(
                 last_snapshot={"elements": "[7]<input type=file />"},

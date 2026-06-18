@@ -9,7 +9,6 @@ from langgraph.types import interrupt
 
 from backend.tailorer.llm import large_llm, FILL_SYSTEM_PROMPT
 from backend.tailorer.state import TailorerState
-from backend.tailorer.tailor import generate_tailored_documents
 
 _log = logging.getLogger(__name__)
 
@@ -25,6 +24,7 @@ _MAX_RETRIES = 2
 async def node_map(state: TailorerState) -> TailorerState:
     """LLM-only node: reads last_snapshot, emits declarative fill commands. No interrupt."""
     from groq import AsyncGroq
+    from backend.tailorer.tailor import generate_tailored_documents
 
     llm = large_llm()
     snapshot = state["last_snapshot"] or {}
@@ -93,42 +93,6 @@ async def node_map(state: TailorerState) -> TailorerState:
         "status": "mapping",
     }
 
-
-# ---------------------------------------------------------------------------
-# Compatibility stubs — agent.py (Task 4) still imports these names.
-# They will be removed when agent.py is rewritten in Task 4.
-# ---------------------------------------------------------------------------
-
-def confirm_apply(state: TailorerState) -> TailorerState:
-    """Stub: replaced by node_map / node_apply in Task 4."""
-    raise NotImplementedError("confirm_apply removed; use node_map + node_apply")
-
-
-async def tailor_documents(state: TailorerState) -> TailorerState:
-    """Stub: document generation moved into node_map."""
-    raise NotImplementedError("tailor_documents removed; generation happens in node_map")
-
-
-def fetch_snapshot(state: TailorerState) -> TailorerState:
-    """Stub: snapshot is now passed in with start_or_fill, not fetched as a separate node."""
-    raise NotImplementedError("fetch_snapshot removed; snapshot passed via interrupt payload")
-
-
-def fill_page(state: TailorerState) -> TailorerState:
-    """Stub: replaced by node_map + node_apply."""
-    raise NotImplementedError("fill_page removed; use node_map + node_apply")
-
-
-def navigate_next(state: TailorerState) -> TailorerState:
-    """Stub: multi-page navigation removed from fill flow."""
-    raise NotImplementedError("navigate_next removed in fill-redesign")
-
-
-async def node_done(state: TailorerState) -> TailorerState:
-    return {**state, "status": "done"}
-
-
-# ---------------------------------------------------------------------------
 
 
 def node_apply(state: TailorerState) -> TailorerState:
