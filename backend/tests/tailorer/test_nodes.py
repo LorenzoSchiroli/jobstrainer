@@ -326,7 +326,7 @@ def test_nav_system_prompt_prioritises_search_over_scroll():
     rules_section = lower[rules_start:]
     assert "search" in rules_section, "Rules section must mention search input"
     search_pos = rules_section.index("search")
-    for kw in ("scroll_to_bottom", "next_page"):
+    for kw in ("scroll_to_bottom", "scroll_down"):
         kw_pos = rules_section.find(kw)
         assert kw_pos == -1 or kw_pos > search_pos, (
             f"'{kw}' rule appears before search rule — agent will paginate instead of search"

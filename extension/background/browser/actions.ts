@@ -27,8 +27,8 @@ const ACTIONS: Record<string, ActionFn> = {
 
   scroll_to_bottom: (page) => done(() => page.scrollToBottom()),
   scroll_to_top:    (page) => done(() => page.scrollToTop()),
-  next_page:        (page) => done(() => page.scrollDown()),
-  previous_page:    (page) => done(() => page.scrollUp()),
+  scroll_down:      (page) => done(() => page.scrollDown()),
+  scroll_up:        (page) => done(() => page.scrollUp()),
   send_keys:        (page, a) => done(() => page.sendKeys((a.keys ?? '') as string)),
   wait:             (page, a) => done(() => page.wait((a.seconds ?? 2) as number)),
 

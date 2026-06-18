@@ -33,7 +33,7 @@ NAV_SYSTEM_PROMPT = (
     '{"action": "go_to_url", "url": "<absolute url>"}\n'
     '{"action": "scroll_to_bottom"}\n'
     '{"action": "scroll_to_top"}\n'
-    '{"action": "next_page"}\n'
+    '{"action": "scroll_down"}  -- scroll down to reveal more content on the current page\n'
     '{"action": "input_text", "index": N, "text": "<value>"}\n'
     '{"action": "send_keys", "keys": "Enter"}\n'
     '{"action": "go_back"}\n'
@@ -45,7 +45,7 @@ NAV_SYSTEM_PROMPT = (
     "- Do NOT return at_form for login-only pages\n"
     "- Avoid URLs/actions already in navigation history\n"
     "- On a careers/job-listings page: FIRST look for a search or keyword input field, type the job title into it and press Enter — do this BEFORE scrolling or paginating\n"
-    "- Use scroll_to_bottom or next_page only if no search input is present and the page might have more links below\n"
+    "- Use scroll_down if no search input is present and the page might have more links below\n"
     "- Return stuck only as last resort\n"
     "- Return up to 2 actions maximum\n"
     "- Return ONLY valid JSON, no prose, no markdown"
