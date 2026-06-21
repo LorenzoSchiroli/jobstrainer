@@ -1,11 +1,8 @@
 import uuid as _uuid
 import json
 import logging
-from typing import Any, Callable
-from urllib.parse import quote
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
-
-logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.types import Command
@@ -18,8 +15,11 @@ from backend.tailorer.state import TailorerState
 from backend.tailorer.agent import build_graph
 from backend.auth.dependencies import get_current_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tailorer", tags=["tailorer"])
 
+
+# ── Profile endpoints (unchanged) ────────────────────────────────────────────
 
 @router.get("/profile", response_model=ProfileResponse)
 async def get_profile(
@@ -58,9 +58,10 @@ async def upsert_profile(
     return ProfileResponse.from_profile(profile)
 
 
+# ── Auth helper ───────────────────────────────────────────────────────────────
+
 async def _get_user_from_token(token: str, session: AsyncSession) -> User:
     from backend.auth.jwt import decode_access_token
-    # decode_access_token returns the user_id (sub) as a str directly
     user_id = decode_access_token(token)
     if not user_id:
         raise ValueError("Invalid token")
@@ -71,78 +72,26 @@ async def _get_user_from_token(token: str, session: AsyncSession) -> User:
     return user
 
 
-_API_BASE = "http://localhost:8000"
+# ── Interrupt handler ─────────────────────────────────────────────────────────
 
-
-async def _handle_navigate(ws: WebSocket, val: dict, **_kw: Any) -> dict:
-    await ws.send_json({"type": "navigate", "url": val["url"]})
-    return await ws.receive_json()
-
-
-async def _handle_request_snapshot(ws: WebSocket, _val: dict, **_kw: Any) -> dict:
-    await ws.send_json({"type": "request_snapshot"})
-    return await ws.receive_json()
-
-
-async def _handle_execute_actions(ws: WebSocket, val: dict, **_kw: Any) -> dict:
-    await ws.send_json({"type": "execute_actions", "actions": val.get("actions", [])})
-    return await ws.receive_json()
-
-
-async def _handle_fill_and_confirm(
-    ws: WebSocket, val: dict, thread_id: str = "", token: str = "", **_kw: Any
-) -> dict:
-    all_cmds = val.get("commands", [])
-    confirm_cmds = val.get("confirm_commands", all_cmds)
-
-    # Send a single batched message so the extension dispatcher can route it
-    # via msg.type. Individual bare objects (no type key) are silently dropped.
+async def _handle_apply_fills(ws: WebSocket, val: dict, thread_id: str = "", token: str = "") -> dict:
     await ws.send_json({
-        "type": "fill_and_confirm",
-        "commands": all_cmds,
-        "confirm_commands": confirm_cmds,
-        "summary": val.get("summary", ""),
+        "type": "apply_fills",
+        "commands": val.get("commands", []),
         "thread_id": thread_id,
         "token": token,
     })
-
     return await ws.receive_json()
 
 
-async def _handle_show_confirm(ws: WebSocket, val: dict, **_kw: Any) -> dict:
-    await ws.send_json(val)
-    return await ws.receive_json()
+async def _handle_interrupt(ws: WebSocket, interrupt_val: dict, thread_id: str = "", token: str = "") -> dict:
+    if interrupt_val.get("type") == "apply_fills":
+        return await _handle_apply_fills(ws, interrupt_val, thread_id=thread_id, token=token)
+    logger.warning("[tailorer] unknown interrupt type: %s", interrupt_val.get("type"))
+    return {"type": "unknown"}
 
 
-async def _handle_navigate_next(ws: WebSocket, _val: dict, **_kw: Any) -> dict:
-    await ws.send_json({"type": "navigate_next"})
-    return await ws.receive_json()
-
-
-async def _handle_show_stuck(ws: WebSocket, val: dict, **_kw: Any) -> dict:
-    await ws.send_json({"type": "show_stuck", "message": val["message"]})
-    return await ws.receive_json()
-
-
-_INTERRUPT_HANDLERS: dict[str, Callable[..., Any]] = {
-    "navigate":          _handle_navigate,
-    "request_snapshot":  _handle_request_snapshot,
-    "execute_actions":   _handle_execute_actions,
-    "fill_and_confirm":  _handle_fill_and_confirm,
-    "show_confirm":      _handle_show_confirm,
-    "navigate_next":     _handle_navigate_next,
-    "show_stuck":        _handle_show_stuck,
-}
-
-
-async def _handle_interrupt(
-    ws: WebSocket, interrupt_val: dict, thread_id: str = "", token: str = ""
-) -> dict:
-    handler = _INTERRUPT_HANDLERS.get(interrupt_val.get("type", ""))
-    if not handler:
-        return {"type": "unknown"}
-    return await handler(ws, interrupt_val, thread_id=thread_id, token=token)
-
+# ── WebSocket session ─────────────────────────────────────────────────────────
 
 @router.websocket("/ws/{job_id}")
 async def tailorer_ws(
@@ -151,13 +100,12 @@ async def tailorer_ws(
     token: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ):
+    await websocket.accept()
     try:
         user = await _get_user_from_token(token, session)
     except Exception:
         await websocket.close(code=4001)
         return
-
-    await websocket.accept()
 
     job_result = await session.execute(select(Job).where(Job.id == job_id))
     job = job_result.scalar_one_or_none()
@@ -166,14 +114,10 @@ async def tailorer_ws(
         await websocket.close()
         return
 
-    company_result = await session.execute(select(Company).where(Company.id == job.company_id))
-    company = company_result.scalar_one_or_none()
-
     profile_result = await session.execute(
         select(ApplicantProfile).where(ApplicantProfile.user_id == user.id)
     )
     profile = profile_result.scalar_one_or_none()
-
     if not profile or not profile.cv_text:
         await websocket.send_json({"type": "error", "message": "No CV on file. Upload your CV first."})
         await websocket.close()
@@ -182,12 +126,17 @@ async def tailorer_ws(
     thread_id = str(_uuid.uuid4())
     await websocket.send_json({"type": "session_started", "thread_id": thread_id})
 
-    initial_state: TailorerState = {
+    config = {"configurable": {"thread_id": thread_id}}
+
+    from backend.main import get_checkpointer
+    checkpointer = get_checkpointer()
+    graph = build_graph(checkpointer)
+
+    base_state: TailorerState = {
         "job_id": str(job.id),
         "user_id": str(user.id),
         "job_title": job.title,
         "job_description": job.description or "",
-        "company_homepage": company.website if company else "",
         "profile": {
             "first_name": profile.first_name,
             "last_name": profile.last_name,
@@ -200,65 +149,96 @@ async def tailorer_ws(
             "extra_qa": profile.extra_qa or {},
         },
         "cv_text": profile.cv_text or "",
-        "apply_url": "",
-        "current_page": 0,
-        "filled_fields": {},
         "cv_bytes": b"",
         "cl_bytes": b"",
         "cl_text": "",
         "last_snapshot": None,
-        "pending_correction": None,
+        "fill_commands": [],
+        "last_feedback": None,
         "retry_count": 0,
-        "status": "navigating",
-        "nav_phase": "start",
-        "nav_snapshot": None,
-        "nav_action": None,
-        "nav_history": [],
-        "no_progress_count": 0,
+        "status": "mapping",
     }
 
-    config = {"configurable": {"thread_id": thread_id}}
-
-    from backend.main import get_checkpointer
-    checkpointer = get_checkpointer()
-    graph = build_graph(checkpointer)
+    is_first_pass = True
 
     try:
-        current_input = initial_state
-        iteration = 0
-        while True:
-            iteration += 1
-            logger.info("[tailorer] iteration=%d invoking graph", iteration)
-            await graph.ainvoke(current_input, config)
+        while True:  # outer: keep WS alive across fill passes
+            msg = await websocket.receive_json()
+            msg_type = msg.get("type", "")
 
-            state_snapshot = await graph.aget_state(config)
-            logger.info("[tailorer] iteration=%d next=%s status=%s", iteration, state_snapshot.next, state_snapshot.values.get("status") if state_snapshot.values else "?")
-
-            if not state_snapshot.next:
-                final_status = state_snapshot.values.get("status") if state_snapshot.values else None
-                logger.info("[tailorer] graph finished — final status=%s", final_status)
-                if final_status == "done":
-                    try:
-                        app_record = Application(user_id=user.id, job_id=job_id)
-                        session.add(app_record)
-                        await session.commit()
-                    except Exception:
-                        await session.rollback()
-                    await websocket.send_json({"type": "done", "message": "Application submitted!"})
-                else:
-                    await websocket.send_json({"type": "error", "message": f"Agent stopped unexpectedly (status: {final_status})."})
+            if msg_type == "new_session":
+                logger.info("[tailorer] new_session requested — closing WS")
                 break
 
-            interrupts = [i for task in state_snapshot.tasks for i in task.interrupts]
-            logger.info("[tailorer] iteration=%d interrupts=%s", iteration, [i.value for i in interrupts])
-            if not interrupts:
-                logger.warning("[tailorer] no interrupts but graph not done — breaking")
-                break
+            if msg_type == "submitted":
+                logger.info("[tailorer] submit detected — writing Application row")
+                try:
+                    app_record = Application(user_id=user.id, job_id=job_id)
+                    session.add(app_record)
+                    await session.commit()
+                    await websocket.send_json({"type": "application_recorded"})
+                except Exception:
+                    await session.rollback()
+                    logger.warning("[tailorer] Application row already exists or write failed")
+                continue
 
-            logger.info("[tailorer] handling interrupt: %s", interrupts[0].value)
-            resume_val = await _handle_interrupt(websocket, interrupts[0].value, thread_id=thread_id, token=token)
-            logger.info("[tailorer] resume_val type=%s", resume_val.get("type") if isinstance(resume_val, dict) else type(resume_val))
-            current_input = Command(resume=resume_val)
+            if msg_type != "start_or_fill":
+                logger.warning("[tailorer] unexpected message type=%s — ignored", msg_type)
+                continue
+
+            snapshot = msg.get("snapshot")
+            feedback_text = msg.get("text", "")
+
+            if is_first_pass:
+                current_input: Any = {
+                    **base_state,
+                    "last_snapshot": snapshot,
+                    "last_feedback": feedback_text or None,
+                }
+                is_first_pass = False
+            else:
+                current_input = {
+                    "last_snapshot": snapshot,
+                    "last_feedback": feedback_text or None,
+                    "retry_count": 0,
+                    "status": "mapping",
+                    "fill_commands": [],
+                }
+
+            # inner: drive map → apply (with interrupt loop) to END
+            while True:
+                await graph.ainvoke(current_input, config)
+                state_snap = await graph.aget_state(config)
+
+                if not state_snap.next:
+                    values = state_snap.values or {}
+                    final_status = values.get("status")
+                    fill_commands = values.get("fill_commands", [])
+                    uncertain = [str(c["index"]) for c in fill_commands if c.get("uncertain")]
+
+                    if final_status == "filled":
+                        await websocket.send_json({
+                            "type": "filled",
+                            "filled_count": len(fill_commands),
+                            "uncertain_fields": uncertain,
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": f"Fill pass failed (status: {final_status})",
+                        })
+                    break  # back to outer loop — wait for next start_or_fill
+
+                interrupts = [i for task in state_snap.tasks for i in task.interrupts]
+                if not interrupts:
+                    logger.warning("[tailorer] graph not done but no interrupts — breaking")
+                    break
+
+                logger.info("[tailorer] interrupt: %s", interrupts[0].value.get("type"))
+                resume_val = await _handle_interrupt(
+                    websocket, interrupts[0].value, thread_id=thread_id, token=token
+                )
+                current_input = Command(resume=resume_val)
 
     except WebSocketDisconnect:
         logger.info("[tailorer] WebSocket disconnected")
@@ -274,6 +254,8 @@ async def tailorer_ws(
         except Exception:
             pass
 
+
+# ── File download endpoint (unchanged) ───────────────────────────────────────
 
 @router.get("/files/{thread_id}/{file_type}")
 async def download_tailored_file(

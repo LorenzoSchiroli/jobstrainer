@@ -39,7 +39,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!pending && !session) return;
   chrome.sidePanel?.open?.({ tabId }).catch(() => {});
   if (pending) {
-    sessionManager.sendToPanel(tabId, { type: 'show_apply_button', job_id: pending.job_id, token: pending.token });
+    sessionManager.sendToPanel(tabId, { type: 'show_job_context', job_id: pending.job_id, token: pending.token });
   }
 });
 
@@ -61,7 +61,7 @@ chrome.runtime.onConnect.addListener((port) => {
   const pending = sessionManager.getPending(tabId);
   const session = sessionManager.get(tabId);
   if (pending) {
-    port.postMessage({ type: 'show_apply_button', job_id: pending.job_id, token: pending.token });
+    port.postMessage({ type: 'show_job_context', job_id: pending.job_id, token: pending.token });
   } else if (session) {
     const wsAlive = session.ws.readyState === WebSocket.OPEN;
     port.postMessage({
@@ -84,29 +84,78 @@ chrome.runtime.onConnect.addListener((port) => {
     });
   }
 
-  port.onMessage.addListener((msg: any) => {
-    if (msg.type === 'start_session') {
-      sessionManager.clearPending(tabId);
-      sessionManager.open(tabId, msg.job_id as string, msg.token as string, handleAgentMessage);
-      return;
-    }
+  port.onMessage.addListener(async (msg: any) => {
     if (msg.type === 'stop_session') {
       if (sessionManager.has(tabId)) {
         sessionManager.stop(tabId, 'Stopped by user.');
-      } else {
-        sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'idle' });
       }
+      sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'idle' });
       return;
     }
+
+    if (msg.type === 'new_session') {
+      if (sessionManager.has(tabId)) {
+        sessionManager.stop(tabId, 'New session started.');
+      }
+      sessionManager.sendToPanel(tabId, { type: 'idle' });
+      return;
+    }
+
     if (msg.type === 'append_optimistic_log') {
       const s = sessionManager.get(tabId);
       if (s) s.log.push(msg.entry as any);
       return;
     }
-    const session = sessionManager.get(tabId);
-    if (!session?.ws || session.ws.readyState !== WebSocket.OPEN) return;
-    if (['user_approved', 'user_correction', 'stuck_unblocked', 'user_manual_edit'].includes(msg.type)) {
-      session.ws.send(JSON.stringify(msg));
+
+    if (msg.type === 'start_or_fill') {
+      const feedbackText: string = msg.text ?? '';
+      const pending = sessionManager.getPending(tabId);
+      const session = sessionManager.get(tabId);
+
+      const job_id: string = session?.job_id ?? pending?.job_id ?? '';
+      const token: string = session?.token ?? pending?.token ?? '';
+
+      if (!job_id || !token) {
+        sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job first.' });
+        return;
+      }
+
+      // Open session (and WS) if not already open
+      if (!session) {
+        sessionManager.clearPending(tabId);
+        sessionManager.open(tabId, job_id, token, handleAgentMessage);
+      }
+
+      // Wait for the session to exist
+      const activeSession = sessionManager.get(tabId);
+      if (!activeSession) return;
+
+      // Capture whole-page snapshot
+      try {
+        await activeSession.page.attach();
+        const snapshot = await activeSession.page.snapshot();
+        const wsMsg = JSON.stringify({ type: 'start_or_fill', text: feedbackText, snapshot });
+
+        if (activeSession.ws.readyState === WebSocket.OPEN) {
+          activeSession.ws.send(wsMsg);
+        } else {
+          // WS still connecting — queue the send
+          activeSession.ws.addEventListener('open', () => activeSession.ws.send(wsMsg), { once: true });
+        }
+      } catch (e) {
+        console.error('[tailorer] snapshot failed during start_or_fill', e);
+        sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'error' });
+      }
+      return;
+    }
+
+    // Forward submitted signal
+    if (msg.type === 'submitted') {
+      const s = sessionManager.get(tabId);
+      if (s?.ws.readyState === WebSocket.OPEN) {
+        s.ws.send(JSON.stringify({ type: 'submitted' }));
+      }
+      return;
     }
   });
 });

@@ -17,71 +17,46 @@ DATABASE_URL = os.environ.get(
 
 
 @pytest.mark.asyncio
-async def test_handle_interrupt_execute_actions_returns_snapshot():
-    """execute_actions sends actions to WS and returns the snapshot response."""
+async def test_handle_interrupt_apply_fills_sends_commands_and_returns_response():
+    """apply_fills forwards commands to WS and returns the extension's response."""
     from backend.tailorer.router import _handle_interrupt
 
     ws = AsyncMock()
-    snapshot = {"url": "https://example.com", "title": "Test", "elements": "[1]<button >Apply />", "scroll_y": 0, "scroll_height": 100, "viewport_height": 800}
-    ws.receive_json = AsyncMock(return_value=snapshot)
+    extension_response = {"type": "fills_applied", "results": []}
+    ws.receive_json = AsyncMock(return_value=extension_response)
 
     interrupt_val = {
-        "type": "execute_actions",
-        "actions": [
-            {"action": "click_element", "index": 1},
-        ]
-    }
-
-    result = await _handle_interrupt(ws, interrupt_val)
-
-    ws.send_json.assert_called()
-    sent = ws.send_json.call_args[0][0]
-    assert sent["type"] == "execute_actions"
-    assert sent["actions"] == [{"action": "click_element", "index": 1}]
-    assert result == snapshot
-
-
-@pytest.mark.asyncio
-async def test_handle_interrupt_fill_and_confirm_sends_batched_message():
-    """fill_and_confirm must send a single {type: fill_and_confirm, commands: [...]} message
-    (not individual bare objects) so the extension dispatcher can route it."""
-    from backend.tailorer.router import _handle_interrupt
-
-    ws = AsyncMock()
-    ws.receive_json = AsyncMock(return_value={"type": "user_approved"})
-
-    interrupt_val = {
-        "type": "fill_and_confirm",
+        "type": "apply_fills",
         "commands": [
-            {"index": 2, "value": "John", "action": "input_text", "uncertain": False},
-            {"index": 3, "value": "Doe", "action": "input_text", "uncertain": False},
-            {"index": 7, "value": "__CV__", "action": "file_upload"},
+            {"index": 2, "value": "John", "action": "input_text"},
+            {"index": 5, "value": "Engineer", "action": "input_text"},
         ],
-        "summary": "Filling page 1",
     }
 
     result = await _handle_interrupt(ws, interrupt_val, thread_id="t1", token="tok")
 
-    calls = [c[0][0] for c in ws.send_json.call_args_list]
+    ws.send_json.assert_called_once()
+    sent = ws.send_json.call_args[0][0]
+    assert sent["type"] == "apply_fills"
+    assert sent["commands"] == interrupt_val["commands"]
+    assert sent["thread_id"] == "t1"
+    assert sent["token"] == "tok"
+    assert result == extension_response
 
-    # There must be exactly one fill_and_confirm message
-    fill_calls = [c for c in calls if c.get("type") == "fill_and_confirm"]
-    assert len(fill_calls) == 1, f"Expected 1 fill_and_confirm message, got {len(fill_calls)}"
 
-    fill_msg = fill_calls[0]
-    # commands list must contain all commands
-    assert "commands" in fill_msg
-    regular = [c for c in fill_msg["commands"] if c.get("action") != "file_upload"
-               and c.get("value") not in ("__CV__", "__COVER_LETTER__")]
-    assert len(regular) == 2
-    assert regular[0]["index"] == 2
-    assert regular[1]["index"] == 3
+@pytest.mark.asyncio
+async def test_handle_interrupt_unknown_type_returns_unknown():
+    """Unknown interrupt types log a warning and return {type: unknown}."""
+    from backend.tailorer.router import _handle_interrupt
 
-    # No bare {action: "input_text"} objects must be sent as top-level messages
-    bare_fills = [c for c in calls if c.get("action") in ("input_text", "select_option")]
-    assert bare_fills == [], f"Unexpected bare fill commands sent: {bare_fills}"
+    ws = AsyncMock()
 
-    assert result == {"type": "user_approved"}
+    interrupt_val = {"type": "some_future_type", "data": "x"}
+
+    result = await _handle_interrupt(ws, interrupt_val)
+
+    ws.send_json.assert_not_called()
+    assert result == {"type": "unknown"}
 
 
 def test_ws_rejects_missing_token():
