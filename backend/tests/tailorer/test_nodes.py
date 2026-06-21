@@ -166,3 +166,19 @@ def test_route_after_apply_ends_on_filled():
     from backend.tailorer import agent as agent_module
     importlib.reload(agent_module)
     assert agent_module._route_after_apply(_make_state(status="filled")) == END
+
+
+def test_fill_system_prompt_has_no_nav_prompt():
+    import backend.tailorer.llm as llm_mod
+    assert not hasattr(llm_mod, "NAV_SYSTEM_PROMPT")
+    assert not hasattr(llm_mod, "CORRECTION_SYSTEM_PROMPT")
+
+
+def test_new_state_has_no_nav_fields():
+    import typing
+    from backend.tailorer.state import TailorerState
+    hints = typing.get_type_hints(TailorerState)
+    for nav_field in ("nav_phase", "nav_snapshot", "nav_action", "nav_history", "no_progress_count", "apply_url", "current_page", "filled_fields", "pending_correction"):
+        assert nav_field not in hints, f"nav field {nav_field!r} should be removed"
+    for new_field in ("fill_commands", "last_feedback", "retry_count"):
+        assert new_field in hints, f"new field {new_field!r} missing"
