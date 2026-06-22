@@ -112,8 +112,8 @@ chrome.runtime.onConnect.addListener((port) => {
       const pending = sessionManager.getPending(tabId);
       const session = sessionManager.get(tabId);
 
-      const job_id: string = session?.job_id ?? pending?.job_id ?? '';
-      const token: string = session?.token ?? pending?.token ?? '';
+      const job_id: string = session?.job_id ?? pending?.job_id ?? (msg.job_id as string) ?? '';
+      const token: string = session?.token ?? pending?.token ?? (msg.token as string) ?? '';
 
       if (!job_id || !token) {
         sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job first.' });
