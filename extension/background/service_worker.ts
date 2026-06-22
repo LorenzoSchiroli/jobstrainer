@@ -132,18 +132,28 @@ chrome.runtime.onConnect.addListener((port) => {
 
       // Capture whole-page snapshot
       try {
+        sessionManager.appendLog(tabId, { kind: 'step', text: 'Capturing page snapshot…', done: false });
         await activeSession.page.attach();
         const snapshot = await activeSession.page.snapshot();
-        const wsMsg = JSON.stringify({ type: 'start_or_fill', text: feedbackText, snapshot });
+        sessionManager.appendLog(tabId, { kind: 'step', text: 'Capturing page snapshot…', done: true });
 
-        if (activeSession.ws.readyState === WebSocket.OPEN) {
+        const wsMsg = JSON.stringify({ type: 'start_or_fill', text: feedbackText, snapshot });
+        const wsState = activeSession.ws.readyState;
+        console.log('[tailorer] start_or_fill wsState=%d elements=%d', wsState, (snapshot.elements.match(/^\[/gm) ?? []).length);
+
+        if (wsState === WebSocket.OPEN) {
           activeSession.ws.send(wsMsg);
+          sessionManager.appendLog(tabId, { kind: 'step', text: 'Analyzing form with AI…', done: false });
         } else {
-          // WS still connecting — queue the send
-          activeSession.ws.addEventListener('open', () => activeSession.ws.send(wsMsg), { once: true });
+          sessionManager.appendLog(tabId, { kind: 'step', text: 'Waiting for backend connection…', done: false });
+          activeSession.ws.addEventListener('open', () => {
+            activeSession.ws.send(wsMsg);
+            sessionManager.appendLog(tabId, { kind: 'step', text: 'Analyzing form with AI…', done: false });
+          }, { once: true });
         }
       } catch (e) {
         console.error('[tailorer] snapshot failed during start_or_fill', e);
+        sessionManager.appendLog(tabId, { kind: 'error', message: `Snapshot failed: ${(e as Error).message}` });
         sessionManager.sendToPanel(tabId, { type: 'set_status', status: 'error' });
       }
       return;

@@ -17,9 +17,13 @@ const HANDLERS: Record<string, Handler> = {
 
   apply_fills: async (tabId, session, msg) => {
     session.currentStatus = 'filling';
+    const commands = msg.commands as Record<string, unknown>[];
+    console.log('[tailorer] apply_fills received commands=%d', commands.length);
+
+    sessionManager.appendLog(tabId, { kind: 'step', text: 'Analyzing form with AI…', done: true });
+
     await session.page.attach();
 
-    const commands = msg.commands as Record<string, unknown>[];
     const threadId = (msg.thread_id as string) ?? session.thread_id ?? '';
     const token = (msg.token as string) ?? session.token;
 
@@ -100,6 +104,7 @@ export async function handleAgentMessage(
   tabId: number,
   msg: Record<string, unknown>,
 ): Promise<void> {
+  console.log('[tailorer] handleAgentMessage type=%s', msg.type);
   const session = sessionManager.get(tabId);
   if (!session) return;
   const handler = HANDLERS[msg.type as string];
