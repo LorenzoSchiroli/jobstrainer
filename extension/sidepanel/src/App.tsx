@@ -21,7 +21,7 @@ export default function App() {
       portRef.current = port;
 
       port.onMessage.addListener((msg: any) => {
-        if (msg.type === 'idle') { setStatus('idle'); setLog([]); setJobContext(null); return; }
+        if (msg.type === 'idle') { setStatus('idle'); setLog([]); return; }
         if (msg.type === 'show_job_context') { setJobContext({ job_id: msg.job_id, token: msg.token }); return; }
         if (msg.type === 'restore_panel') { setLog(msg.log ?? []); setStatus(msg.status ?? 'idle'); return; }
         if (msg.type === 'append_log') { setLog(prev => [...prev, msg.entry]); return; }
@@ -51,6 +51,7 @@ export default function App() {
   const handleNewSession = useCallback(() => {
     setLog([]);
     setStatus('idle');
+    setJobContext(null);
     sendMsg({ type: 'new_session' });
   }, [sendMsg]);
 
