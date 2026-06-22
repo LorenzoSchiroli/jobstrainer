@@ -46,7 +46,7 @@ export default function App() {
     setInputText('');
     setLog(prev => [...prev, { kind: 'step', text, done: false }]);
     sendMsg({ type: 'start_or_fill', text, job_id: jobContext?.job_id, token: jobContext?.token });
-  }, [inputText, sendMsg]);
+  }, [inputText, sendMsg, jobContext]);
 
   const handleNewSession = useCallback(() => {
     setLog([]);
