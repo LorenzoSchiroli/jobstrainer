@@ -17,7 +17,11 @@ let pendingNextTab: { job_id: string; token: string } | null = null;
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'register_pending' && msg.job_id && msg.token) {
     pendingNextTab = { job_id: msg.job_id as string, token: msg.token as string };
-    console.log('[tailorer] register_pending stored for next tab, job_id=%s', msg.job_id);
+    // Persist as the "active job" so the panel can pick it up on ANY tab the user
+    // ends up on (jobstrainer → LinkedIn → company site is a multi-tab journey, so
+    // per-tab pending alone is not enough). Survives service-worker suspension too.
+    chrome.storage.local.set({ activeJob: { job_id: msg.job_id, token: msg.token } });
+    console.log('[tailorer] register_pending stored, job_id=%s', msg.job_id);
   }
 });
 
@@ -97,7 +101,7 @@ chrome.runtime.onConnect.addListener((port) => {
       status: wsAlive ? session.currentStatus : 'error',
     });
   } else {
-    chrome.storage.local.get('activeSessions', ({ activeSessions }) => {
+    chrome.storage.local.get(['activeSessions', 'activeJob'], ({ activeSessions, activeJob }) => {
       const saved = (activeSessions as any[] || []).find((s: any) => s.tabId === tabId);
       if (saved) {
         port.postMessage({
@@ -105,6 +109,10 @@ chrome.runtime.onConnect.addListener((port) => {
           log: [...saved.log, { kind: 'error', message: 'Connection lost — restart session.' }],
           status: 'error',
         });
+      } else if (activeJob?.job_id && activeJob?.token) {
+        // No per-tab pending/session, but the user selected a job earlier (possibly
+        // on a different tab). Surface it here so Fill has a job to work with.
+        port.postMessage({ type: 'show_job_context', job_id: activeJob.job_id, token: activeJob.token });
       } else {
         port.postMessage({ type: 'idle' });
       }
