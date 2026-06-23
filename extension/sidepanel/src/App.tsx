@@ -8,19 +8,29 @@ export default function App() {
   const [status, setStatus] = useState('idle');
   const [jobContext, setJobContext] = useState<{ job_id: string; token: string } | null>(null);
   const [inputText, setInputText] = useState('');
+  const [diag, setDiag] = useState<{ tabId?: number; storedJob?: string; portMsgs: string[] }>({ portMsgs: [] });
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const isActive = ['connecting', 'filling'].includes(status);
   const hasJob = jobContext !== null || status !== 'idle';
 
+  // Diagnostic: read what the service worker persisted, independent of any messaging.
+  useEffect(() => {
+    chrome.storage?.local?.get('activeJob', ({ activeJob }) => {
+      setDiag(d => ({ ...d, storedJob: activeJob?.job_id ?? 'NONE' }));
+    });
+  }, []);
+
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (!tab?.id) return;
+      setDiag(d => ({ ...d, tabId: tab.id }));
       const port = chrome.runtime.connect({ name: `panel-${tab.id}` });
       portRef.current = port;
 
       port.onMessage.addListener((msg: any) => {
+        setDiag(d => ({ ...d, portMsgs: [...d.portMsgs.slice(-4), msg.type] }));
         if (msg.type === 'idle') { setStatus('idle'); setLog([]); return; }
         if (msg.type === 'show_job_context') { setJobContext({ job_id: msg.job_id, token: msg.token }); return; }
         if (msg.type === 'restore_panel') { setLog(msg.log ?? []); setStatus(msg.status ?? 'idle'); return; }
@@ -134,6 +144,12 @@ export default function App() {
             style={{ background: isActive ? '#7f1d1d' : '#1e293b', color: isActive ? '#fca5a5' : '#334155', border: `1px solid ${isActive ? '#991b1b' : '#1e293b'}`, borderRadius: 5, padding: '6px 10px', fontSize: 11, cursor: isActive ? 'pointer' : 'not-allowed', flexShrink: 0 }}
           >■ Stop</button>
         </div>
+      </div>
+
+      {/* DEBUG strip — remove once fixed */}
+      <div style={{ borderTop: '1px solid #1e293b', padding: '4px 10px', fontSize: 9, fontFamily: 'monospace', color: '#64748b', flexShrink: 0, lineHeight: 1.5 }}>
+        <div>tab={diag.tabId ?? '?'} · jobCtx={jobContext?.job_id?.slice(0, 8) ?? 'NULL'} · stored={diag.storedJob ?? '…'}</div>
+        <div>msgs: {diag.portMsgs.join(' → ') || '(none)'}</div>
       </div>
 
       <style>{`
