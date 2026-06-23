@@ -8,28 +8,55 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   chrome.storage.local.set({ activeSessions: sessionManager.activeSessions() });
 });
 
+// Set by frontend_bridge content script (register_pending) before/as the job tab
+// opens. The JobCard link uses rel="noopener", which severs tab.openerTabId, so the
+// localStorage-via-opener path below cannot run — this variable is the real path.
+let pendingNextTab: { job_id: string; token: string } | null = null;
+
+// ── register_pending from the frontend content script ───────────────────────
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === 'register_pending' && msg.job_id && msg.token) {
+    pendingNextTab = { job_id: msg.job_id as string, token: msg.token as string };
+    console.log('[tailorer] register_pending stored for next tab, job_id=%s', msg.job_id);
+  }
+});
+
 // ── Tab lifecycle ──────────────────────────────────────────────────────────
 chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!tab.openerTabId || !tab.id) return;
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.openerTabId },
-      func: () => ({
-        pending: localStorage.getItem('tailorer_pending'),
-        token: localStorage.getItem('access_token'),
-      }),
-    });
-    const { pending, token } = result.result as { pending: string | null; token: string | null };
-    if (pending && token) {
-      const { job_id } = JSON.parse(pending) as { job_id: string };
-      await chrome.scripting.executeScript({
+  if (!tab.id) return;
+
+  // Chrome path: opener tab accessible, read pending from its localStorage.
+  if (tab.openerTabId) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
         target: { tabId: tab.openerTabId },
-        func: () => localStorage.removeItem('tailorer_pending'),
+        func: () => ({
+          pending: localStorage.getItem('tailorer_pending'),
+          token: localStorage.getItem('access_token'),
+        }),
       });
-      sessionManager.setPending(tab.id, { job_id, token });
-      chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
-    }
-  } catch (_) {}
+      const { pending, token } = result.result as { pending: string | null; token: string | null };
+      if (pending && token) {
+        const { job_id } = JSON.parse(pending) as { job_id: string };
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.openerTabId },
+          func: () => localStorage.removeItem('tailorer_pending'),
+        });
+        sessionManager.setPending(tab.id, { job_id, token });
+        chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // noopener path: openerTabId is severed; frontend_bridge already forwarded the
+  // job + token via register_pending. Claim it for this newly opened tab.
+  if (pendingNextTab) {
+    sessionManager.setPending(tab.id, pendingNextTab);
+    pendingNextTab = null;
+    console.log('[tailorer] pending claimed via register_pending for tab', tab.id);
+    chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
+  }
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
