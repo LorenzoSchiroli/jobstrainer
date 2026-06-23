@@ -28,6 +28,11 @@ export default function App() {
             ? `${lastBridgeEvent.job_id?.slice(0, 8)} tok=${lastBridgeEvent.hadToken}`
             : 'NONE',
         }));
+        // Adopt the stored job as our context if we don't already have one. This is
+        // the source of truth — independent of SW messaging / connect timing.
+        if (activeJob?.job_id && activeJob?.token) {
+          setJobContext(prev => prev ?? { job_id: activeJob.job_id, token: activeJob.token });
+        }
       },
     );
     read();
