@@ -8,18 +8,31 @@ export default function App() {
   const [status, setStatus] = useState('idle');
   const [jobContext, setJobContext] = useState<{ job_id: string; token: string } | null>(null);
   const [inputText, setInputText] = useState('');
-  const [diag, setDiag] = useState<{ tabId?: number; storedJob?: string; portMsgs: string[] }>({ portMsgs: [] });
+  const [diag, setDiag] = useState<{ tabId?: number; storedJob?: string; bridge?: string; event?: string; portMsgs: string[] }>({ portMsgs: [] });
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const isActive = ['connecting', 'filling'].includes(status);
   const hasJob = jobContext !== null || status !== 'idle';
 
-  // Diagnostic: read what the service worker persisted, independent of any messaging.
+  // Diagnostic: read storage directly, independent of any messaging.
   useEffect(() => {
-    chrome.storage?.local?.get('activeJob', ({ activeJob }) => {
-      setDiag(d => ({ ...d, storedJob: activeJob?.job_id ?? 'NONE' }));
-    });
+    const read = () => chrome.storage?.local?.get(
+      ['activeJob', 'bridgeLoadedAt', 'lastBridgeEvent'],
+      ({ activeJob, bridgeLoadedAt, lastBridgeEvent }) => {
+        setDiag(d => ({
+          ...d,
+          storedJob: activeJob?.job_id?.slice(0, 8) ?? 'NONE',
+          bridge: bridgeLoadedAt ? new Date(bridgeLoadedAt).toLocaleTimeString() : 'NEVER',
+          event: lastBridgeEvent
+            ? `${lastBridgeEvent.job_id?.slice(0, 8)} tok=${lastBridgeEvent.hadToken}`
+            : 'NONE',
+        }));
+      },
+    );
+    read();
+    const id = setInterval(read, 1500);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -149,6 +162,7 @@ export default function App() {
       {/* DEBUG strip — remove once fixed */}
       <div style={{ borderTop: '1px solid #1e293b', padding: '4px 10px', fontSize: 9, fontFamily: 'monospace', color: '#64748b', flexShrink: 0, lineHeight: 1.5 }}>
         <div>tab={diag.tabId ?? '?'} · jobCtx={jobContext?.job_id?.slice(0, 8) ?? 'NULL'} · stored={diag.storedJob ?? '…'}</div>
+        <div>bridge={diag.bridge ?? '…'} · event={diag.event ?? '…'}</div>
         <div>msgs: {diag.portMsgs.join(' → ') || '(none)'}</div>
       </div>
 
