@@ -47,6 +47,10 @@ chrome.tabs.onCreated.addListener(async (tab) => {
           func: () => localStorage.removeItem('tailorer_pending'),
         });
         sessionManager.setPending(tab.id, { job_id, token });
+        // Persist globally so a panel on ANY later tab (LinkedIn → company site) can
+        // pick the job up. This opener path is the reliable capture mechanism.
+        chrome.storage.local.set({ activeJob: { job_id, token } });
+        console.log('[tailorer] activeJob captured via opener path, job_id=%s', job_id);
         chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
         return;
       }
@@ -57,6 +61,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   // job + token via register_pending. Claim it for this newly opened tab.
   if (pendingNextTab) {
     sessionManager.setPending(tab.id, pendingNextTab);
+    chrome.storage.local.set({ activeJob: pendingNextTab });
     pendingNextTab = null;
     console.log('[tailorer] pending claimed via register_pending for tab', tab.id);
     chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
