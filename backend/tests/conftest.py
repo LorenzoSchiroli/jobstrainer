@@ -14,6 +14,7 @@ from backend.main import app
 from backend.database import get_session
 from backend.models import Base
 import backend.tailorer.models  # noqa: F401
+import backend.search.advanced.models  # noqa: F401
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
