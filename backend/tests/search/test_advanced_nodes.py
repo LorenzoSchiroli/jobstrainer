@@ -1,13 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-pytestmark = pytest.mark.asyncio
-
 
 def _hit(job_id, summary):
     return {"_source": {"job_id": job_id, "summary_text": summary}}
 
 
+@pytest.mark.asyncio
 async def test_node_search_retrieves_and_reranks():
     from backend.search.advanced import nodes
     biencoder = MagicMock()
@@ -29,6 +28,7 @@ async def test_node_search_retrieves_and_reranks():
     assert out["hits"][0]["_source"]["job_id"] == "j1"
 
 
+@pytest.mark.asyncio
 async def test_node_search_uses_refined_query_when_present():
     from backend.search.advanced import nodes
     biencoder = MagicMock()
@@ -48,6 +48,7 @@ async def test_node_search_uses_refined_query_when_present():
     assert "senior ml pytorch" in captured["q"]
 
 
+@pytest.mark.asyncio
 async def test_node_critique_sets_refined_once_guard():
     from backend.search.advanced import nodes
     state = {"query": "ml", "hits": [], "refined_once": False}
@@ -59,6 +60,7 @@ async def test_node_critique_sets_refined_once_guard():
     assert out["refined_query"] == "better"
 
 
+@pytest.mark.asyncio
 async def test_node_critique_no_refine_when_already_refined():
     from backend.search.advanced import nodes
     state = {"query": "ml", "hits": [], "refined_once": True}
@@ -74,6 +76,7 @@ def test_route_after_critique():
     assert nodes._route_after_critique({"need_refine": False}) == "fit_score"
 
 
+@pytest.mark.asyncio
 async def test_node_fit_score_sorts_by_score():
     from backend.search.advanced import nodes
     state = {"cv_text": "cv", "preference_memory": "",
