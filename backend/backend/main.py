@@ -69,6 +69,9 @@ app = FastAPI(title="jobstrainer backend", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    # The Tailorer side panel (chrome-extension:// origin) calls /auth/me and other
+    # endpoints directly; a concrete regex (not "*") is allowed alongside credentials.
+    allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

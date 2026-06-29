@@ -46,6 +46,10 @@ async def node_map(state: TailorerState) -> TailorerState:
         )),
     ])
 
+    element_lines = elements.count("\n") + 1 if elements else 0
+    _log.info("[node_map] snapshot has ~%d element lines; LLM raw response: %s",
+              element_lines, resp.content[:1000])
+
     raw = re.sub(r"```(?:json)?\s*|\s*```", "", resp.content.strip())
     try:
         commands = json.loads(raw)
@@ -54,6 +58,8 @@ async def node_map(state: TailorerState) -> TailorerState:
     except Exception:
         _log.warning("[node_map] JSON parse failed — returning empty commands")
         return {**state, "fill_commands": [], "retry_count": 0, "status": "mapping"}
+
+    _log.info("[node_map] parsed %d fill commands: %s", len(commands), commands)
 
     new_cv_bytes = state.get("cv_bytes") or b""
     new_cl_bytes = state.get("cl_bytes") or b""
@@ -105,6 +111,8 @@ def node_apply(state: TailorerState) -> TailorerState:
 
     post_snapshot = response.get("snapshot", {})
     field_values: dict = response.get("field_values", {})
+
+    _log.info("[node_apply] extension returned field_values: %s", field_values)
 
     mismatches: list[dict] = []
     for cmd in state["fill_commands"]:

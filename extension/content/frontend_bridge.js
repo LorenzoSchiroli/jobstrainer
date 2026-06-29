@@ -1,27 +1,32 @@
-// Injected on the jobstrainer frontend to capture the selected job + auth token.
-// Content scripts share chrome.storage with the rest of the extension, so we write
-// the job directly to storage (no service-worker round-trip — the SW may be asleep
-// or its message handler unregistered). The panel reads `activeJob` from storage.
+// Runs only on the jobstrainer frontend (localhost:3000). It is the single bridge
+// between the web app and the extension: it writes the user's auth token and the
+// selected job to chrome.storage.local, which the side panel treats as the one
+// source of truth for "which user / which job."
 //
-// Diagnostic keys (read by the panel debug strip):
-//   bridgeLoadedAt  — proves this content script was injected on the page
-//   lastBridgeEvent — the most recent tailorer_pending click + whether a token was found
+// Content scripts share the page's origin, so they can read the page's
+// localStorage directly — no service-worker round-trip (the SW may be asleep).
 
-try {
-  chrome.storage?.local?.set({ bridgeLoadedAt: Date.now() });
-} catch (_) {}
-
-window.addEventListener('message', (e) => {
-  if (e.source !== window || e.data?.type !== 'tailorer_pending') return;
+function currentToken() {
   try {
-    const token = localStorage.getItem('access_token');
-    chrome.storage.local.set({
-      activeJob: token ? { job_id: e.data.job_id, token } : null,
-      lastBridgeEvent: { job_id: e.data.job_id, hadToken: !!token, at: Date.now() },
-    });
-    // Best-effort: also notify the SW so it can auto-open the side panel.
-    chrome.runtime.sendMessage({ type: 'register_pending', job_id: e.data.job_id, token });
-  } catch (err) {
-    try { chrome.storage?.local?.set({ bridgeError: String(err) }); } catch (_) {}
+    return localStorage.getItem('access_token');
+  } catch (_) {
+    return null;
   }
+}
+
+// Keep the stored token fresh whenever the user has the app open (login, refresh).
+const token = currentToken();
+if (token) {
+  try { chrome.storage.local.set({ token }); } catch (_) {}
+}
+
+// Job selection: the app posts { type: 'tailorer_link', job_id, job_title }.
+window.addEventListener('message', (e) => {
+  if (e.source !== window || e.data?.type !== 'tailorer_link') return;
+  try {
+    chrome.storage.local.set({
+      token: currentToken(),
+      activeJob: { job_id: e.data.job_id, job_title: e.data.job_title ?? '' },
+    });
+  } catch (_) {}
 });

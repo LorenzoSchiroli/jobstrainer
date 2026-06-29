@@ -11,11 +11,6 @@ export type LogEntry =
   | { kind: 'summary'; filled_count: number; uncertain_fields: string[]; file_links: FileLink[] }
   | { kind: 'error'; message: string };
 
-export interface PendingJob {
-  job_id: string;
-  token: string;
-}
-
 export interface Session {
   job_id: string;
   token: string;

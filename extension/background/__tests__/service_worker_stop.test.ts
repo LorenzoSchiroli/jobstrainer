@@ -12,12 +12,9 @@ vi.mock('../session/manager', () => ({
     registerPort: vi.fn(),
     removePort: vi.fn(),
     get: vi.fn(),
-    getPending: vi.fn(),
-    clearPending: vi.fn(),
     open: vi.fn(),
     cleanupTab: vi.fn(),
     activeSessions: vi.fn().mockReturnValue([]),
-    setPending: vi.fn(),
   },
 }));
 

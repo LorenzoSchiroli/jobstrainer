@@ -3,54 +3,70 @@ import LogEntry from './components/LogEntry';
 import StatusBar from './components/StatusBar';
 import type { LogEntry as LogItem } from '../../background/session/types';
 
+const API_BASE = 'http://localhost:8000';
+
+interface ActiveJob { job_id: string; job_title: string; }
+type LinkState = 'checking' | 'linked' | 'unlinked' | 'expired';
+
 export default function App() {
   const [log, setLog] = useState<LogItem[]>([]);
   const [status, setStatus] = useState('idle');
-  const [jobContext, setJobContext] = useState<{ job_id: string; token: string } | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [authState, setAuthState] = useState<'checking' | 'ok' | 'fail'>('checking');
   const [inputText, setInputText] = useState('');
-  const [diag, setDiag] = useState<{ tabId?: number; storedJob?: string; bridge?: string; event?: string; portMsgs: string[] }>({ portMsgs: [] });
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const isActive = ['connecting', 'filling'].includes(status);
-  const hasJob = jobContext !== null || status !== 'idle';
+  const hasJob = activeJob !== null;
 
-  // Diagnostic: read storage directly, independent of any messaging.
+  // ── The user↔offer link: storage is the single source of truth ──────────────
   useEffect(() => {
-    const read = () => chrome.storage?.local?.get(
-      ['activeJob', 'bridgeLoadedAt', 'lastBridgeEvent'],
-      ({ activeJob, bridgeLoadedAt, lastBridgeEvent }) => {
-        setDiag(d => ({
-          ...d,
-          storedJob: activeJob?.job_id?.slice(0, 8) ?? 'NONE',
-          bridge: bridgeLoadedAt ? new Date(bridgeLoadedAt).toLocaleTimeString() : 'NEVER',
-          event: lastBridgeEvent
-            ? `${lastBridgeEvent.job_id?.slice(0, 8)} tok=${lastBridgeEvent.hadToken}`
-            : 'NONE',
-        }));
-        // Adopt the stored job as our context if we don't already have one. This is
-        // the source of truth — independent of SW messaging / connect timing.
-        if (activeJob?.job_id && activeJob?.token) {
-          setJobContext(prev => prev ?? { job_id: activeJob.job_id, token: activeJob.token });
-        }
-      },
-    );
-    read();
-    const id = setInterval(read, 1500);
-    return () => clearInterval(id);
+    chrome.storage.local.get(['token', 'activeJob'], ({ token, activeJob }) => {
+      setToken(token ?? null);
+      setActiveJob(activeJob ?? null);
+    });
+    const onChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string,
+    ) => {
+      if (area !== 'local') return;
+      if ('token' in changes) setToken(changes.token.newValue ?? null);
+      if ('activeJob' in changes) setActiveJob(changes.activeJob.newValue ?? null);
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
+  // Resolve the user from the token — also a live auth check (401 ⇒ expired link).
+  useEffect(() => {
+    if (!token) { setUsername(null); setAuthState('fail'); return; }
+    let cancelled = false;
+    setAuthState('checking');
+    fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(data => { if (!cancelled) { setUsername(data.username ?? null); setAuthState('ok'); } })
+      .catch(() => { if (!cancelled) { setUsername(null); setAuthState('fail'); } });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const linkState: LinkState =
+    !activeJob || !token ? 'unlinked'
+    : authState === 'checking' ? 'checking'
+    : authState === 'fail' ? 'expired'
+    : 'linked';
+
+  // ── Session port (per-tab fill flow) ────────────────────────────────────────
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (!tab?.id) return;
-      setDiag(d => ({ ...d, tabId: tab.id }));
       const port = chrome.runtime.connect({ name: `panel-${tab.id}` });
       portRef.current = port;
 
       port.onMessage.addListener((msg: any) => {
-        setDiag(d => ({ ...d, portMsgs: [...d.portMsgs.slice(-4), msg.type] }));
         if (msg.type === 'idle') { setStatus('idle'); setLog([]); return; }
-        if (msg.type === 'show_job_context') { setJobContext({ job_id: msg.job_id, token: msg.token }); return; }
         if (msg.type === 'restore_panel') { setLog(msg.log ?? []); setStatus(msg.status ?? 'idle'); return; }
         if (msg.type === 'append_log') { setLog(prev => [...prev, msg.entry]); return; }
         if (msg.type === 'set_status') { setStatus(msg.status); return; }
@@ -73,13 +89,12 @@ export default function App() {
     if (!text) return;
     setInputText('');
     setLog(prev => [...prev, { kind: 'step', text, done: false }]);
-    sendMsg({ type: 'start_or_fill', text, job_id: jobContext?.job_id, token: jobContext?.token });
-  }, [inputText, sendMsg, jobContext]);
+    sendMsg({ type: 'start_or_fill', text, job_id: activeJob?.job_id, token });
+  }, [inputText, sendMsg, activeJob, token]);
 
   const handleNewSession = useCallback(() => {
     setLog([]);
     setStatus('idle');
-    setJobContext(null);
     sendMsg({ type: 'new_session' });
   }, [sendMsg]);
 
@@ -98,11 +113,14 @@ export default function App() {
         </div>
       </div>
 
+      {/* Link status — which user / which job */}
+      <LinkBanner state={linkState} username={username} job={activeJob} />
+
       {/* Feed */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {status === 'idle' && log.length === 0 && (
           <div style={{ color: '#475569', textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
-            {hasJob ? 'Navigate to the application form, then click Fill.' : 'No active job — browse to a job listing.'}
+            {hasJob ? 'Navigate to the application form, then click Fill.' : 'No active job — browse to a job listing in jobstrainer.'}
           </div>
         )}
 
@@ -138,7 +156,7 @@ export default function App() {
       </div>
 
       {/* Fill shortcut + input bar */}
-      <div style={{ borderTop: '1px solid #1e293b', padding: '6px 10px 4px', flexShrink: 0 }}>
+      <div style={{ borderTop: '1px solid #1e293b', padding: '6px 10px 8px', flexShrink: 0 }}>
         <button
           onClick={() => handleSend('fill the form')}
           style={{ width: '100%', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6, padding: '7px', fontWeight: 600, fontSize: 12, cursor: 'pointer', marginBottom: 6 }}
@@ -164,13 +182,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* DEBUG strip — remove once fixed */}
-      <div style={{ borderTop: '1px solid #1e293b', padding: '4px 10px', fontSize: 9, fontFamily: 'monospace', color: '#64748b', flexShrink: 0, lineHeight: 1.5 }}>
-        <div>tab={diag.tabId ?? '?'} · jobCtx={jobContext?.job_id?.slice(0, 8) ?? 'NULL'} · stored={diag.storedJob ?? '…'}</div>
-        <div>bridge={diag.bridge ?? '…'} · event={diag.event ?? '…'}</div>
-        <div>msgs: {diag.portMsgs.join(' → ') || '(none)'}</div>
-      </div>
-
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -179,6 +190,31 @@ export default function App() {
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
       `}</style>
+    </div>
+  );
+}
+
+function LinkBanner({ state, username, job }: { state: LinkState; username: string | null; job: ActiveJob | null }) {
+  const base: React.CSSProperties = {
+    padding: '6px 12px', fontSize: 11, borderBottom: '1px solid #1e293b',
+    display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+  };
+
+  if (state === 'unlinked') {
+    return <div style={{ ...base, color: '#64748b' }}>Not linked — open a job in jobstrainer.</div>;
+  }
+  if (state === 'expired') {
+    return <div style={{ ...base, color: '#fca5a5' }}>Session expired — re-open the job in jobstrainer.</div>;
+  }
+  return (
+    <div style={base}>
+      <span style={{ color: '#94a3b8' }}>
+        👤 <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{state === 'checking' ? '…' : username}</span>
+      </span>
+      <span style={{ color: '#334155' }}>·</span>
+      <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        💼 <span style={{ color: '#7dd3fc' }}>{job?.job_title || job?.job_id?.slice(0, 8)}</span>
+      </span>
     </div>
   );
 }

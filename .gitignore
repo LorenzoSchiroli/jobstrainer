@@ -18,4 +18,6 @@ output/
 .env
 .DS_Store
 .worktrees
-.superpowers/
+.superpowers
+.playwright-mcp
+.vite

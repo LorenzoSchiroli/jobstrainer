@@ -8,74 +8,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   chrome.storage.local.set({ activeSessions: sessionManager.activeSessions() });
 });
 
-// Set by frontend_bridge content script (register_pending) before/as the job tab
-// opens. The JobCard link uses rel="noopener", which severs tab.openerTabId, so the
-// localStorage-via-opener path below cannot run — this variable is the real path.
-let pendingNextTab: { job_id: string; token: string } | null = null;
-
-// ── register_pending from the frontend content script ───────────────────────
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type === 'register_pending' && msg.job_id && msg.token) {
-    pendingNextTab = { job_id: msg.job_id as string, token: msg.token as string };
-    // Persist as the "active job" so the panel can pick it up on ANY tab the user
-    // ends up on (jobstrainer → LinkedIn → company site is a multi-tab journey, so
-    // per-tab pending alone is not enough). Survives service-worker suspension too.
-    chrome.storage.local.set({ activeJob: { job_id: msg.job_id, token: msg.token } });
-    console.log('[tailorer] register_pending stored, job_id=%s', msg.job_id);
-  }
-});
+// The user↔offer link lives entirely in chrome.storage.local ({ token, activeJob }),
+// written by content/frontend_bridge.js and read by the panel. The service worker no
+// longer captures jobs per-tab — it only manages live fill sessions and panel ports.
 
 // ── Tab lifecycle ──────────────────────────────────────────────────────────
-chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!tab.id) return;
-
-  // Chrome path: opener tab accessible, read pending from its localStorage.
-  if (tab.openerTabId) {
-    try {
-      const [result] = await chrome.scripting.executeScript({
-        target: { tabId: tab.openerTabId },
-        func: () => ({
-          pending: localStorage.getItem('tailorer_pending'),
-          token: localStorage.getItem('access_token'),
-        }),
-      });
-      const { pending, token } = result.result as { pending: string | null; token: string | null };
-      if (pending && token) {
-        const { job_id } = JSON.parse(pending) as { job_id: string };
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.openerTabId },
-          func: () => localStorage.removeItem('tailorer_pending'),
-        });
-        sessionManager.setPending(tab.id, { job_id, token });
-        // Persist globally so a panel on ANY later tab (LinkedIn → company site) can
-        // pick the job up. This opener path is the reliable capture mechanism.
-        chrome.storage.local.set({ activeJob: { job_id, token } });
-        console.log('[tailorer] activeJob captured via opener path, job_id=%s', job_id);
-        chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
-        return;
-      }
-    } catch (_) {}
-  }
-
-  // noopener path: openerTabId is severed; frontend_bridge already forwarded the
-  // job + token via register_pending. Claim it for this newly opened tab.
-  if (pendingNextTab) {
-    sessionManager.setPending(tab.id, pendingNextTab);
-    chrome.storage.local.set({ activeJob: pendingNextTab });
-    pendingNextTab = null;
-    console.log('[tailorer] pending claimed via register_pending for tab', tab.id);
-    chrome.sidePanel?.open?.({ tabId: tab.id }).catch(() => {});
-  }
-});
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status !== 'complete') return;
-  const pending = sessionManager.getPending(tabId);
-  const session = sessionManager.get(tabId);
-  if (!pending && !session) return;
-  chrome.sidePanel?.open?.({ tabId }).catch(() => {});
-  if (pending) {
-    sessionManager.sendToPanel(tabId, { type: 'show_job_context', job_id: pending.job_id, token: pending.token });
+  // Re-open the side panel on tabs that already have an active fill session.
+  if (sessionManager.get(tabId)) {
+    chrome.sidePanel?.open?.({ tabId }).catch(() => {});
   }
 });
 
@@ -94,11 +36,8 @@ chrome.runtime.onConnect.addListener((port) => {
     sessionManager.removePort(tabId);
   });
 
-  const pending = sessionManager.getPending(tabId);
   const session = sessionManager.get(tabId);
-  if (pending) {
-    port.postMessage({ type: 'show_job_context', job_id: pending.job_id, token: pending.token });
-  } else if (session) {
+  if (session) {
     const wsAlive = session.ws.readyState === WebSocket.OPEN;
     port.postMessage({
       type: 'restore_panel',
@@ -106,7 +45,7 @@ chrome.runtime.onConnect.addListener((port) => {
       status: wsAlive ? session.currentStatus : 'error',
     });
   } else {
-    chrome.storage.local.get(['activeSessions', 'activeJob'], ({ activeSessions, activeJob }) => {
+    chrome.storage.local.get('activeSessions', ({ activeSessions }) => {
       const saved = (activeSessions as any[] || []).find((s: any) => s.tabId === tabId);
       if (saved) {
         port.postMessage({
@@ -114,10 +53,6 @@ chrome.runtime.onConnect.addListener((port) => {
           log: [...saved.log, { kind: 'error', message: 'Connection lost — restart session.' }],
           status: 'error',
         });
-      } else if (activeJob?.job_id && activeJob?.token) {
-        // No per-tab pending/session, but the user selected a job earlier (possibly
-        // on a different tab). Surface it here so Fill has a job to work with.
-        port.postMessage({ type: 'show_job_context', job_id: activeJob.job_id, token: activeJob.token });
       } else {
         port.postMessage({ type: 'idle' });
       }
@@ -149,20 +84,20 @@ chrome.runtime.onConnect.addListener((port) => {
 
     if (msg.type === 'start_or_fill') {
       const feedbackText: string = msg.text ?? '';
-      const pending = sessionManager.getPending(tabId);
       const session = sessionManager.get(tabId);
 
-      const job_id: string = session?.job_id ?? pending?.job_id ?? (msg.job_id as string) ?? '';
-      const token: string = session?.token ?? pending?.token ?? (msg.token as string) ?? '';
+      // The job + token come from the panel, which reads them from storage (the
+      // single source of truth). A live session keeps its own copy once opened.
+      const job_id: string = session?.job_id ?? (msg.job_id as string) ?? '';
+      const token: string = session?.token ?? (msg.token as string) ?? '';
 
       if (!job_id || !token) {
-        sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job first.' });
+        sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job in jobstrainer first.' });
         return;
       }
 
       // Open session (and WS) if not already open
       if (!session) {
-        sessionManager.clearPending(tabId);
         sessionManager.open(tabId, job_id, token, handleAgentMessage);
       }
 

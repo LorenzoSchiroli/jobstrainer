@@ -1,5 +1,5 @@
 import Page from '../browser/page';
-import type { Session, PendingJob, LogEntry } from './types';
+import type { Session, LogEntry } from './types';
 
 export type MessageHandler = (
   tabId: number,
@@ -8,7 +8,6 @@ export type MessageHandler = (
 
 export class SessionManager {
   private readonly sessions = new Map<number, Session>();
-  private readonly pendingJobs = new Map<number, PendingJob>();
   private readonly ports = new Map<number, chrome.runtime.Port>();
 
   // ── Ports ──────────────────────────────────────────────────────────────────
@@ -23,20 +22,6 @@ export class SessionManager {
 
   sendToPanel(tabId: number, msg: unknown): void {
     this.ports.get(tabId)?.postMessage(msg);
-  }
-
-  // ── Pending jobs ───────────────────────────────────────────────────────────
-
-  setPending(tabId: number, job: PendingJob): void {
-    this.pendingJobs.set(tabId, job);
-  }
-
-  getPending(tabId: number): PendingJob | undefined {
-    return this.pendingJobs.get(tabId);
-  }
-
-  clearPending(tabId: number): void {
-    this.pendingJobs.delete(tabId);
   }
 
   // ── Sessions ───────────────────────────────────────────────────────────────
@@ -67,13 +52,6 @@ export class SessionManager {
         await onMessage(tabId, msg);
       } catch (e) {
         console.error('[tailorer] onMessage error type=%s err=%s', msg?.type, (e as Error)?.message);
-        const needsResponse = msg && ['navigate', 'request_snapshot', 'execute_actions'].includes(msg.type as string);
-        if (needsResponse && ws.readyState === WebSocket.OPEN) {
-          const tab = await chrome.tabs.get(tabId).catch(() => null);
-          ws.send(JSON.stringify({
-            url: tab?.url ?? '', title: tab?.title ?? '', elements: '',
-          }));
-        }
       }
     };
 
@@ -126,7 +104,6 @@ export class SessionManager {
       s.page.detach().catch(() => {});
       this.sessions.delete(tabId);
     }
-    this.pendingJobs.delete(tabId);
     this.ports.delete(tabId);
   }
 

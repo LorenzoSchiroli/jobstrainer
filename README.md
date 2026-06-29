@@ -72,3 +72,8 @@ Things to change:
 - if it fails the fill it should retry autonomously correcting the fill
 - the agent should be ready for a correction from the user (the usual bar)
 - take inspiration from battle tested tools
+
+
+Infrastructure idea (cloud agnostic):
+- tools: terraform / opentofu + kubernates
+- 
