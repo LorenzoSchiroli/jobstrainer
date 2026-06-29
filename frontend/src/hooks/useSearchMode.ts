@@ -1,14 +1,29 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 export type SearchMode = 'basic' | 'advanced'
 
-export function useSearchMode() {
-  const [mode, setModeState] = useState<SearchMode>(
-    () => (localStorage.getItem('search_mode') as SearchMode) || 'basic',
-  )
-  const setMode = (m: SearchMode) => {
-    localStorage.setItem('search_mode', m)
-    setModeState(m)
+const KEY = 'search_mode'
+const listeners = new Set<() => void>()
+
+function getSnapshot(): SearchMode {
+  return (localStorage.getItem(KEY) as SearchMode) || 'basic'
+}
+
+function subscribe(cb: () => void) {
+  listeners.add(cb)
+  window.addEventListener('storage', cb)
+  return () => {
+    listeners.delete(cb)
+    window.removeEventListener('storage', cb)
   }
-  return { mode, setMode }
+}
+
+function setSearchMode(m: SearchMode) {
+  localStorage.setItem(KEY, m)
+  listeners.forEach((l) => l())
+}
+
+export function useSearchMode() {
+  const mode = useSyncExternalStore(subscribe, getSnapshot)
+  return { mode, setMode: setSearchMode }
 }

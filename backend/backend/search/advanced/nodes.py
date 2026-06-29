@@ -8,12 +8,16 @@ from backend.search.advanced.llm import (
 )
 
 
-async def node_clarify(state: dict) -> dict:
+async def node_generate_questions(state: dict) -> dict:
     questions = await generate_clarify_questions(
         state["query"], state.get("cv_text", ""), state.get("preference_memory", "")
     )
-    answers = interrupt({"clarify_questions": questions})
-    return {"clarify_questions": questions, "clarify_answers": answers}
+    return {"clarify_questions": questions}
+
+
+async def node_clarify(state: dict) -> dict:
+    answers = interrupt({"clarify_questions": state.get("clarify_questions", [])})
+    return {"clarify_answers": answers}
 
 
 async def node_search(state: dict, *, biencoder, reranker, os_client, groq_client) -> dict:

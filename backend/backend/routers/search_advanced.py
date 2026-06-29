@@ -123,15 +123,20 @@ async def resume_advanced_search(
     if not scored:
         return []
 
-    by_id = {r["job_id"]: r for r in scored}
+    job_ids = [r["job_id"] for r in scored if r.get("job_id")]
+    if not job_ids:
+        return []
     result = await session.execute(
-        select(Job).options(selectinload(Job.company)).where(Job.id.in_(list(by_id.keys())))
+        select(Job).options(selectinload(Job.company)).where(Job.id.in_(job_ids))
     )
     jobs_by_id = {str(job.id): job for job in result.scalars()}
 
     response: list[AdvancedJobResult] = []
     for r in scored:  # already sorted by fit_score desc
-        job = jobs_by_id.get(r["job_id"])
+        jid = r.get("job_id")
+        if not jid:
+            continue
+        job = jobs_by_id.get(jid)
         if job is None:
             continue
         base = JobSearchResponse.model_validate(job, from_attributes=True)
