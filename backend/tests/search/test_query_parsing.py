@@ -61,6 +61,11 @@ def test_consulting_positive_and_negative():
     assert parse_query("python dev without consulting").is_consulting is False
 
 
+def test_hyphenated_negation():
+    assert parse_query("python dev non-startup").is_startup is False
+    assert parse_query("python dev non-consulting").is_consulting is False
+
+
 def test_languages():
     assert parse_query("dev fluent in german").languages_required == ["German"]
     assert parse_query("english-speaking dev").languages_required == ["English"]

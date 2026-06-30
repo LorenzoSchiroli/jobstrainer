@@ -60,7 +60,8 @@ _COUNTRIES = {
 # longest first so multi-word countries win
 _COUNTRY_KEYS = sorted(_COUNTRIES, key=len, reverse=True)
 
-_NEG = r"(?:no|not|without|non[- ]?|excluding)\s+"
+_NEG = r"(?:(?:no|not|without|excluding)\s+|non[\s-]?)"
+_OP = r"(?:>=|≥|above|over|at least|min(?:imum)?|greater than|more than)\s*"
 
 
 def parse_query(query: str) -> SearchFilters:
@@ -99,7 +100,6 @@ def parse_query(query: str) -> SearchFilters:
         strip(r"\bthis week\b")
 
     # --- numeric thresholds (explicit phrasing only) ---
-    _OP = r"(?:>=|≥|above|over|at least|min(?:imum)?|greater than|more than)\s*"
     mf = re.search(r"financial(?: health)?(?: score)?\s*" + _OP + r"(\d+)", text)
     if mf:
         fields["min_financial_health_score"] = int(mf.group(1))
@@ -146,9 +146,12 @@ def parse_query(query: str) -> SearchFilters:
 
     # --- strict flag ---
     for pattern, value in _STRICT_RULES:
+        if "strict" in fields:
+            continue
         if re.search(pattern, text):
             fields["strict"] = value
             strip(pattern)
+            break
 
     semantic = re.sub(r"\s{2,}", " ", semantic).strip(" ,.-")
     if not semantic:
