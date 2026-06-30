@@ -19,7 +19,7 @@ export default function Login() {
       const { access_token } = await fn(username, password)
       localStorage.setItem('access_token', access_token)
       const user = await me()
-      navigate(user.has_cv ? '/search' : '/cv')
+      navigate('/search')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Something went wrong')
     } finally {
