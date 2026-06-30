@@ -5,7 +5,7 @@ import { getPreferenceMemory, setPreferenceMemory } from '../api/preferences'
 import { getCV, uploadCV } from '../api/cv'
 import { useSearchMode } from '../hooks/useSearchMode'
 
-export default function Sidebar() {
+export default function Sidebar({ onToggle }: { onToggle: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, setMode } = useSearchMode()
@@ -72,6 +72,11 @@ export default function Sidebar() {
       width: 240, minWidth: 240, height: '100vh', borderRight: '1px solid #2a2a2a',
       padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#0f0f0f',
     }}>
+      <button onClick={onToggle} aria-label="Collapse sidebar"
+              style={{ alignSelf: 'flex-end', background: 'transparent', color: '#aaa', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}>
+        ☰
+      </button>
+
       <div style={{ fontWeight: 600 }}>{user?.username || '...'}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
