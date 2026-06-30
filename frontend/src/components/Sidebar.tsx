@@ -45,6 +45,7 @@ export default function Sidebar() {
       setCvError(err.response?.data?.detail || 'Upload failed')
     } finally {
       setCvBusy(false)
+      if (cvInputRef.current) cvInputRef.current.value = ''
     }
   }
 

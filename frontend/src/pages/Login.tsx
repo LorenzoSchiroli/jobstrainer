@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { login, register, me } from '../api/auth'
+import { login, register } from '../api/auth'
 
 export default function Login() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -18,7 +18,6 @@ export default function Login() {
       const fn = mode === 'login' ? login : register
       const { access_token } = await fn(username, password)
       localStorage.setItem('access_token', access_token)
-      const user = await me()
       navigate('/search')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Something went wrong')
