@@ -105,12 +105,18 @@ Some keywords are also legitimate content words ("contract" in "contract law",
 boosts** (not hard filters), the parser favors precision of the content query:
 
 - **Unambiguous control phrases are stripped** from `semantic_query`: time
-  windows, "strictly", "remote"/"wfh", "hybrid", "on-site", explicit
-  language/country phrases, explicit numeric-threshold phrases.
+  windows, "strictly", "remote"/"wfh", "hybrid", "on-site", explicit language
+  phrases, explicit numeric-threshold phrases.
 - **Ambiguous content-ish words are NOT stripped**: they set the filter boost but
   stay in `semantic_query` (e.g. "contract law" → `employment_type=contract` boost
   AND `semantic_query="contract law"`). This gets the boost without amputating
   the content search.
+- **`country` is set but NOT stripped.** `build_clauses` does not currently
+  consume `country`, so stripping the location word would drop location intent
+  entirely. Keeping it (e.g. "python jobs in germany" → `country="Germany"` AND
+  `semantic_query` still contains "germany") preserves the location signal for
+  hybrid retrieval. Wiring `country` into `build_clauses` is a possible follow-up
+  (out of scope here).
 - Each lexicon entry is tagged `strip` or `keep` to encode this distinction; the
   default for content-noun-collision-prone terms is `keep`.
 
