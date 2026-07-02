@@ -60,7 +60,7 @@ _COUNTRIES = {
 # longest first so multi-word countries win
 _COUNTRY_KEYS = sorted(_COUNTRIES, key=len, reverse=True)
 
-_NEG = r"(?:(?:no|not|without|excluding)\s+|non[\s-]?)"
+_NEG = r"\b(?:(?:no|not|without|excluding)\s+|non[\s-]?)"
 _OP = r"(?:>=|≥|above|over|at least|min(?:imum)?|greater than|more than)\s*"
 
 
@@ -129,10 +129,12 @@ def parse_query(query: str) -> SearchFilters:
               r")(?:\s*(?:,|and|&)\s*(?:" + _LANG_ALT + r"))*)\b")
 
     # --- country ---
+    # Set country field but do NOT strip from semantic_query — build_clauses
+    # does not consume country, so stripping would silently drop the location
+    # word from hybrid search entirely.
     for key in _COUNTRY_KEYS:
         if re.search(r"\b" + re.escape(key) + r"\b", text):
             fields["country"] = _COUNTRIES[key]
-            strip(r"\b(?:in\s+)?(?:the\s+)?" + re.escape(key) + r"\b")
             break
 
     # --- enum filters (first per field wins) ---

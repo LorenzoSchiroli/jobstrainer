@@ -73,8 +73,16 @@ def test_languages():
 
 
 def test_country():
-    assert parse_query("python jobs in germany").country == "Germany"
+    f_de = parse_query("python jobs in germany")
+    assert f_de.country == "Germany"
+    # country word must remain in semantic_query so hybrid search still uses it
+    assert "germany" in f_de.semantic_query
     assert parse_query("python jobs in the united kingdom").country == "United Kingdom"
+
+
+def test_no_false_negation_on_unrelated_word():
+    # "casino" ends in "no" — must not falsely negate is_startup
+    assert parse_query("casino startup jobs").is_startup is True
 
 
 def test_numeric_thresholds():
