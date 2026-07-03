@@ -68,14 +68,18 @@ export default function Sidebar({ open, onToggle }: { open: boolean; onToggle: (
   )
 
   return (
-    <aside style={{
-      position: 'fixed', top: 0, left: 0, zIndex: 30,
-      width: 240, minWidth: 240, height: '100vh', borderRight: '1px solid #2a2a2a',
-      padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#0f0f0f',
-      overflowY: 'auto',
-      transform: open ? 'translateX(0)' : 'translateX(-100%)',
-      transition: 'transform 200ms ease',
-    }}>
+    <aside
+      aria-hidden={!open}
+      style={{
+        position: 'fixed', top: 0, left: 0, zIndex: 30,
+        width: 240, minWidth: 240, height: '100vh', borderRight: '1px solid #2a2a2a',
+        padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#0f0f0f',
+        overflowY: 'auto',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 200ms ease',
+      }}
+      {...(!open ? ({ inert: '' } as unknown as Record<string, string>) : {})}
+    >
       <button onClick={onToggle} aria-label="Collapse sidebar"
               style={{ alignSelf: 'flex-end', background: 'transparent', color: '#aaa', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}>
         ☰
