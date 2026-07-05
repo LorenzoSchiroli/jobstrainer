@@ -21,7 +21,8 @@ async def _job(session, company_id, url="https://ex.com/1") -> Job:
 async def test_job_event_indexes_in_opensearch(db_session):
     company = await _company(db_session)
     job = await _job(db_session, company.id)
-    db_session.add(Outbox(event_type="job_upserted", entity_id=job.id, payload={"embedding": [0.1] * 384}))
+    job.embedding = [0.1] * 384
+    db_session.add(Outbox(event_type="job_upserted", entity_id=job.id, payload={}))
     await db_session.commit()
 
     mock_os = AsyncMock()

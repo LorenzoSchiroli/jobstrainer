@@ -25,7 +25,7 @@ def _flatten_summary(summary: dict | None) -> str:
     return " ".join(parts)
 
 
-def _build_job_doc(job: Job, embedding: list[float] | None) -> dict:
+def _build_job_doc(job: Job) -> dict:
     c = job.company
     return {
         "job_id": str(job.id),
@@ -33,7 +33,7 @@ def _build_job_doc(job: Job, embedding: list[float] | None) -> dict:
         "title": job.title,
         "description": job.description or "",
         "summary_text": _flatten_summary(job.summary),
-        "embedding": embedding,
+        "embedding": job.embedding,
         "employment_type": job.employment_type,
         "location_type": job.location_type,
         "seniority": job.seniority,
@@ -55,7 +55,7 @@ async def _handle_job_upserted(event: Outbox, session: AsyncSession, os_client: 
     job = result.scalar_one_or_none()
     if job is None:
         return
-    doc = _build_job_doc(job, event.payload.get("embedding"))
+    doc = _build_job_doc(job)
     await os_client.index(index=INDEX_NAME, id=str(job.id), body=doc)
 
 
