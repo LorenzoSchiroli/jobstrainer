@@ -30,8 +30,7 @@ async def upsert_job(body: JobRequest, response: Response, session: AsyncSession
     job_result = await session.execute(select(Job).where(Job.url == body.url))
     job = job_result.scalar_one_or_none()
 
-    embedding = body.embedding
-    job_data = body.model_dump(exclude={"company_name", "embedding"})
+    job_data = body.model_dump(exclude={"company_name"})
 
     if job is None:
         job = Job(company_id=company.id, **job_data)
@@ -48,7 +47,7 @@ async def upsert_job(body: JobRequest, response: Response, session: AsyncSession
     session.add(Outbox(
         event_type="job_upserted",
         entity_id=job.id,
-        payload={"embedding": embedding},
+        payload={},
     ))
 
     await session.commit()

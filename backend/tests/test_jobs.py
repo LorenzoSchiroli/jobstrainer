@@ -108,7 +108,7 @@ async def test_create_job_accepts_summary_and_embedding(client):
 
 
 from sqlalchemy import select
-from backend.models import Outbox
+from backend.models import Outbox, Job
 
 
 async def test_job_upsert_creates_outbox_event(client, db_session):
@@ -123,4 +123,36 @@ async def test_job_upsert_creates_outbox_event(client, db_session):
     )
     events = result.scalars().all()
     assert len(events) == 1
-    assert events[0].payload["embedding"] == [0.5] * 384
+    assert events[0].payload == {}
+
+
+async def test_create_job_persists_embedding_in_postgres(client, db_session):
+    resp = await client.post("/jobs/", json={
+        "url": "https://example.com/embed-persist",
+        "title": "Engineer",
+        "company_name": "Acme",
+        "embedding": [0.25] * 384,
+    })
+    job_id = resp.json()["id"]
+    result = await db_session.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one()
+    assert job.embedding == [0.25] * 384
+
+
+async def test_upsert_job_does_not_overwrite_existing_embedding(client, db_session):
+    await client.post("/jobs/", json={
+        "url": "https://example.com/embed-fill-only",
+        "title": "Engineer",
+        "company_name": "Acme",
+        "embedding": [0.1] * 384,
+    })
+    resp = await client.post("/jobs/", json={
+        "url": "https://example.com/embed-fill-only",
+        "title": "Engineer",
+        "company_name": "Acme",
+        "embedding": [0.9] * 384,
+    })
+    job_id = resp.json()["id"]
+    result = await db_session.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one()
+    assert job.embedding == [0.1] * 384
