@@ -56,4 +56,3 @@ async def test_company_upsert_creates_outbox_event(client, db_session):
     )
     events = result.scalars().all()
     assert len(events) == 1
-    assert events[0].payload == {}

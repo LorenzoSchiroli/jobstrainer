@@ -123,7 +123,6 @@ async def test_job_upsert_creates_outbox_event(client, db_session):
     )
     events = result.scalars().all()
     assert len(events) == 1
-    assert events[0].payload == {}
 
 
 async def test_create_job_persists_embedding_in_postgres(client, db_session):

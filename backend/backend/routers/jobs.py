@@ -47,7 +47,6 @@ async def upsert_job(body: JobRequest, response: Response, session: AsyncSession
     session.add(Outbox(
         event_type="job_upserted",
         entity_id=job.id,
-        payload={},
     ))
 
     await session.commit()

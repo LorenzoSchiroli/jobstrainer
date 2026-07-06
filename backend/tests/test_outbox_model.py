@@ -6,7 +6,6 @@ async def test_outbox_row_can_be_inserted(db_session):
     event = Outbox(
         event_type="job_upserted",
         entity_id=uuid.uuid4(),
-        payload={"embedding": [0.1, 0.2]},
     )
     db_session.add(event)
     await db_session.commit()

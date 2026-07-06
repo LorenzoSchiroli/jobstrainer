@@ -46,7 +46,6 @@ async def upsert_company(body: CompanyRequest, response: Response, session: Asyn
     session.add(Outbox(
         event_type="company_upserted",
         entity_id=company.id,
-        payload={},
     ))
 
     await session.commit()
