@@ -31,7 +31,8 @@ async def prefs_client(engine):
 
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.outbox_worker", new_callable=AsyncMock), \
+         patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
+         patch("backend.main.retention_worker", new_callable=AsyncMock), \
          patch("backend.main._backfill_created_at", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac

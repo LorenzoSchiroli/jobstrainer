@@ -19,7 +19,7 @@ from backend.routers.preferences import router as preferences_router
 from backend.routers.search_advanced import router as search_advanced_router
 from backend.search.models_lifecycle import init_models
 from backend.opensearch_client import init_opensearch, get_opensearch, INDEX_NAME
-from backend.outbox.worker import outbox_worker
+from backend.outbox.worker import reconcile_worker, retention_worker
 from backend.database import get_session_factory
 from backend.models import Job
 
@@ -61,9 +61,11 @@ async def lifespan(app: FastAPI):
         await checkpointer.setup()
         _checkpointer = checkpointer
 
-        task = asyncio.create_task(outbox_worker())
+        reconcile_task = asyncio.create_task(reconcile_worker())
+        retention_task = asyncio.create_task(retention_worker())
         yield
-        task.cancel()
+        reconcile_task.cancel()
+        retention_task.cancel()
 
 
 app = FastAPI(title="jobstrainer backend", lifespan=lifespan)

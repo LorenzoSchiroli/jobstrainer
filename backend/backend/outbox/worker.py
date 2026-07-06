@@ -160,3 +160,25 @@ async def purge_expired_jobs(
         index=INDEX_NAME,
         body={"query": {"range": {"created_at": {"lt": f"now-{max_age_days}d"}}}},
     )
+
+
+async def reconcile_worker() -> None:
+    factory = get_session_factory()
+    while True:
+        try:
+            os_client = get_opensearch()
+            async with factory() as session:
+                await reconcile(session, os_client)
+        except Exception as e:
+            logger.warning("Reconcile worker error: %s", e)
+        await asyncio.sleep(RECONCILE_INTERVAL_SECONDS)
+
+
+async def retention_worker() -> None:
+    while True:
+        try:
+            os_client = get_opensearch()
+            await purge_expired_jobs(os_client)
+        except Exception as e:
+            logger.warning("Retention worker error: %s", e)
+        await asyncio.sleep(RETENTION_INTERVAL_SECONDS)
