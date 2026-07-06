@@ -1,16 +1,24 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from opensearchpy import AsyncOpenSearch
+from opensearchpy.helpers import async_bulk
 
 from backend.database import get_session_factory
 from backend.models import Outbox, Job, Company
-from backend.opensearch_client import get_opensearch, INDEX_NAME
+from backend.opensearch_client import get_opensearch, get_existing_job_ids, INDEX_NAME
 
 logger = logging.getLogger(__name__)
+
+RECONCILE_INTERVAL_SECONDS = 300
+RETENTION_INTERVAL_SECONDS = 21600
+RECONCILE_BATCH_SIZE = 2000
+RECONCILE_WINDOW_DAYS = 30
+RETENTION_MAX_AGE_DAYS = 30
 
 
 def _flatten_summary(summary: dict | None) -> str:
@@ -48,17 +56,6 @@ def _build_job_doc(job: Job) -> dict:
     }
 
 
-async def _handle_job_upserted(event: Outbox, session: AsyncSession, os_client: AsyncOpenSearch) -> None:
-    result = await session.execute(
-        select(Job).options(selectinload(Job.company)).where(Job.id == event.entity_id)
-    )
-    job = result.scalar_one_or_none()
-    if job is None:
-        return
-    doc = _build_job_doc(job)
-    await os_client.index(index=INDEX_NAME, id=str(job.id), body=doc)
-
-
 async def _handle_company_upserted(event: Outbox, session: AsyncSession, os_client: AsyncOpenSearch) -> None:
     result = await session.execute(select(Company).where(Company.id == event.entity_id))
     company = result.scalar_one_or_none()
@@ -90,34 +87,67 @@ async def _handle_company_upserted(event: Outbox, session: AsyncSession, os_clie
     )
 
 
-async def process_pending_events(session: AsyncSession, os_client: AsyncOpenSearch) -> None:
-    result = await session.execute(
-        select(Outbox)
-        .where(Outbox.processed_at.is_(None))
-        .order_by(Outbox.created_at)
-        .limit(100)
-    )
-    events = result.scalars().all()
-    for event in events:
+async def reconcile(
+    session: AsyncSession,
+    os_client: AsyncOpenSearch,
+    batch_size: int = RECONCILE_BATCH_SIZE,
+) -> int:
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=RECONCILE_WINDOW_DAYS)
+
+    # 1. Changed entities: everything with an unprocessed outbox row.
+    events = (
+        await session.execute(select(Outbox).where(Outbox.processed_at.is_(None)))
+    ).scalars().all()
+    changed_job_ids = {e.entity_id for e in events if e.event_type == "job_upserted"}
+    company_events = [e for e in events if e.event_type == "company_upserted"]
+
+    # 2. Missing entities: live jobs (created within the window) absent from OpenSearch.
+    live_ids = [
+        str(jid)
+        for (jid,) in (
+            await session.execute(select(Job.id).where(Job.created_at >= window_start))
+        ).all()
+    ]
+    present = await get_existing_job_ids(os_client, live_ids)
+    missing_ids = {uuid.UUID(i) for i in set(live_ids) - present}
+
+    # 3. Union, newest-first, capped. Re-index from Postgres via the bulk API.
+    to_index = changed_job_ids | missing_ids
+    indexed_ids: set[uuid.UUID] = set()
+    if to_index:
+        jobs = (
+            await session.execute(
+                select(Job)
+                .options(selectinload(Job.company))
+                .where(Job.id.in_(to_index))
+                .order_by(Job.created_at.desc())
+                .limit(batch_size)
+            )
+        ).scalars().all()
+        if jobs:
+            actions = [
+                {"_index": INDEX_NAME, "_id": str(j.id), "_source": _build_job_doc(j)}
+                for j in jobs
+            ]
+            await async_bulk(os_client, actions)
+            indexed_ids = {j.id for j in jobs}
+
+    # 4. Company changes: patch derived fields on their jobs' docs.
+    for event in company_events:
         try:
-            if event.event_type == "job_upserted":
-                await _handle_job_upserted(event, session, os_client)
-            elif event.event_type == "company_upserted":
-                await _handle_company_upserted(event, session, os_client)
-            event.processed_at = datetime.now(timezone.utc)
+            await _handle_company_upserted(event, session, os_client)
         except Exception as e:
-            logger.warning("Outbox event %s failed: %s", event.id, e)
+            logger.warning("Company reconcile %s failed: %s", event.entity_id, e)
+            continue
+        event.processed_at = now
+
+    # 5. Stamp job events whose job was actually indexed this pass (capped-out
+    #    ones stay unprocessed and are retried next tick).
+    for event in events:
+        if event.event_type == "job_upserted" and event.entity_id in indexed_ids:
+            event.processed_at = now
+
     if events:
         await session.commit()
-
-
-async def outbox_worker() -> None:
-    factory = get_session_factory()
-    while True:
-        try:
-            os_client = get_opensearch()
-            async with factory() as session:
-                await process_pending_events(session, os_client)
-        except Exception as e:
-            logger.warning("Outbox worker error: %s", e)
-        await asyncio.sleep(1)
+    return len(indexed_ids)

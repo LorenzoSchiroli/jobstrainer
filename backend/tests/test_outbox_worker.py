@@ -1,7 +1,8 @@
-from unittest.mock import AsyncMock
+import uuid
+from unittest.mock import AsyncMock, patch
 from sqlalchemy import select
 from backend.models import Outbox, Job, Company
-from backend.outbox.worker import process_pending_events
+from backend.outbox.worker import reconcile
 
 
 async def _company(session, name="Acme") -> Company:
@@ -12,54 +13,76 @@ async def _company(session, name="Acme") -> Company:
 
 
 async def _job(session, company_id, url="https://ex.com/1") -> Job:
-    j = Job(url=url, title="Engineer", company_id=company_id)
+    j = Job(url=url, title="Engineer", company_id=company_id, embedding=[0.1] * 384)
     session.add(j)
     await session.flush()
     return j
 
 
-async def test_job_event_indexes_in_opensearch(db_session):
+def _mget(found_ids):
+    async def _call(index, body, _source):
+        return {"docs": [{"_id": i, "found": i in found_ids} for i in body["ids"]]}
+    return _call
+
+
+async def test_reconcile_reindexes_changed_job_even_when_present(db_session):
     company = await _company(db_session)
     job = await _job(db_session, company.id)
-    job.embedding = [0.1] * 384
-    db_session.add(Outbox(event_type="job_upserted", entity_id=job.id, payload={}))
+    db_session.add(Outbox(event_type="job_upserted", entity_id=job.id))
     await db_session.commit()
 
-    mock_os = AsyncMock()
-    await process_pending_events(db_session, mock_os)
+    os_client = AsyncMock()
+    os_client.mget.side_effect = _mget({str(job.id)})  # doc IS present -> only change-log catches it
+    with patch("backend.outbox.worker.async_bulk", new_callable=AsyncMock) as mock_bulk:
+        count = await reconcile(db_session, os_client)
 
-    mock_os.index.assert_called_once()
-    kwargs = mock_os.index.call_args.kwargs
-    assert kwargs["id"] == str(job.id)
-    assert kwargs["body"]["embedding"] == [0.1] * 384
-
-    result = await db_session.execute(select(Outbox))
-    event = result.scalar_one()
-    assert event.processed_at is not None
+    assert count == 1
+    actions = list(mock_bulk.call_args.args[1])
+    assert actions[0]["_id"] == str(job.id)
+    assert actions[0]["_source"]["embedding"] == [0.1] * 384
+    row = (await db_session.execute(select(Outbox))).scalar_one()
+    assert row.processed_at is not None
 
 
-async def test_company_event_calls_update_by_query(db_session):
-    company = await _company(db_session, "TestCo")
-    db_session.add(Outbox(event_type="company_upserted", entity_id=company.id, payload={}))
+async def test_reconcile_reindexes_missing_job_with_no_outbox_row(db_session):
+    company = await _company(db_session, "MissingCo")
+    job = await _job(db_session, company.id, "https://ex.com/missing")
+    await db_session.commit()  # no outbox row: simulates a wiped index
+
+    os_client = AsyncMock()
+    os_client.mget.side_effect = _mget(set())  # doc absent
+    with patch("backend.outbox.worker.async_bulk", new_callable=AsyncMock) as mock_bulk:
+        count = await reconcile(db_session, os_client)
+
+    assert count == 1
+    actions = list(mock_bulk.call_args.args[1])
+    assert actions[0]["_id"] == str(job.id)
+
+
+async def test_reconcile_skips_present_unchanged_job(db_session):
+    company = await _company(db_session, "PresentCo")
+    job = await _job(db_session, company.id, "https://ex.com/present")
     await db_session.commit()
 
-    mock_os = AsyncMock()
-    await process_pending_events(db_session, mock_os)
+    os_client = AsyncMock()
+    os_client.mget.side_effect = _mget({str(job.id)})  # present AND no outbox row
+    with patch("backend.outbox.worker.async_bulk", new_callable=AsyncMock) as mock_bulk:
+        count = await reconcile(db_session, os_client)
 
-    mock_os.update_by_query.assert_called_once()
-    result = await db_session.execute(select(Outbox))
-    assert result.scalar_one().processed_at is not None
+    assert count == 0
+    mock_bulk.assert_not_called()
 
 
-async def test_opensearch_failure_leaves_event_unprocessed(db_session):
-    company = await _company(db_session, "FailCo")
-    job = await _job(db_session, company.id, "https://ex.com/fail")
-    db_session.add(Outbox(event_type="job_upserted", entity_id=job.id, payload={}))
+async def test_reconcile_company_event_runs_update_by_query(db_session):
+    company = await _company(db_session, "PatchCo")
+    db_session.add(Outbox(event_type="company_upserted", entity_id=company.id))
     await db_session.commit()
 
-    mock_os = AsyncMock()
-    mock_os.index.side_effect = Exception("OpenSearch down")
-    await process_pending_events(db_session, mock_os)
+    os_client = AsyncMock()
+    os_client.mget.side_effect = _mget(set())
+    with patch("backend.outbox.worker.async_bulk", new_callable=AsyncMock):
+        await reconcile(db_session, os_client)
 
-    result = await db_session.execute(select(Outbox))
-    assert result.scalar_one().processed_at is None
+    os_client.update_by_query.assert_called_once()
+    row = (await db_session.execute(select(Outbox))).scalar_one()
+    assert row.processed_at is not None
