@@ -86,3 +86,12 @@ async def test_reconcile_company_event_runs_update_by_query(db_session):
     os_client.update_by_query.assert_called_once()
     row = (await db_session.execute(select(Outbox))).scalar_one()
     assert row.processed_at is not None
+
+
+async def test_purge_expired_jobs_deletes_old_docs():
+    from backend.outbox.worker import purge_expired_jobs
+    os_client = AsyncMock()
+    await purge_expired_jobs(os_client, max_age_days=30)
+    os_client.delete_by_query.assert_called_once()
+    body = os_client.delete_by_query.call_args.kwargs["body"]
+    assert body["query"]["range"]["created_at"]["lt"] == "now-30d"

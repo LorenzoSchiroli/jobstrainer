@@ -151,3 +151,12 @@ async def reconcile(
     if events:
         await session.commit()
     return len(indexed_ids)
+
+
+async def purge_expired_jobs(
+    os_client: AsyncOpenSearch, max_age_days: int = RETENTION_MAX_AGE_DAYS
+) -> None:
+    await os_client.delete_by_query(
+        index=INDEX_NAME,
+        body={"query": {"range": {"created_at": {"lt": f"now-{max_age_days}d"}}}},
+    )
