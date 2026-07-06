@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 import backend.opensearch_client as m
+from backend.opensearch_client import get_existing_job_ids
 
 
 async def test_init_creates_index_when_missing(monkeypatch):
@@ -28,3 +29,29 @@ def test_get_opensearch_raises_before_init():
     m._client = None
     with pytest.raises(AssertionError):
         m.get_opensearch()
+
+
+async def test_get_existing_job_ids_returns_only_found():
+    os_client = AsyncMock()
+    os_client.mget.return_value = {"docs": [
+        {"_id": "a", "found": True},
+        {"_id": "b", "found": False},
+        {"_id": "c", "found": True},
+    ]}
+    result = await get_existing_job_ids(os_client, ["a", "b", "c"])
+    assert result == {"a", "c"}
+
+
+async def test_get_existing_job_ids_empty_skips_call():
+    os_client = AsyncMock()
+    result = await get_existing_job_ids(os_client, [])
+    assert result == set()
+    os_client.mget.assert_not_called()
+
+
+async def test_get_existing_job_ids_chunks_large_input():
+    os_client = AsyncMock()
+    os_client.mget.return_value = {"docs": []}
+    ids = [str(i) for i in range(12000)]
+    await get_existing_job_ids(os_client, ids, chunk_size=5000)
+    assert os_client.mget.call_count == 3

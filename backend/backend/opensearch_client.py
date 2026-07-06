@@ -54,6 +54,19 @@ def get_opensearch() -> AsyncOpenSearch:
     return _client
 
 
+async def get_existing_job_ids(
+    os_client: AsyncOpenSearch, ids: list[str], chunk_size: int = 5000
+) -> set[str]:
+    found: set[str] = set()
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start:start + chunk_size]
+        resp = await os_client.mget(index=INDEX_NAME, body={"ids": chunk}, _source=False)
+        for doc in resp["docs"]:
+            if doc.get("found"):
+                found.add(doc["_id"])
+    return found
+
+
 async def init_opensearch() -> None:
     global _client
     url = os.environ["OPENSEARCH_URL"]
