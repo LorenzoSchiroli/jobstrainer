@@ -45,7 +45,7 @@ async def backfill(batch_size: int = 100) -> None:
                 skipped += 1
                 continue
             job.embedding = model.encode(f"{job.title}\n{text}").tolist()
-            session.add(Outbox(event_type="job_upserted", entity_id=job.id, payload={}))
+            session.add(Outbox(event_type="job_upserted", entity_id=job.id))
             updated += 1
             if updated % batch_size == 0:
                 await session.commit()
