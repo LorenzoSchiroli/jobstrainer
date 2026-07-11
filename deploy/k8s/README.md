@@ -27,3 +27,15 @@ doesn't watch for image changes.
 
     kubectl apply -f deploy/k8s/opensearch.yaml
     kubectl wait --for=condition=ready pod -l app=opensearch --timeout=180s
+
+## 4. Secret
+
+Requires the repo's `.env` file (see `CLAUDE.md` for required vars).
+
+    kubectl create secret generic jobstrainer-secrets \
+      --from-env-file=.env \
+      --from-literal=DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer \
+      --from-literal=OPENSEARCH_URL=http://opensearch:9200 \
+      --from-literal=BACKEND_URL=http://api:8000
+
+To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets` then re-run the command above, then restart any running pods (`kubectl rollout restart deployment api worker`).
