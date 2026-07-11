@@ -43,3 +43,14 @@ Due to kubectl version constraints, `--from-env-file` cannot be combined with
       -p '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
 
 To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets` then re-run both commands above, then restart any running pods (`kubectl rollout restart deployment api worker`).
+
+## 5. Bootstrap (migrations + OpenSearch index + checkpointer tables)
+
+    kubectl apply -f deploy/k8s/bootstrap-job.yaml
+    kubectl wait --for=condition=complete job/jobstrainer-bootstrap --timeout=180s
+
+Job specs are immutable, so re-running bootstrap (e.g. after a new
+migration) requires deleting the old Job first:
+
+    kubectl delete job jobstrainer-bootstrap --ignore-not-found
+    kubectl apply -f deploy/k8s/bootstrap-job.yaml
