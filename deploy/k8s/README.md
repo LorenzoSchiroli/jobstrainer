@@ -79,3 +79,17 @@ verify the pod spec without waiting):
     kubectl wait --for=condition=complete job/ingestion-manual-test --timeout=600s
     kubectl logs job/ingestion-manual-test
     kubectl delete job ingestion-manual-test
+
+## 9. Frontend
+
+    kubectl apply -f deploy/k8s/frontend-deployment.yaml
+    kubectl wait --for=condition=available deployment/frontend --timeout=60s
+
+## Full stack access
+
+    kubectl port-forward svc/api 8000:8000 &
+    kubectl port-forward svc/frontend 3000:80 &
+
+Open http://localhost:3000 — this matches docker-compose's ports exactly, so
+the frontend's baked-in VITE_API_URL and the backend's CORS allow-list both
+work unchanged.
