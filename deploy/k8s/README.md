@@ -22,3 +22,8 @@ doesn't watch for image changes.
 
     kubectl apply -f deploy/k8s/postgres.yaml
     kubectl wait --for=condition=ready pod -l app=postgres --timeout=120s
+
+## 3. OpenSearch
+
+    kubectl apply -f deploy/k8s/opensearch.yaml
+    kubectl wait --for=condition=ready pod -l app=opensearch --timeout=180s
