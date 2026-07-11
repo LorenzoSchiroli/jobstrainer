@@ -61,3 +61,9 @@ migration) requires deleting the old Job first:
     kubectl wait --for=condition=available deployment/api --timeout=120s
     kubectl port-forward svc/api 8000:8000 &
     curl http://localhost:8000/health   # {"status":"ok"}
+
+## 7. Worker
+
+    kubectl apply -f deploy/k8s/worker-deployment.yaml
+    kubectl wait --for=condition=available deployment/worker --timeout=60s
+    kubectl logs deployment/worker --tail=20   # no errors
