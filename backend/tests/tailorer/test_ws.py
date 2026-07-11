@@ -73,10 +73,7 @@ def test_ws_rejects_missing_token():
     job_id = str(uuid.uuid4())
     try:
         with patch("backend.main.init_models"), \
-             patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-             patch("backend.main._backfill_created_at", new_callable=AsyncMock), \
-             patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
-             patch("backend.main.retention_worker", new_callable=AsyncMock):
+             patch("backend.main.init_opensearch", new_callable=AsyncMock):
             with TestClient(app) as tc:
                 with pytest.raises(Exception):
                     with tc.websocket_connect(f"/tailorer/ws/{job_id}"):

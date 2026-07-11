@@ -48,9 +48,7 @@ async def search_client(engine):
     app.dependency_overrides[get_current_user] = lambda: mock_user
 
     with patch("backend.main.init_models"), \
-         patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
-         patch("backend.main.retention_worker", new_callable=AsyncMock):
+         patch("backend.main.init_opensearch", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac, mock_os, factory
 
@@ -119,9 +117,7 @@ async def test_search_works_without_cv(engine):
     app.dependency_overrides[get_current_user] = lambda: mock_user
 
     with patch("backend.main.init_models"), \
-         patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
-         patch("backend.main.retention_worker", new_callable=AsyncMock):
+         patch("backend.main.init_opensearch", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/jobs/search", json={"query": "ml engineer"})
 

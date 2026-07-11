@@ -69,9 +69,6 @@ async def adv_client(engine):
 
     with patch("backend.main.init_models"), \
          patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
-         patch("backend.main.retention_worker", new_callable=AsyncMock), \
-         patch("backend.main._backfill_created_at", new_callable=AsyncMock), \
          patch("backend.search.advanced.nodes.rerank",
                side_effect=lambda r, hits, q, top_k=20: hits), \
          patch("backend.search.advanced.nodes.generate_clarify_questions",
@@ -128,10 +125,7 @@ async def test_advanced_requires_cv(engine):
     app.dependency_overrides[get_checkpointer] = lambda: MemorySaver()
 
     with patch("backend.main.init_models"), \
-         patch("backend.main.init_opensearch", new_callable=AsyncMock), \
-         patch("backend.main.reconcile_worker", new_callable=AsyncMock), \
-         patch("backend.main.retention_worker", new_callable=AsyncMock), \
-         patch("backend.main._backfill_created_at", new_callable=AsyncMock):
+         patch("backend.main.init_opensearch", new_callable=AsyncMock):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.post("/jobs/search/advanced", json={"query": "x"})
     app.dependency_overrides.clear()

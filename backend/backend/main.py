@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -9,7 +8,6 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
-from sqlalchemy import select
 from backend.routers import companies, jobs
 from backend.routers.search import router as search_router
 from backend.routers.auth import router as auth_router
@@ -18,10 +16,7 @@ from backend.tailorer.router import router as tailorer_router
 from backend.routers.preferences import router as preferences_router
 from backend.routers.search_advanced import router as search_advanced_router
 from backend.search.models_lifecycle import init_models
-from backend.opensearch_client import init_opensearch, get_opensearch, INDEX_NAME
-from backend.outbox.worker import reconcile_worker, retention_worker
-from backend.database import get_session_factory
-from backend.models import Job
+from backend.opensearch_client import init_opensearch
 
 logger = logging.getLogger(__name__)
 
@@ -34,38 +29,16 @@ def get_checkpointer() -> AsyncPostgresSaver:
     return _checkpointer
 
 
-async def _backfill_created_at() -> None:
-    factory = get_session_factory()
-    os_client = get_opensearch()
-    async with factory() as session:
-        rows = (await session.execute(select(Job.id, Job.created_at))).all()
-    if not rows:
-        return
-    body = []
-    for job_id, created_at in rows:
-        body.append({"update": {"_id": str(job_id)}})
-        body.append({"doc": {"created_at": created_at.isoformat()}, "doc_as_upsert": False})
-    await os_client.bulk(index=INDEX_NAME, body=body)
-    logger.info("Backfilled created_at for %d jobs in OpenSearch", len(rows))
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _checkpointer
     init_models()
     await init_opensearch()
-    await _backfill_created_at()
 
     db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
     async with AsyncPostgresSaver.from_conn_string(db_url) as checkpointer:
-        await checkpointer.setup()
         _checkpointer = checkpointer
-
-        reconcile_task = asyncio.create_task(reconcile_worker())
-        retention_task = asyncio.create_task(retention_worker())
         yield
-        reconcile_task.cancel()
-        retention_task.cancel()
 
 
 app = FastAPI(title="jobstrainer backend", lifespan=lifespan)
