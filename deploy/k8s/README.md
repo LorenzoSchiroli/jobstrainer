@@ -32,10 +32,14 @@ doesn't watch for image changes.
 
 Requires the repo's `.env` file (see `CLAUDE.md` for required vars).
 
-    kubectl create secret generic jobstrainer-secrets \
-      --from-env-file=.env \
-      --from-literal=DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer \
-      --from-literal=OPENSEARCH_URL=http://opensearch:9200 \
-      --from-literal=BACKEND_URL=http://api:8000
+Due to kubectl version constraints, `--from-env-file` cannot be combined with
+`--from-literal` in a single invocation. Create the secret in two steps:
 
-To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets` then re-run the command above, then restart any running pods (`kubectl rollout restart deployment api worker`).
+    kubectl create secret generic jobstrainer-secrets \
+      --from-env-file=.env
+
+    kubectl patch secret jobstrainer-secrets \
+      --type merge \
+      -p '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
+
+To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets` then re-run both commands above, then restart any running pods (`kubectl rollout restart deployment api worker`).
