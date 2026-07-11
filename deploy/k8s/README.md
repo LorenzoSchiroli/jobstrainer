@@ -54,3 +54,10 @@ migration) requires deleting the old Job first:
 
     kubectl delete job jobstrainer-bootstrap --ignore-not-found
     kubectl apply -f deploy/k8s/bootstrap-job.yaml
+
+## 6. API
+
+    kubectl apply -f deploy/k8s/api-deployment.yaml
+    kubectl wait --for=condition=available deployment/api --timeout=120s
+    kubectl port-forward svc/api 8000:8000 &
+    curl http://localhost:8000/health   # {"status":"ok"}
