@@ -67,3 +67,15 @@ migration) requires deleting the old Job first:
     kubectl apply -f deploy/k8s/worker-deployment.yaml
     kubectl wait --for=condition=available deployment/worker --timeout=60s
     kubectl logs deployment/worker --tail=20   # no errors
+
+## 8. Ingestion CronJob
+
+    kubectl apply -f deploy/k8s/ingestion-cronjob.yaml
+
+Runs every 2 hours automatically. To trigger one run immediately (e.g. to
+verify the pod spec without waiting):
+
+    kubectl create job --from=cronjob/ingestion ingestion-manual-test
+    kubectl wait --for=condition=complete job/ingestion-manual-test --timeout=600s
+    kubectl logs job/ingestion-manual-test
+    kubectl delete job ingestion-manual-test

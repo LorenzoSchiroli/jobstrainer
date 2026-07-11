@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ingestion
+spec:
+  schedule: "0 */2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: ingestion
+            image: jobstrainer-ingestion:local
+            imagePullPolicy: IfNotPresent
+            command: ["uv", "run", "python", "-m", "ingestion.pipeline", "$(OFFER_QUERY)", "--hours", "2"]
+            envFrom:
+            - secretRef:
+                name: jobstrainer-secrets
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 1500m
+                memory: 2Gi
