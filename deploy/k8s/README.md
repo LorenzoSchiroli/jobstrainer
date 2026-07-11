@@ -17,3 +17,8 @@ must complete (not just be applied) before the next.
 
 Re-run the `docker build` + `kind load` pair after any code change — kind
 doesn't watch for image changes.
+
+## 2. Postgres
+
+    kubectl apply -f deploy/k8s/postgres.yaml
+    kubectl wait --for=condition=ready pod -l app=postgres --timeout=120s
