@@ -1,36 +1,28 @@
-# jobstrainer on kind (Phase 1)
+# jobstrainer on Kubernetes (Helm)
 
-Plain manifests, no Helm. Apply order matters — Kubernetes has no
-dependency graph between plain `kubectl apply` resources, so each step below
-must complete (not just be applied) before the next.
+The stack deploys as a single Helm chart: `deploy/helm/jobstrainer/`. The plain
+manifests that previously lived here (Phase 1) were retired after the chart
+took over; see git history and
+`docs/superpowers/specs/2026-07-18-k8s-phase3-helm-design.md`. Only
+`loadtest-job.yaml` (a demo/ops tool, not part of the app deploy) remains as a
+plain manifest.
 
-## 1. Cluster + images
+## 1. Prerequisites
 
-    brew install kind
+### Cluster + images
+
     kind create cluster --name jobstrainer
 
-    docker build -f backend/Dockerfile -t jobstrainer-backend:local .
-    docker build -f ingestion/Dockerfile -t jobstrainer-ingestion:local .
-    docker build -f frontend/Dockerfile --build-arg VITE_API_URL=http://localhost:8000 -t jobstrainer-frontend:local ./frontend
-
+    docker build -t jobstrainer-backend:local backend/
+    docker build -t jobstrainer-ingestion:local ingestion/
+    docker build -t jobstrainer-frontend:local frontend/
     kind load docker-image jobstrainer-backend:local jobstrainer-ingestion:local jobstrainer-frontend:local --name jobstrainer
 
-Re-run the `docker build` + `kind load` pair after any code change — kind
-doesn't watch for image changes.
+### Secret
 
-## 2. Postgres
-
-    kubectl apply -f deploy/k8s/postgres.yaml
-    kubectl wait --for=condition=ready pod -l app=postgres --timeout=120s
-
-## 3. OpenSearch
-
-    kubectl apply -f deploy/k8s/opensearch.yaml
-    kubectl wait --for=condition=ready pod -l app=opensearch --timeout=180s
-
-## 4. Secret
-
-Requires the repo's `.env` file (see `CLAUDE.md` for required vars).
+The chart does **not** create the secret — it references one by name
+(`existingSecret`, default `jobstrainer-secrets`). Create it from the repo's
+`.env` before installing.
 
 > **Warning — no quotes in `.env` values.** `kubectl create secret
 > --from-env-file` stores values **verbatim**: unlike docker-compose/dotenv it
@@ -49,75 +41,10 @@ Due to kubectl version constraints, `--from-env-file` cannot be combined with
       --type merge \
       -p '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
 
-To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets` then re-run both commands above, then restart any running pods (`kubectl rollout restart deployment api worker`).
+To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets`, re-run
+both commands, then `kubectl rollout restart deployment api worker`.
 
-## 5. Bootstrap (migrations + OpenSearch index + checkpointer tables)
-
-    kubectl apply -f deploy/k8s/bootstrap-job.yaml
-    kubectl wait --for=condition=complete job/jobstrainer-bootstrap --timeout=180s
-
-Job specs are immutable, so re-running bootstrap (e.g. after a new
-migration) requires deleting the old Job first:
-
-    kubectl delete job jobstrainer-bootstrap --ignore-not-found
-    kubectl apply -f deploy/k8s/bootstrap-job.yaml
-
-## 6. API
-
-    kubectl apply -f deploy/k8s/api-deployment.yaml
-    kubectl wait --for=condition=available deployment/api --timeout=120s
-    kubectl port-forward svc/api 8000:8000 &
-    curl http://localhost:8000/health   # {"status":"ok"}
-
-## 7. Worker
-
-    kubectl apply -f deploy/k8s/worker-deployment.yaml
-    kubectl wait --for=condition=available deployment/worker --timeout=60s
-    kubectl logs deployment/worker --tail=20   # no errors
-
-## 8. Ingestion CronJob
-
-    kubectl apply -f deploy/k8s/ingestion-cronjob.yaml
-
-Runs every 2 hours. To pause it without deleting anything:
-
-    kubectl patch cronjob ingestion -p '{"spec":{"suspend":true}}'
-
-(also flip `suspend` in the manifest to keep them in sync). A slow run
-self-terminates after `activeDeadlineSeconds: 1800` so it can't wedge the
-`concurrencyPolicy: Forbid` lock. To trigger one run immediately (e.g. to
-verify the pod spec without waiting):
-
-    kubectl create job --from=cronjob/ingestion ingestion-manual-test
-    kubectl wait --for=condition=complete job/ingestion-manual-test --timeout=600s
-    kubectl logs job/ingestion-manual-test
-    kubectl delete job ingestion-manual-test
-
-## 9. Frontend
-
-    kubectl apply -f deploy/k8s/frontend-deployment.yaml
-    kubectl wait --for=condition=available deployment/frontend --timeout=60s
-
-## Full stack access
-
-    kubectl port-forward svc/api 8000:8000 &
-    kubectl port-forward svc/frontend 3000:80 &
-
-Open http://localhost:3000 — this matches docker-compose's ports exactly, so
-the frontend's baked-in VITE_API_URL and the backend's CORS allow-list both
-work unchanged.
-
-# Phase 2 — API autoscaling (HPA)
-
-Adds a CPU-based HorizontalPodAutoscaler to the **API only** (min 1 / max 4 @
-70% CPU). Other services are excluded on purpose: the frontend is near-idle, the
-worker is a singleton, Postgres/OpenSearch are stateful, and ingestion is a batch
-CronJob — none are HPA-shaped. See
-`docs/superpowers/specs/2026-07-18-k8s-phase2-hpa-autoscaling-design.md`.
-
-## 10. metrics-server
-
-HPA reads pod CPU from metrics-server, which kind does not ship by default:
+### metrics-server (required by the API HPA)
 
     kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
     kubectl patch deployment metrics-server -n kube-system --type='json' \
@@ -126,39 +53,65 @@ HPA reads pod CPU from metrics-server, which kind does not ship by default:
 
 `--kubelet-insecure-tls` is a **kind-only** workaround (kind's kubelet serving
 cert isn't signed by the cluster CA). Real clusters — EKS/GKE/bare metal — must
-NOT use it. Verify metrics flow:
+NOT use it.
 
-    kubectl top pods -l app=api
+## 2. Deploy
 
-## 11. HPA
+    helm install jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
 
-    kubectl apply -f deploy/k8s/api-hpa.yaml
-    kubectl get hpa api
+The `jobstrainer-bootstrap` post-install hook runs migrations, creates the
+OpenSearch index, and sets up checkpointer tables automatically. On a fresh
+cluster its first attempts may crash while Postgres/OpenSearch are still
+starting — that is the `backoffLimit: 6` retry budget working, not a problem.
 
-`TARGETS` should read `<N>%/70%` with a real number (not `<unknown>`). Note:
-`replicas` was removed from `api-deployment.yaml` because the HPA owns the
-replica count — never set both.
+Upgrade after chart/values changes (the bootstrap hook re-runs pre-upgrade, so
+migrations apply before new code rolls out):
 
-## 12. Watch it scale (load demo)
+    helm upgrade jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
 
-**Prerequisite:** a valid `GROQ_API_KEY` must be in `jobstrainer-secrets`.
-`POST /jobs/search` calls Groq for query-understanding *first*; with a dead key
-every request fails before the CPU-heavy reranking stage, so no load is produced
-and nothing scales.
+Uninstall (PVCs — and therefore all Postgres/OpenSearch data — survive):
 
-In two panes:
+    helm uninstall jobstrainer
+
+## 3. Access
+
+    kubectl port-forward svc/api 8000:8000 &
+    kubectl port-forward svc/frontend 3000:80 &
+
+Open http://localhost:3000 — matches docker-compose's ports, so the frontend's
+baked-in VITE_API_URL and the backend's CORS allow-list work unchanged.
+
+## 4. Changing config
+
+Edit `values.yaml` / `values-local.yaml` (or use `--set`) and `helm upgrade`.
+Examples:
+
+    # pause ingestion
+    helm upgrade jobstrainer deploy/helm/jobstrainer \
+      -f deploy/helm/jobstrainer/values-local.yaml --set ingestion.suspend=true
+
+    # widen the HPA ceiling
+    helm upgrade jobstrainer deploy/helm/jobstrainer \
+      -f deploy/helm/jobstrainer/values-local.yaml --set hpa.maxReplicas=6
+
+Notable values: `existingSecret`, `hpa.minReplicas/maxReplicas/targetCPUUtilization`,
+`ingestion.schedule/suspend/activeDeadlineSeconds`, per-service `image.repository/tag`
+and `resources`, `postgres.storage`, `opensearch.storage`.
+
+## 5. HPA load demo
+
+Watch in two panes:
 
     kubectl get hpa api -w
     kubectl get pods -l app=api -w
 
-Then start the in-cluster k6 load Job (ramps 0→20→50 virtual users against
-`http://api:8000/jobs/search`):
+Fire the in-cluster k6 load Job (ramps 0→20→50 virtual users against
+`POST /jobs/search`; needs a valid `GROQ_API_KEY` in the secret — requests fail
+at query-understanding without it and produce no CPU load):
 
     kubectl apply -f deploy/k8s/loadtest-job.yaml
 
-Watch replicas climb 1 → up to 4 as CPU crosses 70%, then settle back to 1 a few
-minutes after the Job finishes (HPA scale-down stabilization ~5 min). Inspect and
-clean up:
+Replicas climb 1 → up to 4 past 70% CPU, then settle back to 1 a few minutes
+after the load ends (~5 min scale-down stabilization). Clean up:
 
-    kubectl logs -l job-name=api-loadtest -f
     kubectl delete -f deploy/k8s/loadtest-job.yaml

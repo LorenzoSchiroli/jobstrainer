@@ -3,10 +3,15 @@ kind: Job
 metadata:
   name: jobstrainer-bootstrap
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    # post-install (not pre-): on a fresh install the chart itself deploys
+    # postgres/opensearch, and a pre-install hook would run before they exist.
+    # post-install lets the Job retry while the stores boot; pre-upgrade keeps
+    # migrations running BEFORE new app code rolls out on upgrades.
+    helm.sh/hook: post-install,pre-upgrade
     helm.sh/hook-delete-policy: before-hook-creation
 spec:
-  backoffLimit: 3
+  # generous: first attempts may crash while postgres/opensearch are starting
+  backoffLimit: 6
   template:
     spec:
       restartPolicy: Never
