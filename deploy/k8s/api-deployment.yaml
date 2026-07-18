@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: api
 spec:
-  replicas: 1
+  # replicas is intentionally omitted: the HorizontalPodAutoscaler (api-hpa.yaml)
+  # owns the replica count. Setting it here would fight the HPA on every apply.
   selector:
     matchLabels:
       app: api
