@@ -5,9 +5,17 @@ metadata:
 spec:
   schedule: "0 */2 * * *"
   concurrencyPolicy: Forbid
+  # Temporarily disabled: the scraper's external sources are flaky. Set back to
+  # false (or `kubectl patch cronjob ingestion -p '{"spec":{"suspend":false}}'`)
+  # to resume scheduled runs.
+  suspend: true
   jobTemplate:
     spec:
       backoffLimit: 1
+      # Hard ceiling so a slow run (dead API keys → slow fallback scraping)
+      # self-terminates instead of holding the Forbid lock forever and wedging
+      # every subsequent scheduled run. Healthy runs finish in 3-7 min.
+      activeDeadlineSeconds: 1800
       template:
         spec:
           restartPolicy: OnFailure
