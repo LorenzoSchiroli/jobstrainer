@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: {{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: ["uv", "run", "python", "-m", "backend.worker"]
+        envFrom:
+        - secretRef:
+            name: {{ .Values.existingSecret }}
+        resources:
+          {{- toYaml .Values.worker.resources | nindent 10 }}

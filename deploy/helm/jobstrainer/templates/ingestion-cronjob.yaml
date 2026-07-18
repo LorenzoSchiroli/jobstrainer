@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ingestion
+spec:
+  schedule: {{ .Values.ingestion.schedule | quote }}
+  concurrencyPolicy: Forbid
+  suspend: {{ .Values.ingestion.suspend }}
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ .Values.ingestion.activeDeadlineSeconds }}
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: ingestion
+            image: {{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}
+            imagePullPolicy: {{ .Values.imagePullPolicy }}
+            command: ["uv", "run", "python", "-m", "ingestion.pipeline", "$(OFFER_QUERY)", "--hours", "2"]
+            envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+            resources:
+              {{- toYaml .Values.ingestion.resources | nindent 14 }}
