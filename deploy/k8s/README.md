@@ -32,6 +32,13 @@ doesn't watch for image changes.
 
 Requires the repo's `.env` file (see `CLAUDE.md` for required vars).
 
+> **Warning — no quotes in `.env` values.** `kubectl create secret
+> --from-env-file` stores values **verbatim**: unlike docker-compose/dotenv it
+> does NOT strip surrounding quotes. `GROQ_API_KEY="gsk_..."` becomes the
+> literal value `"gsk_..."` (quotes included) and Groq rejects it with
+> `401 invalid_api_key` — same for every other quoted value. Write
+> `GROQ_API_KEY=gsk_...` unquoted, or strip quotes before creating the secret.
+
 Due to kubectl version constraints, `--from-env-file` cannot be combined with
 `--from-literal` in a single invocation. Create the secret in two steps:
 
