@@ -1,0 +1,16 @@
+# kind: images are side-loaded (`kind load docker-image`), tagged :local
+bootstrap:
+  image:
+    tag: local
+api:
+  image:
+    tag: local
+worker:
+  image:
+    tag: local
+ingestion:
+  image:
+    tag: local
+frontend:
+  image:
+    tag: local

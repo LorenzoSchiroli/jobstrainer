@@ -1,0 +1,99 @@
+# Name of a pre-created Secret consumed via envFrom by api, worker, bootstrap,
+# and ingestion. The chart never creates or manages it (see design §4).
+existingSecret: jobstrainer-secrets
+
+imagePullPolicy: IfNotPresent
+
+postgres:
+  image: postgres:16
+  storage: 1Gi
+  user: postgres
+  password: postgres
+  db: jobstrainer
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+opensearch:
+  image: opensearchproject/opensearch:2
+  storage: 2Gi
+  javaOpts: "-Xms512m -Xmx512m"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+bootstrap:
+  image:
+    repository: jobstrainer-backend
+    tag: latest
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+api:
+  image:
+    repository: jobstrainer-backend
+    tag: latest
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1536Mi
+
+hpa:
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilization: 70
+
+worker:
+  image:
+    repository: jobstrainer-backend
+    tag: latest
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+ingestion:
+  image:
+    repository: jobstrainer-ingestion
+    tag: latest
+  schedule: "0 */2 * * *"
+  suspend: false
+  activeDeadlineSeconds: 1800
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+
+frontend:
+  image:
+    repository: jobstrainer-frontend
+    tag: latest
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
