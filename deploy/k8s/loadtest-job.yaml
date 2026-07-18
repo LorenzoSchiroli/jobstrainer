@@ -15,14 +15,32 @@ data:
       ],
     };
 
+    // /jobs/search is JWT-protected: register a throwaway user once and
+    // share its token with every VU. Unique name per run avoids collisions.
+    export function setup() {
+      const res = http.post(
+        'http://api:8000/auth/register',
+        JSON.stringify({
+          username: `loadtest-${Date.now()}`,
+          password: 'loadtest-password',
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+      return { token: res.json('access_token') };
+    }
+
     const payload = JSON.stringify({
       cv_text: 'Experienced machine learning engineer with Python, PyTorch, and NLP background. Built search and recommendation systems and hybrid retrieval pipelines.',
       query: 'machine learning engineer remote',
     });
-    const params = { headers: { 'Content-Type': 'application/json' } };
 
-    export default function () {
-      http.post('http://api:8000/jobs/search', payload, params);
+    export default function (data) {
+      http.post('http://api:8000/jobs/search', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.token}`,
+        },
+      });
       sleep(1);
     }
 ---
