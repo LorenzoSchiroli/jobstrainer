@@ -79,13 +79,11 @@ migration) requires deleting the old Job first:
 
     kubectl apply -f deploy/k8s/ingestion-cronjob.yaml
 
-Scheduled to run every 2 hours, but **currently suspended** (`suspend: true` in
-the manifest) because the scraper's external sources are unreliable. Re-enable
-with:
+Runs every 2 hours. To pause it without deleting anything:
 
-    kubectl patch cronjob ingestion -p '{"spec":{"suspend":false}}'
+    kubectl patch cronjob ingestion -p '{"spec":{"suspend":true}}'
 
-(also flip `suspend: false` in the manifest to keep them in sync). A slow run
+(also flip `suspend` in the manifest to keep them in sync). A slow run
 self-terminates after `activeDeadlineSeconds: 1800` so it can't wedge the
 `concurrencyPolicy: Forbid` lock. To trigger one run immediately (e.g. to
 verify the pod spec without waiting):
