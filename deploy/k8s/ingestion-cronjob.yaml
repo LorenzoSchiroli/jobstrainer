@@ -5,10 +5,9 @@ metadata:
 spec:
   schedule: "0 */2 * * *"
   concurrencyPolicy: Forbid
-  # Temporarily disabled: the scraper's external sources are flaky. Set back to
-  # false (or `kubectl patch cronjob ingestion -p '{"spec":{"suspend":false}}'`)
-  # to resume scheduled runs.
-  suspend: true
+  # Flip to true (or `kubectl patch cronjob ingestion -p '{"spec":{"suspend":true}}'`)
+  # to pause scheduled runs without deleting the CronJob.
+  suspend: false
   jobTemplate:
     spec:
       backoffLimit: 1
