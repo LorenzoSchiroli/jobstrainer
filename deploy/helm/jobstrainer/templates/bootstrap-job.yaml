@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jobstrainer-bootstrap
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: bootstrap
+        image: {{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        command: ["sh", "-c", "uv run alembic upgrade head && uv run python -m backend.bootstrap"]
+        envFrom:
+        - secretRef:
+            name: {{ .Values.existingSecret }}
+        resources:
+          {{- toYaml .Values.bootstrap.resources | nindent 10 }}
