@@ -29,8 +29,9 @@ data:
       return { token: res.json('access_token') };
     }
 
+    // Base search takes only {query} (no LLM in that path; regex parse +
+    // embed + rerank supply the CPU load).
     const payload = JSON.stringify({
-      cv_text: 'Experienced machine learning engineer with Python, PyTorch, and NLP background. Built search and recommendation systems and hybrid retrieval pipelines.',
       query: 'machine learning engineer remote',
     });
 

@@ -106,8 +106,10 @@ Watch in two panes:
     kubectl get pods -l app=api -w
 
 Fire the in-cluster k6 load Job (ramps 0→20→50 virtual users against
-`POST /jobs/search`; needs a valid `GROQ_API_KEY` in the secret — requests fail
-at query-understanding without it and produce no CPU load):
+`POST /jobs/search`). Base search is LLM-free — regex query parsing, then
+embedding + cross-encoder reranking supply the CPU load — so no Groq quota is
+consumed. The script registers a throwaway `loadtest-*` user for the JWT the
+endpoint requires:
 
     kubectl apply -f deploy/k8s/loadtest-job.yaml
 

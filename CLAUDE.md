@@ -54,7 +54,7 @@ Create a `.env` file (or export):
 
 ```
 GROQ_API_KEY=...
-GROQ_MODEL_LARGE=openai/gpt-oss-120b   # used by query understanding and cover letter generation
+GROQ_MODEL_LARGE=openai/gpt-oss-120b   # used by advanced search and cover letter generation
 GROQ_MODEL_BASE=qwen/qwen3-32b         # used by offer/company parsing
 OFFER_QUERY=...                         # used by the ingestion Docker service
 SERPERDEV_API_KEY=...                   # company enrichment web search
@@ -67,9 +67,15 @@ DDGS_PROXY=...                          # optional proxy for DuckDuckGo scraping
 
 ### Search Pipeline (backend)
 
-`POST /jobs/search` (`cv_text` + `query`) runs four sequential steps:
+`POST /jobs/search` (JWT-protected, body `{query}`) runs four sequential steps —
+**no LLM involved**:
 
-1. **Query understanding** — Groq LLM extracts `SearchFilters` (seniority, location_type, languages, etc.) and a `semantic_query` from CV + query text (`search/query_understanding.py`)
+1. **Query parsing** — deterministic regex parsing extracts `SearchFilters`
+   (seniority, location_type, languages, etc.) and a `semantic_query` from the
+   query text (`search/query_parsing.py`). The LLM-based
+   `search/query_understanding.py` is used only by the separate advanced-search
+   endpoint (`POST /jobs/search/advanced`, `search/advanced/`), which is
+   work-in-progress.
 2. **Hybrid retrieval** — OpenSearch hybrid query: BM25 on `description` + k-NN on `embedding` (384-dim, `BAAI/bge-small-en-v1.5`), results combined via min-max normalization with 50/50 weights (`search/retrieval.py`). Filter clauses are soft by default (scored `should` with boost=2) so near-misses still surface; pass `strict=true` in the request to apply them as a hard `post_filter` with a larger prefetch.
 3. **Cross-encoder reranking** — `cross-encoder/ms-marco-MiniLM-L-6-v2` reranks retrieved hits on `summary_text`, returns top 20 (`search/reranker.py`)
 4. **Postgres round-trip** — full `Job` + `Company` records fetched by ID for the response
