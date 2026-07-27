@@ -1,0 +1,6 @@
+cloudflare_zone_id  = "00000000000000000000000000000000"
+domain              = "example.com"
+letsencrypt_email   = "ops@example.com"
+location            = "nbg1"
+cluster_name        = "jobstrainer"
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
