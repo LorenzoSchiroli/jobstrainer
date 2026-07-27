@@ -13,9 +13,11 @@ plain manifest.
 
     kind create cluster --name jobstrainer
 
-    docker build -t jobstrainer-backend:local backend/
-    docker build -t jobstrainer-ingestion:local ingestion/
-    docker build -t jobstrainer-frontend:local frontend/
+    docker build -f backend/Dockerfile -t jobstrainer-backend:local .
+    docker build -f ingestion/Dockerfile -t jobstrainer-ingestion:local .
+    docker build -f frontend/Dockerfile \
+      --build-arg VITE_API_URL=http://localhost:8000 \
+      -t jobstrainer-frontend:local ./frontend
     kind load docker-image jobstrainer-backend:local jobstrainer-ingestion:local jobstrainer-frontend:local --name jobstrainer
 
 ### Secret
@@ -117,3 +119,35 @@ Replicas climb 1 → up to 4 past 70% CPU, then settle back to 1 a few minutes
 after the load ends (~5 min scale-down stabilization). Clean up:
 
     kubectl delete -f deploy/k8s/loadtest-job.yaml
+
+## Hetzner ARM64 images
+
+Build and push images from the repository root. Replace `OWNER`, `TAG`, and
+`api.example.com` before running these commands:
+
+    docker login ghcr.io
+
+    docker buildx build --platform linux/arm64 \
+      -f backend/Dockerfile \
+      -t ghcr.io/OWNER/jobstrainer-backend:TAG --push .
+
+    docker buildx build --platform linux/arm64 \
+      -f ingestion/Dockerfile \
+      -t ghcr.io/OWNER/jobstrainer-ingestion:TAG --push .
+
+    docker buildx build --platform linux/arm64 \
+      -f frontend/Dockerfile \
+      --build-arg VITE_API_URL=https://api.example.com \
+      -t ghcr.io/OWNER/jobstrainer-frontend:TAG --push ./frontend
+
+    docker buildx build --platform linux/arm64 \
+      -f deploy/images/postgres-backup/Dockerfile \
+      -t ghcr.io/OWNER/jobstrainer-postgres-backup:TAG \
+      --push deploy/images/postgres-backup
+
+The frontend API URL is embedded at build time. Rebuild the frontend image when
+the public API hostname changes.
+
+If packages under `ghcr.io/OWNER/` are private, create a pull secret and attach
+it through `values-hetzner-private.yaml` (or make the packages public for the
+portfolio demo). Public packages need no `imagePullSecrets`.
