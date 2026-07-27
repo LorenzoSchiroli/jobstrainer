@@ -10,6 +10,10 @@ postgres:
   user: postgres
   password: postgres
   db: jobstrainer
+  # Empty keeps the image default PGDATA. Set only for CSI volumes that
+  # ship a non-empty root (lost+found); never set this on an already
+  # initialized kind volume.
+  pgdataSubdir: ""
   resources:
     requests:
       cpu: 100m
@@ -22,6 +26,9 @@ opensearch:
   image: opensearchproject/opensearch:2
   storage: 2Gi
   javaOpts: "-Xms512m -Xmx512m"
+  # null omits securityContext. Set to 1000 on CSI so the non-root
+  # OpenSearch process can write the volume.
+  fsGroup: null
   resources:
     requests:
       cpu: 250m
@@ -97,3 +104,14 @@ frontend:
     limits:
       cpu: 200m
       memory: 128Mi
+
+# Empty keeps the cluster default StorageClass, as used by local kind.
+storageClass: ""
+
+nodePools: {}
+
+scheduling:
+  postgres: ""
+  opensearch: ""
+  worker: ""
+  ingestion: ""

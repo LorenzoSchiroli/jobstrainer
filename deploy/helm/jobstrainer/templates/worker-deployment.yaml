@@ -14,6 +14,11 @@ spec:
       labels:
         app: worker
     spec:
+      {{- $nodeContext := dict "root" . "pool" .Values.scheduling.worker }}
+      {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
       containers:
       - name: worker
         image: {{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}

@@ -13,6 +13,15 @@ spec:
       labels:
         app: opensearch
     spec:
+      {{- $nodeContext := dict "root" . "pool" .Values.scheduling.opensearch }}
+      {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.opensearch.fsGroup }}
+      securityContext:
+        fsGroup: {{ .Values.opensearch.fsGroup }}
+      {{- end }}
       containers:
       - name: opensearch
         image: {{ .Values.opensearch.image }}
@@ -42,6 +51,9 @@ spec:
       name: data
     spec:
       accessModes: ["ReadWriteOnce"]
+      {{- with include "jobstrainer.storageClass" . }}
+      {{- . | nindent 6 }}
+      {{- end }}
       resources:
         requests:
           storage: {{ .Values.opensearch.storage }}

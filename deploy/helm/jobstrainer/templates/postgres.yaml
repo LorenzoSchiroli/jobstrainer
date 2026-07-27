@@ -13,6 +13,11 @@ spec:
       labels:
         app: postgres
     spec:
+      {{- $nodeContext := dict "root" . "pool" .Values.scheduling.postgres }}
+      {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
       containers:
       - name: postgres
         image: {{ .Values.postgres.image }}
@@ -23,6 +28,10 @@ spec:
           value: {{ .Values.postgres.password }}
         - name: POSTGRES_DB
           value: {{ .Values.postgres.db }}
+        {{- if .Values.postgres.pgdataSubdir }}
+        - name: PGDATA
+          value: {{ printf "/var/lib/postgresql/data/%s" .Values.postgres.pgdataSubdir | quote }}
+        {{- end }}
         ports:
         - containerPort: 5432
         volumeMounts:
@@ -40,6 +49,9 @@ spec:
       name: data
     spec:
       accessModes: ["ReadWriteOnce"]
+      {{- with include "jobstrainer.storageClass" . }}
+      {{- . | nindent 6 }}
+      {{- end }}
       resources:
         requests:
           storage: {{ .Values.postgres.storage }}

@@ -12,6 +12,11 @@ spec:
       activeDeadlineSeconds: {{ .Values.ingestion.activeDeadlineSeconds }}
       template:
         spec:
+          {{- $nodeContext := dict "root" . "pool" .Values.scheduling.ingestion }}
+          {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+          affinity:
+            {{- . | nindent 12 }}
+          {{- end }}
           restartPolicy: OnFailure
           containers:
           - name: ingestion
