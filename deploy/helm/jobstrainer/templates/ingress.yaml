@@ -1,0 +1,49 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.issuerName | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.frontendHost | quote }}
+    secretName: {{ .Values.ingress.frontendTlsSecretName | quote }}
+  rules:
+  - host: {{ .Values.ingress.frontendHost | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.issuerName | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.apiHost | quote }}
+    secretName: {{ .Values.ingress.apiTlsSecretName | quote }}
+  rules:
+  - host: {{ .Values.ingress.apiHost | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api
+            port:
+              number: 8000
+{{- end }}

@@ -115,3 +115,19 @@ scheduling:
   opensearch: ""
   worker: ""
   ingestion: ""
+
+ingress:
+  enabled: false
+  className: traefik
+  frontendHost: ""
+  apiHost: ""
+  frontendTlsSecretName: jobstrainer-frontend-tls
+  apiTlsSecretName: jobstrainer-api-tls
+
+certManager:
+  createIssuers: false
+  email: ""
+  issuerName: letsencrypt-prod
+
+backup:
+  enabled: false
