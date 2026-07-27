@@ -22,7 +22,7 @@ spec:
           - name: ingestion
             image: {{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}
             imagePullPolicy: {{ .Values.imagePullPolicy }}
-            command: ["uv", "run", "python", "-m", "ingestion.pipeline", "$(OFFER_QUERY)", "--hours", "2"]
+            command: ["uv", "run", "python", "-m", "ingestion.pipeline", "$(OFFER_QUERY)", "--hours", {{ .Values.ingestion.hours | quote }}]
             envFrom:
             - secretRef:
                 name: {{ .Values.existingSecret }}

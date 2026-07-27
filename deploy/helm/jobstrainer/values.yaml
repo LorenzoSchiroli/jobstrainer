@@ -83,6 +83,9 @@ ingestion:
     repository: jobstrainer-ingestion
     tag: latest
   schedule: "0 */2 * * *"
+  # Lookback window for `ingestion.pipeline --hours`. Local every-2h schedule
+  # keeps a short default; Hetzner daily schedule overrides to cover a full day.
+  hours: 2
   suspend: false
   activeDeadlineSeconds: 1800
   resources:

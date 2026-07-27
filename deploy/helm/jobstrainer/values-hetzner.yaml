@@ -45,6 +45,10 @@ ingestion:
     tag: phase4-example
   # Daily rather than every two hours: burst affinity boots a CAX21 per run.
   schedule: "0 3 * * *"
+  # Cover a full day plus overlap (matches prior pipeline --hours default).
+  hours: 48
+  # Larger lookback can run longer than the local 30m deadline.
+  activeDeadlineSeconds: 3600
 
 frontend:
   image:
