@@ -151,3 +151,132 @@ the public API hostname changes.
 If packages under `ghcr.io/OWNER/` are private, create a pull secret and attach
 it through `values-hetzner-private.yaml` (or make the packages public for the
 portfolio demo). Public packages need no `imagePullSecrets`.
+
+## Hetzner application Secret
+
+Create the application secret after OpenTofu has produced a kubeconfig. `.env`
+values must remain unquoted because `kubectl --from-env-file` preserves quotes.
+
+    export KUBECONFIG=/path/to/jobstrainer-kubeconfig
+    kubectl create secret generic jobstrainer-secrets --from-env-file=.env
+
+Create the rclone password value once:
+
+    rclone obscure "$BACKUP_SBOX_PASSWORD"
+
+Patch the cluster-local URLs, public CORS origin, and Storage Box values.
+`BACKUP_SBOX_PATH` is relative (no leading slash). `BACKUP_SBOX_RCLONE_PASS` is
+the obscured value, not the raw password:
+
+    kubectl patch secret jobstrainer-secrets --type merge -p \
+      '{"stringData":{
+        "DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer",
+        "OPENSEARCH_URL":"http://opensearch:9200",
+        "BACKEND_URL":"http://api:8000",
+        "CORS_ORIGINS":"https://app.example.com",
+        "BACKUP_SBOX_HOST":"uXXXXX.your-storagebox.de",
+        "BACKUP_SBOX_USER":"uXXXXX",
+        "BACKUP_SBOX_RCLONE_PASS":"rclone-obscured-password-goes-here",
+        "BACKUP_SBOX_PATH":"backups/jobstrainer"
+      }}'
+
+## Hetzner Helm deployment
+
+Create an ignored `values-hetzner-private.yaml` that overrides the safe example
+image repository, immutable tag, hostname, and Let's Encrypt email:
+
+```yaml
+bootstrap:
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+api:
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+worker:
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+ingestion:
+  image: { repository: ghcr.io/loryschi/jobstrainer-ingestion, tag: "2026-07-27" }
+frontend:
+  image: { repository: ghcr.io/loryschi/jobstrainer-frontend, tag: "2026-07-27" }
+backup:
+  image: { repository: ghcr.io/loryschi/jobstrainer-postgres-backup, tag: "2026-07-27" }
+ingress:
+  frontendHost: app.example.com
+  apiHost: api.example.com
+certManager:
+  email: ops@example.com
+```
+
+Then deploy:
+
+    helm lint deploy/helm/jobstrainer \
+      -f deploy/helm/jobstrainer/values.yaml \
+      -f deploy/helm/jobstrainer/values-hetzner.yaml \
+      -f values-hetzner-private.yaml
+
+    helm install jobstrainer deploy/helm/jobstrainer \
+      -f deploy/helm/jobstrainer/values.yaml \
+      -f deploy/helm/jobstrainer/values-hetzner.yaml \
+      -f values-hetzner-private.yaml
+
+    kubectl get pods -o wide
+    kubectl get ingress,clusterissuer,certificate
+    curl --fail --silent --show-error https://api.example.com/health
+    curl --fail --silent --show-error --output /dev/null https://app.example.com/
+
+Start with `certManager.issuerName: letsencrypt-staging`. After the staging
+certificate works, delete the issued Certificate/Secret pair for each host,
+set `issuerName` to `letsencrypt-prod`, and run `helm upgrade`. Leaving the
+staging Secret in place prevents the production issuer from replacing it.
+
+## Backup and restore drill
+
+Trigger one backup before relying on the schedule:
+
+    kubectl create job --from=cronjob/postgres-backup postgres-backup-manual
+    kubectl logs -f job/postgres-backup-manual
+
+To restore, download a selected `.dump` from the Storage Box, then restore into
+a freshly recreated Postgres PVC only:
+
+    kubectl scale statefulset/postgres --replicas=0
+    kubectl delete pvc data-postgres-0
+    kubectl scale statefulset/postgres --replicas=1
+    kubectl wait --for=condition=Ready pod/postgres-0 --timeout=180s
+    kubectl cp selected.dump postgres-0:/tmp/restore.dump
+    kubectl exec postgres-0 -- \
+      pg_restore -U postgres -d jobstrainer --clean --if-exists --no-owner /tmp/restore.dump
+
+Verify row counts and foreign keys after restoring:
+
+    kubectl exec postgres-0 -- psql -U postgres -d jobstrainer -c \
+      "SELECT count(*) AS orphaned_jobs
+       FROM jobs j LEFT JOIN companies c ON c.id = j.company_id
+       WHERE c.id IS NULL;"
+
+## OpenSearch recovery
+
+OpenSearch is derived from Postgres. To test recovery, delete only its PVC:
+
+    kubectl scale statefulset/opensearch --replicas=0
+    kubectl delete pvc data-opensearch-0
+    kubectl scale statefulset/opensearch --replicas=1
+    kubectl wait --for=condition=Ready pod/opensearch-0 --timeout=300s
+    kubectl rollout restart deployment/worker
+
+Wait for the reconcile interval, then verify a search returns jobs. Do not
+restore OpenSearch from a backup.
+
+## Autoscaling verification
+
+Watch the HPA, pods, nodes, and autoscaler while applying the Hetzner k6 Job:
+
+    kubectl get hpa api -w
+    kubectl get pods -o wide -w
+    kubectl get nodes -w
+    kubectl -n kube-system logs deployment/cluster-autoscaler -f
+    kubectl apply -f deploy/k8s/loadtest-job-hetzner.yaml
+
+Record p50/p95 latency, error rate, API CPU/memory, HPA transitions, Pending
+duration, worker provisioning time, and worker scale-down time. Use those
+measurements to revise API resource requests, `hpa.maxReplicas`, and the
+autoscaler pool maximum. Do not treat the initial 1–4 pods and 0–2 nodes as
+capacity claims.
