@@ -41,11 +41,20 @@ async def lifespan(app: FastAPI):
         yield
 
 
+def cors_origins() -> list[str]:
+    origins = ["http://localhost:3000"]
+    for origin in os.environ.get("CORS_ORIGINS", "").split(","):
+        origin = origin.strip()
+        if origin and origin not in origins:
+            origins.append(origin)
+    return origins
+
+
 app = FastAPI(title="jobstrainer backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=cors_origins(),
     # The Tailorer side panel (chrome-extension:// origin) calls /auth/me and other
     # endpoints directly; a concrete regex (not "*") is allowed alongside credentials.
     allow_origin_regex=r"chrome-extension://.*",
