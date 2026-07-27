@@ -23,3 +23,22 @@ output/
 .vite
 
 .superpowers/
+
+# OpenTofu/Terraform local state and secret variable files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local kubeconfig and deployment secrets
+kubeconfig*
+.kube/
+rclone.conf
+values-hetzner-private.yaml
