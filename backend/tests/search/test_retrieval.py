@@ -42,6 +42,22 @@ def test_build_hybrid_query_strict_no_post_filter_when_no_clauses():
     assert "post_filter" not in q
 
 
+def test_build_hybrid_query_soft_country_boosts_both_legs():
+    f = SearchFilters(semantic_query="germany", country="Germany", max_age_hours=None)
+    q = build_hybrid_query("germany", [0.0] * 384, f)
+    for leg in q["query"]["hybrid"]["queries"]:
+        assert {"terms": {"country": ["Germany", "DE"], "boost": 2.0}} in leg["bool"]["should"]
+    assert "post_filter" not in q
+
+
+def test_build_hybrid_query_strict_country_uses_post_filter():
+    f = SearchFilters(semantic_query="germany", country="Germany", strict=True, max_age_hours=None)
+    q = build_hybrid_query("germany", [0.0] * 384, f)
+    assert {"terms": {"country": ["Germany", "DE"]}} in q["post_filter"]["bool"]["filter"]
+    for leg in q["query"]["hybrid"]["queries"]:
+        assert "should" not in leg["bool"]
+
+
 async def test_hybrid_retrieve_uses_pipeline():
     mock_os = AsyncMock()
     mock_os.search.return_value = {"hits": {"hits": [{"_source": {"job_id": "abc"}}]}}

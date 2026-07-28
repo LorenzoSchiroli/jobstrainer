@@ -129,9 +129,7 @@ def parse_query(query: str) -> SearchFilters:
               r")(?:\s*(?:,|and|&)\s*(?:" + _LANG_ALT + r"))*)\b")
 
     # --- country ---
-    # Set country field but do NOT strip from semantic_query — build_clauses
-    # does not consume country, so stripping would silently drop the location
-    # word from hybrid search entirely.
+    # Keep country in semantic_query too — BM25 still benefits from the place name.
     for key in _COUNTRY_KEYS:
         if re.search(r"\b" + re.escape(key) + r"\b", text):
             fields["country"] = _COUNTRIES[key]

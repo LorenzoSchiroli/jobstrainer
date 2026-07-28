@@ -80,6 +80,29 @@ def test_country():
     assert parse_query("python jobs in the united kingdom").country == "United Kingdom"
 
 
+def test_country_case_insensitive():
+    assert parse_query("Python Jobs In GERMANY").country == "Germany"
+
+
+def test_country_absent_stays_none():
+    assert parse_query("python developer role").country is None
+
+
+def test_country_not_confused_with_similarly_spelled_language():
+    # "germany" contains "german" as a substring — must not also set
+    # languages_required just because the country name embeds a language name.
+    f = parse_query("python jobs in germany")
+    assert f.languages_required is None
+
+
+def test_country_combined_with_other_filters():
+    f = parse_query("senior remote python developer in germany, last 3 days")
+    assert f.country == "Germany"
+    assert f.seniority == "senior"
+    assert f.location_type == "remote"
+    assert f.max_age_hours == 72
+
+
 def test_no_false_negation_on_unrelated_word():
     # "casino" ends in "no" — must not falsely negate is_startup
     assert parse_query("casino startup jobs").is_startup is True

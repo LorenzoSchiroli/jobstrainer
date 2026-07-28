@@ -35,6 +35,26 @@ def test_build_clauses_soft_terms_languages():
     assert {"terms": {"languages_required": ["python", "go"], "boost": 2.0}} in result
 
 
+def test_build_clauses_soft_term_country():
+    result = build_clauses(SearchFilters(semantic_query="x", country="Germany"))
+    assert {"terms": {"country": ["Germany", "DE"], "boost": 2.0}} in result
+
+
+def test_build_clauses_strict_term_country():
+    result = build_clauses(SearchFilters(semantic_query="x", country="Germany", strict=True))
+    assert {"terms": {"country": ["Germany", "DE"]}} in result
+
+
+def test_build_clauses_country_iso_code_expands_to_name():
+    result = build_clauses(SearchFilters(semantic_query="x", country="DE", strict=True))
+    assert {"terms": {"country": ["Germany", "DE"]}} in result
+
+
+def test_build_clauses_country_unknown_stays_single_term():
+    result = build_clauses(SearchFilters(semantic_query="x", country="Atlantis", strict=True))
+    assert {"term": {"country": "Atlantis"}} in result
+
+
 def test_build_clauses_strict_term_bool():
     result = build_clauses(SearchFilters(semantic_query="x", is_startup=True, strict=True))
     assert {"term": {"is_startup": True}} in result
@@ -53,3 +73,12 @@ def test_build_clauses_strict_terms_languages():
 def test_build_clauses_multiple():
     result = build_clauses(SearchFilters(semantic_query="x", seniority="senior", is_startup=True, min_review_score=3.5, max_age_hours=None))
     assert len(result) == 3
+
+
+def test_build_clauses_country_combined_with_other_filters():
+    result = build_clauses(SearchFilters(
+        semantic_query="x", country="Germany", seniority="senior", max_age_hours=None,
+    ))
+    assert {"terms": {"country": ["Germany", "DE"], "boost": 2.0}} in result
+    assert {"term": {"seniority": {"value": "senior", "boost": 2.0}}} in result
+    assert len(result) == 2

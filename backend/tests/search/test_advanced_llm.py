@@ -43,6 +43,20 @@ async def test_score_fit_parses_scored_list():
     assert out[0]["fit_gaps"] == "no kubernetes"
 
 
+async def test_score_fit_falls_back_to_unranked_hits_on_parse_failure():
+    from backend.search.advanced import llm
+    hits = [
+        {"_source": {"job_id": "j1", "summary_text": "ml role"}},
+        {"_source": {"job_id": "j2", "summary_text": "data role"}},
+    ]
+    with patch.object(llm, "large_llm", return_value=_mock_llm("not valid json")):
+        out = await llm.score_fit("cv", "", hits)
+    assert [r["job_id"] for r in out] == ["j1", "j2"]
+    assert all(r["fit_score"] == 0 for r in out)
+    assert all(r["fit_rationale"] == "" for r in out)
+    assert all(r["fit_gaps"] == "" for r in out)
+
+
 async def test_distill_memory_returns_text():
     from backend.search.advanced import llm
     with patch.object(llm, "large_llm", return_value=_mock_llm("prefers remote ml roles in EU")):

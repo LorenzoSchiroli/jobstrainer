@@ -89,12 +89,16 @@ async def score_fit(cv_text: str, preference_memory: str, hits: list[dict]) -> l
             f"Jobs:\n{jobs_blob}"
         )),
     ])
+    fallback = [
+        {"job_id": h["_source"].get("job_id"), "fit_score": 0, "fit_rationale": "", "fit_gaps": ""}
+        for h in hits
+    ]
     try:
         data = _parse_json(resp.content)
-        return data if isinstance(data, list) else []
+        return data if isinstance(data, list) else fallback
     except Exception:
         _log.warning("[advanced.llm] fit-score parse failed")
-        return []
+        return fallback
 
 
 async def distill_memory(existing: str, user_edited: bool, query: str, filters_summary: str,
