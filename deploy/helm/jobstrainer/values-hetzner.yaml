@@ -67,9 +67,3 @@ certManager:
   createIssuers: true
   email: ops@example.com
   issuerName: letsencrypt-staging
-
-backup:
-  enabled: true
-  image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-postgres-backup
-    tag: phase4-example

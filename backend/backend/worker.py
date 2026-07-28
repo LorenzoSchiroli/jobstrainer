@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from backend.backup import backup_worker
 from backend.opensearch_client import init_opensearch
 from backend.outbox.worker import reconcile_worker, retention_worker
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     await init_opensearch()
-    await asyncio.gather(reconcile_worker(), retention_worker())
+    await asyncio.gather(reconcile_worker(), retention_worker(), backup_worker())
 
 
 if __name__ == "__main__":

@@ -140,10 +140,8 @@ Build and push images from the repository root. Replace `OWNER`, `TAG`, and
       --build-arg VITE_API_URL=https://api.example.com \
       -t ghcr.io/OWNER/jobstrainer-frontend:TAG --push ./frontend
 
-    docker buildx build --platform linux/arm64 \
-      -f deploy/images/postgres-backup/Dockerfile \
-      -t ghcr.io/OWNER/jobstrainer-postgres-backup:TAG \
-      --push deploy/images/postgres-backup
+The backend image includes `postgresql-client` and `rclone` for the worker's
+nightly Postgres backup loop. No separate postgres-backup image is required.
 
 The frontend API URL is embedded at build time. Rebuild the frontend image when
 the public API hostname changes.
@@ -196,8 +194,6 @@ ingestion:
   image: { repository: ghcr.io/loryschi/jobstrainer-ingestion, tag: "2026-07-27" }
 frontend:
   image: { repository: ghcr.io/loryschi/jobstrainer-frontend, tag: "2026-07-27" }
-backup:
-  image: { repository: ghcr.io/loryschi/jobstrainer-postgres-backup, tag: "2026-07-27" }
 ingress:
   frontendHost: app.example.com
   apiHost: api.example.com
@@ -229,10 +225,10 @@ staging Secret in place prevents the production issuer from replacing it.
 
 ## Backup and restore drill
 
-Trigger one backup before relying on the schedule:
+The worker runs a backup shortly after start when `BACKUP_SBOX_*` is set, then
+every `BACKUP_INTERVAL_SECONDS` (default 86400). Confirm a dump landed:
 
-    kubectl create job --from=cronjob/postgres-backup postgres-backup-manual
-    kubectl logs -f job/postgres-backup-manual
+    kubectl logs -l app=worker --tail=100 | grep -i backup
 
 To restore, download a selected `.dump` from the Storage Box, then restore into
 a freshly recreated Postgres PVC only:

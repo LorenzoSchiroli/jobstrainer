@@ -132,17 +132,7 @@ certManager:
   email: ""
   issuerName: letsencrypt-prod
 
+# Nightly Postgres backup runs inside the singleton worker when BACKUP_SBOX_*
+# are present on jobstrainer-secrets (no separate image or CronJob).
 backup:
-  enabled: false
-  image:
-    repository: jobstrainer-postgres-backup
-    tag: latest
-  schedule: "0 2 * * *"
-  retentionCount: 7
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
+  intervalSeconds: 86400

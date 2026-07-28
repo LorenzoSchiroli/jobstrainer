@@ -27,11 +27,14 @@ dump_path="${work_dir}/${filename}"
 config_path="${work_dir}/rclone.conf"
 listing_path="${work_dir}/listing.txt"
 
+# Hetzner Storage Box listens on 23; override for local smoke tests.
+port="${BACKUP_SBOX_PORT:-23}"
+
 cat > "${config_path}" <<EOF
 [storagebox]
 type = sftp
 host = ${BACKUP_SBOX_HOST}
-port = 23
+port = ${port}
 user = ${BACKUP_SBOX_USER}
 pass = ${BACKUP_SBOX_RCLONE_PASS}
 shell_type = none

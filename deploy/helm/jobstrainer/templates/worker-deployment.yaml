@@ -24,6 +24,9 @@ spec:
         image: {{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}
         imagePullPolicy: {{ .Values.imagePullPolicy }}
         command: ["uv", "run", "python", "-m", "backend.worker"]
+        env:
+        - name: BACKUP_INTERVAL_SECONDS
+          value: {{ .Values.backup.intervalSeconds | quote }}
         envFrom:
         - secretRef:
             name: {{ .Values.existingSecret }}

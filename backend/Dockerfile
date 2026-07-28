@@ -2,6 +2,11 @@ FROM python:3.13
 
 WORKDIR /app
 
+# Worker nightly Postgres backup: pg_dump + rclone → Hetzner Storage Box.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client rclone \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install uv --quiet
 
 COPY pyproject.toml uv.lock ./

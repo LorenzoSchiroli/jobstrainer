@@ -41,8 +41,9 @@ The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, in
 
 ### Hetzner ARM64 deployment gate
 
-Before deploying the Hetzner profile, build backend, ingestion, frontend, and
-the Postgres backup image with `docker buildx build --platform linux/arm64`.
+Before deploying the Hetzner profile, build backend, ingestion, and frontend
+with `docker buildx build --platform linux/arm64`. The backend image includes
+`pg_dump` and `rclone` for the worker's nightly Postgres backup loop.
 The ingestion image is the highest-risk component because it includes
 Playwright and python-jobspy/tls-client. If the ARM64 gate fails, do not deploy
 under emulation; switch the infrastructure profile to x86 and revisit the
@@ -113,10 +114,10 @@ Keep values UNQUOTED: `kubectl create secret --from-env-file` stores quotes verb
 
 Three entrypoints (split for k8s):
 - `backend.main:app` — API only; lifespan loads ML models, ensures the OpenSearch index/pipeline, and opens a LangGraph `AsyncPostgresSaver` checkpointer. No background sync tasks.
-- `python -m backend.worker` — runs `reconcile_worker` + `retention_worker` from `outbox/worker.py` (singleton Deployment in k8s)
+- `python -m backend.worker` — runs `reconcile_worker` + `retention_worker` from `outbox/worker.py` and `backup_worker` from `backup.py` (singleton Deployment in k8s)
 - `python -m backend.bootstrap` — one-time setup: checkpointer tables + OpenSearch `created_at` backfill (the k8s bootstrap Job runs `alembic upgrade head` first)
 
-Jobs and companies are written atomically to Postgres with an `outbox` row. Every 5 minutes `reconcile` bulk re-indexes to OpenSearch: jobs with unprocessed outbox rows plus live jobs (≤30 days old) missing from the index; `company_upserted` events patch company-derived fields on that company's job docs via `update_by_query()`. Every 6 hours `retention_worker` deletes OpenSearch docs older than 30 days.
+Jobs and companies are written atomically to Postgres with an `outbox` row. Every 5 minutes `reconcile` bulk re-indexes to OpenSearch: jobs with unprocessed outbox rows plus live jobs (≤30 days old) missing from the index; `company_upserted` events patch company-derived fields on that company's job docs via `update_by_query()`. Every 6 hours `retention_worker` deletes OpenSearch docs older than 30 days. When `BACKUP_SBOX_*` is set, `backup_worker` runs a daily `pg_dump` + rclone upload to a Hetzner Storage Box (7-day rolling retention).
 
 ### Ingestion Pipeline
 
