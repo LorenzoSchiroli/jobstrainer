@@ -54,7 +54,9 @@ async def run_backup() -> None:
     env = os.environ.copy()
     env["DATABASE_URL"] = to_libpq_url(env["DATABASE_URL"])
 
+    # Invoke via bash so the script need not be +x (Docker COPY can drop mode).
     proc = await asyncio.create_subprocess_exec(
+        "bash",
         str(BACKUP_SCRIPT),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

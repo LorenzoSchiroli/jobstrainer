@@ -18,6 +18,7 @@ RUN uv run python -c "from sentence_transformers import SentenceTransformer; Sen
 RUN uv run python -c "from sentence_transformers.cross_encoder import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
 COPY backend/ ./backend/
+RUN chmod +x /app/backend/backend/scripts/postgres_backup.sh
 
 WORKDIR /app/backend
 

@@ -65,10 +65,12 @@ def test_backup_configured_requires_all_sbox_env(monkeypatch):
     assert backup_mod.backup_configured() is True
 
 
-async def test_run_backup_invokes_script_when_configured(monkeypatch, tmp_path):
+async def test_run_backup_invokes_script_via_bash_when_configured(monkeypatch, tmp_path):
+    # Not executable on purpose — worker must run via bash so Docker COPY
+    # without +x still works.
     script = tmp_path / "postgres_backup.sh"
     script.write_text("#!/bin/sh\nexit 0\n")
-    script.chmod(0o755)
+    script.chmod(0o644)
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/db")
     monkeypatch.setenv("BACKUP_SBOX_HOST", "u.your-storagebox.de")
@@ -87,13 +89,13 @@ async def test_run_backup_invokes_script_when_configured(monkeypatch, tmp_path):
 
     mock_exec.assert_awaited_once()
     args = mock_exec.await_args.args
-    assert args[0] == str(script)
+    assert args == ("bash", str(script))
 
 
 async def test_run_backup_raises_when_script_fails(monkeypatch, tmp_path):
     script = tmp_path / "postgres_backup.sh"
     script.write_text("#!/bin/sh\nexit 1\n")
-    script.chmod(0o755)
+    script.chmod(0o644)
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@h:5432/db")
     monkeypatch.setenv("BACKUP_SBOX_HOST", "u.your-storagebox.de")
@@ -110,7 +112,7 @@ async def test_run_backup_raises_when_script_fails(monkeypatch, tmp_path):
         mock_exec.return_value = mock_proc
         with pytest.raises(RuntimeError, match="boom"):
             await backup_mod.run_backup()
-
+    assert mock_exec.await_args.args == ("bash", str(script))
 
 async def test_backup_worker_exits_when_not_configured(monkeypatch):
     monkeypatch.delenv("BACKUP_SBOX_HOST", raising=False)
