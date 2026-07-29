@@ -27,22 +27,22 @@ opensearch:
 bootstrap:
   image:
     repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
-    tag: phase4-example
+    tag: latest
 
 api:
   image:
     repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
-    tag: phase4-example
+    tag: latest
 
 worker:
   image:
     repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
-    tag: phase4-example
+    tag: latest
 
 ingestion:
   image:
     repository: ghcr.io/jobstrainer-demo/jobstrainer-ingestion
-    tag: phase4-example
+    tag: latest
   # Daily rather than every two hours: burst affinity boots a CAX21 per run.
   schedule: "0 3 * * *"
   # Cover a full day plus overlap (matches prior pipeline --hours default).
@@ -53,7 +53,7 @@ ingestion:
 frontend:
   image:
     repository: ghcr.io/jobstrainer-demo/jobstrainer-frontend
-    tag: phase4-example
+    tag: latest
 
 ingress:
   enabled: true

@@ -122,8 +122,35 @@ after the load ends (~5 min scale-down stabilization). Clean up:
 
 ## Hetzner ARM64 images
 
-Build and push images from the repository root. Replace `OWNER`, `TAG`, and
-`api.example.com` before running these commands:
+Prefer GitHub Actions over a laptop build. The workflow
+`.github/workflows/build-push-images.yml` builds backend, ingestion, and
+frontend for `linux/arm64` on native ARM runners and pushes to GHCR.
+
+One-time setup:
+
+1. In the GitHub repo: **Settings → Secrets and variables → Actions → Variables**
+2. Add `VITE_API_URL` = `https://api.<your-domain>` (public URL; not a secret)
+3. Ensure GHCR packages will be pullable by the cluster (public packages, or a
+   pull secret via `values-hetzner-private.yaml`)
+
+Publish:
+
+1. Actions → **Build and push images** → Run workflow
+2. Wait until all three build jobs are green (re-run if any leg failed before
+   upgrading the cluster)
+3. Each package is tagged `latest` and a 7-character git SHA; older SHA tags
+   are pruned so at most two SHA tags remain per package (`latest` is kept).
+   Untagged digests may linger until GHCR garbage-collects them.
+
+Cluster pull of `latest` requires `imagePullPolicy: Always` (already set in
+`values-hetzner.yaml`). After a successful publish, `helm upgrade` (or a
+rollout restart) picks up the new digest. To roll back, temporarily set the
+image `tag` to a retained short SHA.
+
+### Laptop fallback
+
+Build and push from the repository root only if Actions is unavailable.
+Replace `OWNER`, `TAG`, and `api.example.com`:
 
     docker login ghcr.io
 
@@ -143,8 +170,9 @@ Build and push images from the repository root. Replace `OWNER`, `TAG`, and
 The backend image includes `postgresql-client` and `rclone` for the worker's
 nightly Postgres backup loop. No separate postgres-backup image is required.
 
-The frontend API URL is embedded at build time. Rebuild the frontend image when
-the public API hostname changes.
+The frontend API URL is embedded at build time. Update the `VITE_API_URL`
+Actions variable (or the laptop `--build-arg`) and rebuild when the public API
+hostname changes.
 
 If packages under `ghcr.io/OWNER/` are private, create a pull secret and attach
 it through `values-hetzner-private.yaml` (or make the packages public for the
@@ -185,15 +213,15 @@ image repository, immutable tag, hostname, and Let's Encrypt email:
 
 ```yaml
 bootstrap:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
 api:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
 worker:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: "2026-07-27" }
+  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
 ingestion:
-  image: { repository: ghcr.io/loryschi/jobstrainer-ingestion, tag: "2026-07-27" }
+  image: { repository: ghcr.io/loryschi/jobstrainer-ingestion, tag: latest }
 frontend:
-  image: { repository: ghcr.io/loryschi/jobstrainer-frontend, tag: "2026-07-27" }
+  image: { repository: ghcr.io/loryschi/jobstrainer-frontend, tag: latest }
 ingress:
   frontendHost: app.example.com
   apiHost: api.example.com

@@ -41,13 +41,15 @@ The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, in
 
 ### Hetzner ARM64 deployment gate
 
-Before deploying the Hetzner profile, build backend, ingestion, and frontend
-with `docker buildx build --platform linux/arm64`. The backend image includes
-`pg_dump` and `rclone` for the worker's nightly Postgres backup loop.
-The ingestion image is the highest-risk component because it includes
-Playwright and python-jobspy/tls-client. If the ARM64 gate fails, do not deploy
-under emulation; switch the infrastructure profile to x86 and revisit the
-budget.
+Before deploying the Hetzner profile, publish backend, ingestion, and frontend
+images for `linux/arm64` via GitHub Actions (**Build and push images**
+workflow; see `deploy/k8s/README.md`). Set repository variable `VITE_API_URL`
+first. Laptop `docker buildx build --platform linux/arm64` remains a fallback.
+The backend image includes `pg_dump` and `rclone` for the worker's nightly
+Postgres backup loop. The ingestion image is the highest-risk component because
+it includes Playwright and python-jobspy/tls-client. If the ARM64 gate fails,
+do not deploy under emulation; switch the infrastructure profile to x86 and
+revisit the budget.
 
 ### Backend
 
