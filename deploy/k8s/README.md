@@ -209,7 +209,7 @@ the obscured value, not the raw password:
 ## Hetzner Helm deployment
 
 Create an ignored `values-hetzner-private.yaml` that overrides the safe example
-image repository, immutable tag, hostname, and Let's Encrypt email:
+image repository, image tag (`latest`, or a retained short SHA for rollback), hostname, and Let's Encrypt email:
 
 ```yaml
 bootstrap:
