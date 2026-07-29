@@ -1,0 +1,142 @@
+name: Build and push images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            dockerfile: backend/Dockerfile
+            context: .
+            package: jobstrainer-backend
+          - image: ingestion
+            dockerfile: ingestion/Dockerfile
+            context: .
+            package: jobstrainer-ingestion
+          - image: frontend
+            dockerfile: frontend/Dockerfile
+            context: ./frontend
+            package: jobstrainer-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require VITE_API_URL for frontend
+        if: matrix.image == 'frontend'
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables)"
+            exit 1
+          fi
+
+      - name: Image name and short SHA
+        id: meta
+        run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo '${{ github.sha }}' | cut -c1-7)
+          echo "owner=${OWNER}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ env.REGISTRY }}/${OWNER}/${{ matrix.package }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+          build-args: |
+            ${{ matrix.image == 'frontend' && format('VITE_API_URL={0}', vars.VITE_API_URL) || '' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  prune-tags:
+    name: Prune old SHA tags
+    runs-on: ubuntu-24.04-arm
+    needs: build
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package:
+          - jobstrainer-backend
+          - jobstrainer-ingestion
+          - jobstrainer-frontend
+    steps:
+      - name: Keep latest + two newest SHA tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          # List container package versions for the user/org owner.
+          # User-owned: /users/{user}/packages/container/{name}/versions
+          # Org-owned:  /orgs/{org}/packages/container/{name}/versions
+          if gh api "users/${OWNER}" --jq '.type' | grep -qi organization; then
+            API_BASE="orgs/${OWNER}/packages/container/${PACKAGE}/versions"
+          else
+            API_BASE="users/${OWNER}/packages/container/${PACKAGE}/versions"
+          fi
+
+          VERSIONS=$(gh api --paginate "${API_BASE}")
+          # Versions that carry a 7-char hex SHA tag, newest first.
+          mapfile -t SHA_VERSION_IDS < <(
+            echo "${VERSIONS}" | jq -r '
+              [.[] | {
+                id,
+                updated_at,
+                tags: (.metadata.container.tags // [])
+              }
+              | select(.tags | map(test("^[0-9a-f]{7}$")) | any)]
+              | sort_by(.updated_at) | reverse | .[].id
+            '
+          )
+
+          KEEP=2
+          idx=0
+          for id in "${SHA_VERSION_IDS[@]:-}"; do
+            idx=$((idx + 1))
+            TAGS=$(echo "${VERSIONS}" | jq -r --argjson id "$id" '
+              .[] | select(.id == $id) | (.metadata.container.tags // []) | join(",")
+            ')
+            if echo "${TAGS}" | tr ',' '\n' | grep -qx 'latest'; then
+              echo "Skip version ${id} (has latest): ${TAGS}"
+              continue
+            fi
+            if [ "$idx" -le "$KEEP" ]; then
+              echo "Keep SHA version ${id}: ${TAGS}"
+              continue
+            fi
+            echo "Delete SHA version ${id}: ${TAGS}"
+            gh api -X DELETE "${API_BASE}/${id}"
+          done
