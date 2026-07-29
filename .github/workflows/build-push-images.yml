@@ -63,6 +63,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set build args
+        id: args
+        run: |
+          if [ "${{ matrix.image }}" = "frontend" ]; then
+            echo "build_args=VITE_API_URL=${{ vars.VITE_API_URL }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -73,8 +80,7 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:latest
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
-          build-args: |
-            ${{ matrix.image == 'frontend' && format('VITE_API_URL={0}', vars.VITE_API_URL) || '' }}
+          build-args: ${{ steps.args.outputs.build_args }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -99,6 +105,7 @@ jobs:
           PACKAGE: ${{ matrix.package }}
         run: |
           set -euo pipefail
+          OWNER=$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')
           # List container package versions for the user/org owner.
           # User-owned: /users/{user}/packages/container/{name}/versions
           # Org-owned:  /orgs/{org}/packages/container/{name}/versions
