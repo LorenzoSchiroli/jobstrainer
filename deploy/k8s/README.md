@@ -128,9 +128,9 @@ frontend for `linux/arm64` on native ARM runners and pushes to GHCR.
 
 One-time setup:
 
-1. In the GitHub repo: **Settings → Secrets and variables → Actions → Variables**
-2. Add `VITE_API_URL` = `https://api.<your-domain>` (public URL; not a secret)
-3. Ensure GHCR packages will be pullable by the cluster (public packages, or a
+1. Set `VITE_API_URL` in `.env.public` to the public API base URL
+   (e.g. `https://api.<your-domain>`). Commit that change before publishing.
+2. Ensure GHCR packages will be pullable by the cluster (public packages, or a
    pull secret via `values-hetzner-private.yaml`)
 
 Publish:
@@ -170,9 +170,9 @@ Replace `OWNER`, `TAG`, and `api.example.com`:
 The backend image includes `postgresql-client` and `rclone` for the worker's
 nightly Postgres backup loop. No separate postgres-backup image is required.
 
-The frontend API URL is embedded at build time. Update the `VITE_API_URL`
-Actions variable (or the laptop `--build-arg`) and rebuild when the public API
-hostname changes.
+The frontend API URL is embedded at build time from `.env.public`. Update that
+file (and the laptop `--build-arg` if you use the fallback) and rebuild when
+the public API hostname changes.
 
 If packages under `ghcr.io/OWNER/` are private, create a pull secret and attach
 it through `values-hetzner-private.yaml` (or make the packages public for the
@@ -180,11 +180,15 @@ portfolio demo). Public packages need no `imagePullSecrets`.
 
 ## Hetzner application Secret
 
-Create the application secret after OpenTofu has produced a kubeconfig. `.env`
-values must remain unquoted because `kubectl --from-env-file` preserves quotes.
+Create the application secret after OpenTofu has produced a kubeconfig. Merge
+committed `.env.public` with local secrets `.env`. Values must remain unquoted
+because `kubectl --from-env-file` preserves quotes.
 
     export KUBECONFIG=/path/to/jobstrainer-kubeconfig
-    kubectl create secret generic jobstrainer-secrets --from-env-file=.env
+    # Later file wins on duplicate keys; keep secrets in `.env`.
+    kubectl create secret generic jobstrainer-secrets \
+      --from-env-file=.env.public \
+      --from-env-file=.env
 
 Create the rclone password value once:
 

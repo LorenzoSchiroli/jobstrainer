@@ -1,0 +1,1 @@
+Follow the project guidance in [AGENTS.md](../AGENTS.md) for architecture, commands, environment variables, and conventions. [CLAUDE.md](../CLAUDE.md) is a Claude Code wrapper that imports the same content.

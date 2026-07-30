@@ -7,7 +7,8 @@ from groq import Groq
 
 from ingestion.company.company import enrich
 
-load_dotenv()
+load_dotenv(".env.public")
+load_dotenv(".env", override=True)
 
 def main():
     debug = "--debug" in sys.argv

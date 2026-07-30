@@ -1,3 +1,4 @@
+
 # Advanced Search Mode — Design
 
 Date: 2026-06-28

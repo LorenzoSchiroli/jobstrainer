@@ -43,7 +43,7 @@ The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, in
 
 Before deploying the Hetzner profile, publish backend, ingestion, and frontend
 images for `linux/arm64` via GitHub Actions (**Build and push images**
-workflow; see `deploy/k8s/README.md`). Set repository variable `VITE_API_URL`
+workflow; see `deploy/k8s/README.md`). Set `VITE_API_URL` in `.env.public`
 first. Laptop `docker buildx build --platform linux/arm64` remains a fallback.
 The backend image includes `pg_dump` and `rclone` for the worker's nightly
 Postgres backup loop. The ingestion image is the highest-risk component because
@@ -74,22 +74,33 @@ uv run pytest                              # run all ingestion tests
 
 ### Required Environment Variables
 
-Create a `.env` file (see `.env.example`):
+**Secrets** — create a local `.env` from `.env.example` (gitignored):
 
 ```
 GROQ_API_KEY=...
-GROQ_MODEL_LARGE=...                    # advanced search, tailorer + cover letter generation
-GROQ_MODEL_BASE=...                     # offer/company parsing
 SECRET_KEY=...                          # JWT signing
-ACCESS_TOKEN_EXPIRE_DAYS=7
-OFFER_QUERY=...                         # used by the ingestion Docker service / CronJob
 SERPERDEV_API_KEY=...                   # company enrichment web search
 ADZUNA_APP_ID=...                       # optional job source
 ADZUNA_APP_KEY=...
 DDGS_PROXY=...                          # optional proxy for DuckDuckGo scraping
+BACKUP_SBOX_HOST=...                    # optional; with USER + rclone pass enables backups
+BACKUP_SBOX_USER=...
+# BACKUP_SBOX_RCLONE_PASS=...           # output of rclone obscure
 ```
 
-Keep values UNQUOTED: `kubectl create secret --from-env-file` stores quotes verbatim (unlike dotenv), so a quoted `GROQ_API_KEY` yields Groq `401 invalid_api_key` in k8s.
+**Non-secrets** — committed in `.env.public` (edit in git):
+
+```
+GROQ_MODEL_LARGE=...                    # advanced search, tailorer + cover letter generation
+GROQ_MODEL_BASE=...                     # offer/company parsing
+OFFER_QUERY=...                         # ingestion Docker / CronJob query
+ACCESS_TOKEN_EXPIRE_DAYS=7
+CORS_ORIGINS=...                        # extra API browser origins (optional)
+BACKUP_SBOX_PATH=backups/jobstrainer
+VITE_API_URL=https://api.example.com    # baked into frontend GHCR images
+```
+
+Keep values UNQUOTED: `kubectl create secret --from-env-file` stores quotes verbatim (unlike dotenv), so a quoted `GROQ_API_KEY` yields Groq `401 invalid_api_key` in k8s. Create the cluster Secret from both files (`.env.public` then `.env`).
 
 ## Architecture
 

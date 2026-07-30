@@ -314,7 +314,7 @@ In each of `backend/tests/search/test_search_endpoint.py` (both occurrences), `b
 - [ ] **Step 4: Run the full backend test suite**
 
 Run: `cd backend && uv run pytest -v`
-Expected: PASS, 0 errors. (Requires local Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test` — see `CLAUDE.md`.) If any test still references `backend.main.reconcile_worker`/`retention_worker`/`_backfill_created_at`, it will fail with `AttributeError: <module 'backend.main'> does not have the attribute ...` — that means Step 3 missed an occurrence; grep for it: `grep -rn "backend.main.reconcile_worker\|backend.main.retention_worker\|backend.main._backfill_created_at" backend/tests/`.
+Expected: PASS, 0 errors. (Requires local Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test` — see `AGENTS.md`.) If any test still references `backend.main.reconcile_worker`/`retention_worker`/`_backfill_created_at`, it will fail with `AttributeError: <module 'backend.main'> does not have the attribute ...` — that means Step 3 missed an occurrence; grep for it: `grep -rn "backend.main.reconcile_worker\|backend.main.retention_worker\|backend.main._backfill_created_at" backend/tests/`.
 
 - [ ] **Step 5: Commit**
 
@@ -602,14 +602,14 @@ git commit -m "feat(k8s): add OpenSearch StatefulSet for local kind deployment"
 **Files:**
 - Modify: `deploy/k8s/README.md`
 
-No manifest is committed for this task — the Secret is created imperatively from the repo's existing `.env` (per `CLAUDE.md`'s required env vars) plus the two cluster-internal URLs, so no real credentials ever land in a tracked file.
+No manifest is committed for this task — the Secret is created imperatively from the repo's existing `.env` (per `AGENTS.md`'s required env vars) plus the two cluster-internal URLs, so no real credentials ever land in a tracked file.
 
 **Interfaces:**
 - Produces: a `Secret` named `jobstrainer-secrets` containing every key from `.env` (`GROQ_API_KEY`, `GROQ_MODEL_LARGE`, `GROQ_MODEL_BASE`, `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_DAYS`, `OFFER_QUERY`, `SERPERDEV_API_KEY`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `DDGS_PROXY`) plus `DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer`, `OPENSEARCH_URL=http://opensearch:9200`, `BACKEND_URL=http://api:8000`. Every later Deployment/Job/CronJob consumes it via `envFrom: - secretRef: {name: jobstrainer-secrets}`.
 
 - [ ] **Step 1: Create the Secret**
 
-From the repo root (requires the existing `.env` file, per `CLAUDE.md`):
+From the repo root (requires the existing `.env` file, per `AGENTS.md`):
 
 ```bash
 kubectl create secret generic jobstrainer-secrets \
@@ -631,7 +631,7 @@ Expected: a line per key listed above (base64-encoded values, not printed in pla
 ```markdown
 ## 4. Secret
 
-Requires the repo's `.env` file (see `CLAUDE.md` for required vars).
+Requires the repo's `.env` file (see `AGENTS.md` for required vars).
 
     kubectl create secret generic jobstrainer-secrets \
       --from-env-file=.env \

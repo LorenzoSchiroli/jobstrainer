@@ -34,16 +34,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Require VITE_API_URL for frontend
-        if: matrix.image == 'frontend'
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-        run: |
-          if [ -z "$VITE_API_URL" ]; then
-            echo "::error::Set repository variable VITE_API_URL (Settings → Secrets and variables → Actions → Variables)"
-            exit 1
-          fi
-
       - name: Image name and short SHA
         id: meta
         run: |
@@ -63,12 +53,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Frontend VITE_API_URL from committed .env.public (not secrets .env).
       - name: Set build args
         id: args
         run: |
-          if [ "${{ matrix.image }}" = "frontend" ]; then
-            echo "build_args=VITE_API_URL=${{ vars.VITE_API_URL }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ matrix.image }}" != "frontend" ]; then
+            exit 0
           fi
+          ENV_FILE=.env.public
+          VITE_API_URL=$(grep -E '^VITE_API_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' | tr -d "'")
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Set VITE_API_URL in .env.public"
+            exit 1
+          fi
+          echo "VITE_API_URL=${VITE_API_URL}"
+          echo "build_args=VITE_API_URL=${VITE_API_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6

@@ -33,14 +33,13 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # .env.public first, then secrets .env (later wins on key clashes)
+    env_file:
+      - .env.public
+      - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer
       OPENSEARCH_URL: http://opensearch:9200
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROQ_MODEL_LARGE: ${GROQ_MODEL_LARGE}
-      GROQ_MODEL_BASE: ${GROQ_MODEL_BASE}
-      SECRET_KEY: ${SECRET_KEY}
-      ACCESS_TOKEN_EXPIRE_DAYS: ${ACCESS_TOKEN_EXPIRE_DAYS:-7}
     ports:
       - "8000:8000"
     depends_on:
@@ -60,15 +59,10 @@ services:
       context: .
       dockerfile: ingestion/Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env.public
+      - .env
     environment:
-      OFFER_QUERY: ${OFFER_QUERY}
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROQ_MODEL_LARGE: ${GROQ_MODEL_LARGE}
-      GROQ_MODEL_BASE: ${GROQ_MODEL_BASE}
-      SERPERDEV_API_KEY: ${SERPERDEV_API_KEY}
-      DDGS_PROXY: ${DDGS_PROXY:-}
-      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
-      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
       BACKEND_URL: http://backend:8000
       PYTHONUNBUFFERED: "1"
     volumes:

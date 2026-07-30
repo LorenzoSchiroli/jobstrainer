@@ -110,7 +110,7 @@ Expected: exits 0, no TypeScript errors (in particular, no complaint about `Side
 
 - [ ] **Step 5: Manual browser verification**
 
-This is a pure layout/CSS change; the spec calls for manual verification instead of new automated tests (no new logic branches were introduced — `useSidebarOpen` is unchanged). Start the full stack per this repo's `CLAUDE.md` (`docker compose up -d postgres opensearch`, `cd backend && uv run uvicorn backend.main:app --reload`, `cd frontend && npm run dev`), log in with a valid user, go to `/search`, and confirm:
+This is a pure layout/CSS change; the spec calls for manual verification instead of new automated tests (no new logic branches were introduced — `useSidebarOpen` is unchanged). Start the full stack per this repo's `AGENTS.md` (`docker compose up -d postgres opensearch`, `cd backend && uv run uvicorn backend.main:app --reload`, `cd frontend && npm run dev`), log in with a valid user, go to `/search`, and confirm:
 
 1. **Pinned during scroll:** run a search that returns enough results to make the page taller than the viewport (or shrink the browser window). Scroll down. The sidebar must stay fixed in place — it must not scroll away — and its "☰ Collapse sidebar" button must stay clickable at all times.
 2. **Independent internal scroll:** shrink the browser window height until the sidebar's own content (CV section with "View CV" expanded + preferences textarea) overflows. Confirm the sidebar scrolls internally (via its own scrollbar) without moving the main page.

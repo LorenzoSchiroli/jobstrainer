@@ -8,7 +8,8 @@ import pyperclip
 from groq import Groq
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env.public")
+load_dotenv(".env", override=True)
 
 CV_PATH = "data/lorenzo_schiroli_cv.docx"
 _MODEL = os.environ["GROQ_MODEL_LARGE"]

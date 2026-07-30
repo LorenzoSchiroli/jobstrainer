@@ -33,7 +33,8 @@ def _t(value: str | None, n: int) -> str:
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(".env.public")
+    load_dotenv(".env", override=True)
 
     parser = argparse.ArgumentParser(description="Fetch and parse job offers.")
     parser.add_argument("query", help="Search query, e.g. 'machine learning engineer'")

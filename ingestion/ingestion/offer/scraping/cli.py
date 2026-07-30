@@ -27,7 +27,8 @@ def _truncate(text: str, n: int) -> str:
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(".env.public")
+    load_dotenv(".env", override=True)
 
     parser = argparse.ArgumentParser(description="Fetch recent job offers matching a query.")
     parser.add_argument("query", help="Search query, e.g. 'machine learning engineer'")

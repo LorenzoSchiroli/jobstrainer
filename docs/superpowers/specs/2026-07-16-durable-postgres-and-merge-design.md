@@ -60,7 +60,7 @@ design §2.3: rebuildable derived index, repopulated from Postgres by
 
 Overlap between the two: **107 company `name`s** shared, **5 job `url`s** shared.
 All primary keys are UUIDs; **zero sequences** in the schema → no sequence
-resync. `jobs` unique by `url`, `companies` unique by `name` (CLAUDE.md,
+resync. `jobs` unique by `url`, `companies` unique by `name` (AGENTS.md,
 confirmed in `models.py`).
 
 **FK graph (confirmed in code):**
@@ -214,7 +214,7 @@ remain as cold backups.
 |---|---|
 | `docker-compose.yml` | **No change.** Left as-is; compose is deprecated informally over time, not edited now. |
 | `deploy/k8s/README.md` | Add a short "Merge / one-time data load" pointer and the `CREATE DATABASE jobstrainer_test` step. |
-| `CLAUDE.md` | Update the test-DB note: tests target `jobstrainer_test` on the k8s Postgres via `kubectl port-forward svc/postgres 5432:5432`, and the compose Postgres must not be occupying `localhost:5432` at test time (see §6.1). |
+| `AGENTS.md` | Update the test-DB note: tests target `jobstrainer_test` on the k8s Postgres via `kubectl port-forward svc/postgres 5432:5432`, and the compose Postgres must not be occupying `localhost:5432` at test time (see §6.1). |
 | `backend/tests/conftest.py` | **No change needed** — see §6.1. |
 
 No manifest or application code changes: storage is unchanged (§1.1), and the
@@ -238,7 +238,7 @@ it occupies `localhost:5432`, and the port-forward can't bind — tests would hi
 whichever is on 5432. To route tests at k8s, either `docker compose stop postgres`
 first, **or** port-forward k8s to a different port (`kubectl port-forward
 svc/postgres 5544:5432`) and set `TEST_DATABASE_URL` accordingly. Document both in
-`CLAUDE.md`.
+`AGENTS.md`.
 
 **Consequence (accepted):** `uv run pytest` now has a "cluster up + port-forward"
 precondition; without it the connection is refused and the suite fails fast with a
