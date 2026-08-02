@@ -15,7 +15,8 @@ module "kube_hetzner" {
   control_plane_nodepools = [
     {
       name        = "permanent"
-      server_type = "cax21"
+      # CX33 (x86, 8 GiB): ARM CAX capacity unavailable; same RAM class as CAX21.
+      server_type = "cx33"
       location    = var.location
       count       = 1
       # v3.0.1 types control-plane labels/taints as list(string), not maps.
@@ -41,7 +42,7 @@ module "kube_hetzner" {
   autoscaler_nodepools = [
     {
       name        = "burst"
-      server_type = "cax21"
+      server_type = "cx33"
       location    = var.location
       min_nodes   = 0
       max_nodes   = 2

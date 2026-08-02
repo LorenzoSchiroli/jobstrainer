@@ -120,11 +120,11 @@ after the load ends (~5 min scale-down stabilization). Clean up:
 
     kubectl delete -f deploy/k8s/loadtest-job.yaml
 
-## Hetzner ARM64 images
+## Hetzner amd64 images
 
 Prefer GitHub Actions over a laptop build. The workflow
 `.github/workflows/build-push-images.yml` builds backend, ingestion, and
-frontend for `linux/arm64` on native ARM runners and pushes to GHCR.
+frontend for `linux/amd64` and pushes to GHCR.
 
 One-time setup:
 
@@ -154,15 +154,15 @@ Replace `OWNER`, `TAG`, and `api.example.com`:
 
     docker login ghcr.io
 
-    docker buildx build --platform linux/arm64 \
+    docker buildx build --platform linux/amd64 \
       -f backend/Dockerfile \
       -t ghcr.io/OWNER/jobstrainer-backend:TAG --push .
 
-    docker buildx build --platform linux/arm64 \
+    docker buildx build --platform linux/amd64 \
       -f ingestion/Dockerfile \
       -t ghcr.io/OWNER/jobstrainer-ingestion:TAG --push .
 
-    docker buildx build --platform linux/arm64 \
+    docker buildx build --platform linux/amd64 \
       -f frontend/Dockerfile \
       --build-arg VITE_API_URL=https://api.example.com \
       -t ghcr.io/OWNER/jobstrainer-frontend:TAG --push ./frontend

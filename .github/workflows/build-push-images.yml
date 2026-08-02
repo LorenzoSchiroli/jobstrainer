@@ -13,7 +13,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.image }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +74,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:latest
@@ -86,7 +86,7 @@ jobs:
 
   prune-tags:
     name: Prune old SHA tags
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     needs: build
     permissions:
       packages: write

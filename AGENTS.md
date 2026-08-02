@@ -39,17 +39,16 @@ helm install jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/valu
 
 The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, ingestion CronJob, frontend, and a bootstrap hook Job (migrations + OpenSearch index + checkpointer setup). It references a pre-created `jobstrainer-secrets` secret. `deploy/k8s/loadtest-job.yaml` is an in-cluster k6 load-test Job for the HPA demo.
 
-### Hetzner ARM64 deployment gate
+### Hetzner image gate (x86)
 
 Before deploying the Hetzner profile, publish backend, ingestion, and frontend
-images for `linux/arm64` via GitHub Actions (**Build and push images**
+images for `linux/amd64` via GitHub Actions (**Build and push images**
 workflow; see `deploy/k8s/README.md`). Set `VITE_API_URL` in `.env.public`
-first. Laptop `docker buildx build --platform linux/arm64` remains a fallback.
+first. Laptop `docker buildx build --platform linux/amd64` remains a fallback.
 The backend image includes `pg_dump` and `rclone` for the worker's nightly
 Postgres backup loop. The ingestion image is the highest-risk component because
-it includes Playwright and python-jobspy/tls-client. If the ARM64 gate fails,
-do not deploy under emulation; switch the infrastructure profile to x86 and
-revisit the budget.
+it includes Playwright and python-jobspy/tls-client. Nodes are CX33 (x86);
+do not pull arm64-only images onto them.
 
 ### Backend
 
