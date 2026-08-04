@@ -84,7 +84,7 @@ ingestion:
     tag: latest
   schedule: "0 */2 * * *"
   # Lookback window for `ingestion.pipeline --hours`. Local every-2h schedule
-  # keeps a short default; Hetzner daily schedule overrides to cover a full day.
+  # keeps a short default; cloud profile (values-cloud.yaml) overrides daily.
   hours: 2
   suspend: false
   activeDeadlineSeconds: 1800
