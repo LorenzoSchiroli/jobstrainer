@@ -41,4 +41,4 @@ override.tf.json
 kubeconfig*
 .kube/
 rclone.conf
-values-hetzner-private.yaml
+values-private.yaml
