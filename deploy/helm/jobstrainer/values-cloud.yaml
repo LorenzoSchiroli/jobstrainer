@@ -1,0 +1,60 @@
+# Portable cloud/demo settings. Provider overlays (e.g. values-hetzner.yaml)
+# add only cloud-specific knobs. Real images/hosts/email go in values-private.yaml.
+imagePullPolicy: Always
+
+nodePools:
+  permanent:
+    labelKey: jobstrainer.io/node-pool
+    labelValue: permanent
+  burst:
+    labelKey: jobstrainer.io/node-pool
+    labelValue: burst
+
+scheduling:
+  postgres: permanent
+  opensearch: permanent
+  worker: permanent
+  ingestion: burst
+
+postgres:
+  storage: 10Gi
+  pgdataSubdir: pgdata
+
+opensearch:
+  storage: 20Gi
+  fsGroup: 1000
+
+bootstrap:
+  image:
+    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    tag: latest
+
+api:
+  image:
+    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    tag: latest
+
+worker:
+  image:
+    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    tag: latest
+
+ingestion:
+  image:
+    repository: ghcr.io/jobstrainer-demo/jobstrainer-ingestion
+    tag: latest
+
+frontend:
+  image:
+    repository: ghcr.io/jobstrainer-demo/jobstrainer-frontend
+    tag: latest
+
+ingress:
+  enabled: true
+  frontendHost: app.example.com
+  apiHost: api.example.com
+
+certManager:
+  createIssuers: true
+  email: ops@example.com
+  issuerName: letsencrypt-staging
