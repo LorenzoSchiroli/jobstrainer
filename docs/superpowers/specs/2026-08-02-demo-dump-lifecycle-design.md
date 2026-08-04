@@ -98,8 +98,10 @@ Steps:
    `deploy/k8s/README.md`; script may invoke documented commands or refuse and
    print them if the secret is absent).
 5. `helm upgrade --install jobstrainer deploy/helm/jobstrainer`
+   `-f deploy/helm/jobstrainer/values.yaml`
+   `-f deploy/helm/jobstrainer/values-cloud.yaml`
    `-f deploy/helm/jobstrainer/values-hetzner.yaml`
-   `-f values-hetzner-private.yaml` (repo-root private overrides).
+   `-f values-private.yaml` (repo-root private overrides).
 6. Wait until `postgres-0` is Ready.
 7. Copy the current dump into the pod and
    `pg_restore -U postgres -d jobstrainer --clean --if-exists --no-owner`.

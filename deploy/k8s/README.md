@@ -131,7 +131,7 @@ One-time setup:
 1. Set `VITE_API_URL` in `.env.public` to the public API base URL
    (e.g. `https://api.<your-domain>`). Commit that change before publishing.
 2. Ensure GHCR packages will be pullable by the cluster (public packages, or a
-   pull secret via `values-hetzner-private.yaml`)
+   pull secret via `values-private.yaml`)
 
 Publish:
 
@@ -143,7 +143,7 @@ Publish:
    Untagged digests may linger until GHCR garbage-collects them.
 
 Cluster pull of `latest` requires `imagePullPolicy: Always` (already set in
-`values-hetzner.yaml`). After a successful publish, `helm upgrade` (or a
+`values-cloud.yaml`). After a successful publish, `helm upgrade` (or a
 rollout restart) picks up the new digest. To roll back, temporarily set the
 image `tag` to a retained short SHA.
 
@@ -175,7 +175,7 @@ file (and the laptop `--build-arg` if you use the fallback) and rebuild when
 the public API hostname changes.
 
 If packages under `ghcr.io/OWNER/` are private, create a pull secret and attach
-it through `values-hetzner-private.yaml` (or make the packages public for the
+it through `values-private.yaml` (or make the packages public for the
 portfolio demo). Public packages need no `imagePullSecrets`.
 
 ## Hetzner application Secret
@@ -212,20 +212,30 @@ the obscured value, not the raw password:
 
 ## Hetzner Helm deployment
 
-Create an ignored `values-hetzner-private.yaml` that overrides the safe example
+Cloud deploys layer portable settings, then provider knobs, then a gitignored
+private overlay:
+
+1. `values.yaml` — kind-safe chart defaults
+2. `values-cloud.yaml` — portable cloud/demo settings (CSI, scheduling, ingress shape, placeholder images)
+3. `values-hetzner.yaml` — Hetzner-only (`storageClass: hcloud-volumes`)
+4. `values-private.yaml` — real image repos, hostnames, Let's Encrypt email (repo root, gitignored)
+
+A future provider adds `values-<provider>.yaml` instead of step 3; `values-cloud.yaml` stays shared.
+
+Create an ignored `values-private.yaml` that overrides the safe example
 image repository, image tag (`latest`, or a retained short SHA for rollback), hostname, and Let's Encrypt email:
 
 ```yaml
 bootstrap:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
 api:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
 worker:
-  image: { repository: ghcr.io/loryschi/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
 ingestion:
-  image: { repository: ghcr.io/loryschi/jobstrainer-ingestion, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobstrainer-ingestion, tag: latest }
 frontend:
-  image: { repository: ghcr.io/loryschi/jobstrainer-frontend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobstrainer-frontend, tag: latest }
 ingress:
   frontendHost: app.example.com
   apiHost: api.example.com
@@ -237,13 +247,15 @@ Then deploy:
 
     helm lint deploy/helm/jobstrainer \
       -f deploy/helm/jobstrainer/values.yaml \
+      -f deploy/helm/jobstrainer/values-cloud.yaml \
       -f deploy/helm/jobstrainer/values-hetzner.yaml \
-      -f values-hetzner-private.yaml
+      -f values-private.yaml
 
-    helm install jobstrainer deploy/helm/jobstrainer \
+    helm upgrade --install jobstrainer deploy/helm/jobstrainer \
       -f deploy/helm/jobstrainer/values.yaml \
+      -f deploy/helm/jobstrainer/values-cloud.yaml \
       -f deploy/helm/jobstrainer/values-hetzner.yaml \
-      -f values-hetzner-private.yaml
+      -f values-private.yaml
 
     kubectl get pods -o wide
     kubectl get ingress,clusterissuer,certificate
