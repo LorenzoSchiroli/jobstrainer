@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Create or replace dumps/jobstrainer.current.dump from compose, a file, or a cluster.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: seed-dump [--from compose|file|cluster] [--file PATH]
+
+  --from compose   Dump from local docker compose Postgres (default)
+  --from file      Promote an existing custom-format dump (--file required)
+  --from cluster   Dump from postgres-0 using KUBECONFIG
+  --file PATH      Source dump for --from file
+
+EOF
+}
+
+from="compose"
+file_path=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --from)
+      from="${2:?--from requires compose|file|cluster}"
+      shift 2
+      ;;
+    --file)
+      file_path="${2:?--file requires a path}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+case "${from}" in
+  compose|file|cluster) ;;
+  *)
+    echo "error: --from must be compose, file, or cluster" >&2
+    exit 1
+    ;;
+esac
+
+tmp="$(mktemp_dump)"
+trap 'rm -f "${tmp}"' EXIT
+
+case "${from}" in
+  compose)
+    require_cmd docker
+    if ! docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --status running --services 2>/dev/null | grep -qx postgres; then
+      # Fall back to a looser check — compose v2 status flags vary.
+      if ! docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+        echo "error: compose Postgres is not reachable (start with: docker compose up -d postgres)" >&2
+        exit 1
+      fi
+    fi
+    docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T postgres \
+      pg_dump -U postgres -Fc jobstrainer > "${tmp}"
+    ;;
+  file)
+    if [[ -z "${file_path}" ]]; then
+      echo "error: --from file requires --file PATH" >&2
+      exit 1
+    fi
+    if [[ ! -f "${file_path}" ]]; then
+      echo "error: dump file not found: ${file_path}" >&2
+      exit 1
+    fi
+    cp "${file_path}" "${tmp}"
+    ;;
+  cluster)
+    cluster_pg_dump_to "${tmp}"
+    ;;
+esac
+
+promote_dump "${tmp}"
+trap - EXIT

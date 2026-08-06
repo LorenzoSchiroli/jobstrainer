@@ -42,3 +42,6 @@ kubeconfig*
 .kube/
 rclone.conf
 values-private.yaml
+
+# Canonical Postgres dump lifecycle (never commit binaries)
+dumps/

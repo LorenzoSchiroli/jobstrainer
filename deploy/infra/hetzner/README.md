@@ -45,5 +45,40 @@ snapshot is missing.
 
     tofu apply
 
-The module writes a local kubeconfig as part of its documented setup. Keep that
-file outside Git and use it only through `KUBECONFIG=/path/to/kubeconfig`.
+kube-hetzner writes a local kubeconfig next to this module:
+
+    export KUBECONFIG=$PWD/jobstrainer_kubeconfig.yaml
+
+(Default `cluster_name` is `jobstrainer`, so the file is
+`jobstrainer_kubeconfig.yaml`. Keep it out of Git; `kubeconfig*` is gitignored.)
+
+## Demo dump lifecycle
+
+Hetzner is disposable. The operator source of truth is a single custom-format
+dump at the repo root (gitignored):
+
+    dumps/jobstrainer.current.dump
+
+Do **not** run bare `tofu destroy` while the demo holds data that is not yet in
+that file — use `demo-down` instead.
+
+Typical flow from the repo root:
+
+    # One-time (or rare): create the canonical dump
+    deploy/scripts/seed-dump --from compose
+    # or: deploy/scripts/seed-dump --from file --file ~/jobstrainer-data/dumps/compose-base.dump
+    # or: deploy/scripts/seed-dump --from cluster
+
+    deploy/scripts/demo-up          # tofu apply → helm → restore dump
+    # … use the demo …
+    deploy/scripts/demo-down        # dump → promote current → tofu destroy
+
+`demo-up` / `demo-down` accept `--yes` to pass `-auto-approve` to tofu.
+Dump validation prefers Homebrew `libpq`’s `pg_restore` (even if keg-only),
+then PATH `pg_restore`, then Docker `postgres:16`/`17`, then the cluster
+Postgres pod. If PATH still has an old PostgreSQL 14 client, install/link
+`libpq` or leave the keg path at `/opt/homebrew/opt/libpq/bin`.
+
+Nightly Storage Box backups (worker) remain disaster recovery for a live demo;
+they are not this workflow’s source of truth. Details:
+`docs/superpowers/specs/2026-08-02-demo-dump-lifecycle-design.md`.
