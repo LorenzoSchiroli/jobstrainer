@@ -1,0 +1,10 @@
+aws_region           = "eu-central-1"
+domain               = "jobsifty.com"
+cloudflare_zone_id   = "00000000000000000000000000000000"
+manage_dns_flip      = false
+ghcr_username        = "YOUR_GITHUB_USER"
+frontend_image       = "ghcr.io/OWNER/jobstrainer-frontend:TAG"
+backend_image        = "ghcr.io/OWNER/jobstrainer-backend:TAG"
+ingestion_image      = "ghcr.io/OWNER/jobstrainer-ingestion:TAG"
+alert_email          = "you@example.com"
+# cloudflare_api_token / ghcr_token via TF_VAR_ or terraform.tfvars (gitignored)
