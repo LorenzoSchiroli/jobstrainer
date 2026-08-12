@@ -268,6 +268,13 @@ resource "aws_ecs_service" "frontend" {
     assign_public_ip = local.ecs_network_configuration.assign_public_ip
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.frontend.arn
+    container_name   = "frontend"
+    container_port   = 80
+  }
+
+  depends_on = [aws_lb_listener.https]
 }
 
 resource "aws_ecs_service" "api" {
@@ -283,6 +290,13 @@ resource "aws_ecs_service" "api" {
     assign_public_ip = local.ecs_network_configuration.assign_public_ip
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = "api"
+    container_port   = 8000
+  }
+
+  depends_on = [aws_lb_listener.https]
 }
 
 resource "aws_ecs_service" "worker" {
