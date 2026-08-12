@@ -115,6 +115,50 @@ resource "aws_lb_listener" "https" {
   depends_on = [aws_acm_certificate_validation.main]
 }
 
+resource "aws_lb_listener_rule" "apex_redirect" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 90
+
+  action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      host        = "app.${var.domain}"
+      status_code = "HTTP_301"
+    }
+  }
+
+  condition {
+    host_header {
+      values = [var.domain]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "www_redirect" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 95
+
+  action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      host        = "app.${var.domain}"
+      status_code = "HTTP_301"
+    }
+  }
+
+  condition {
+    host_header {
+      values = ["www.${var.domain}"]
+    }
+  }
+}
+
 resource "aws_lb_listener_rule" "frontend" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 100
