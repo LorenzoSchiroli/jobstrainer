@@ -27,3 +27,18 @@ output "ecs_tasks_security_group_id" {
   description = "Security group ID attached to ECS Fargate tasks."
   value       = aws_security_group.ecs_tasks.id
 }
+
+output "rds_address" {
+  description = "RDS Postgres hostname for debugging or one-off connections."
+  value       = aws_db_instance.main.address
+}
+
+output "opensearch_endpoint" {
+  description = "OpenSearch domain VPC endpoint (HTTPS)."
+  value       = aws_opensearch_domain.main.endpoint
+}
+
+output "manage_dns_flip" {
+  description = "Whether Cloudflare app/api/apex/www records point at the ALB."
+  value       = var.manage_dns_flip
+}

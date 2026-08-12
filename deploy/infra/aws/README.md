@@ -1,8 +1,40 @@
 # AWS ECS showcase (OpenTofu)
 
-Managed Fargate stack for the jobstrainer demo. Full operator runbook (prerequisites, apply, DNS flip, destroy) is completed in Task 8.
+Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this path uses ECS Fargate, RDS Postgres, OpenSearch Service, and an ALB. Only one public stack should serve `jobsifty.com` at a time — flip Cloudflare DNS between Hetzner and AWS.
 
-## Bootstrap (one-shot after first apply)
+## 1. Prerequisites
+
+- **OpenTofu** ≥ 1.10.1 and the **AWS CLI** configured with credentials for a **Paid AWS account** (Free Tier alone may block RDS, OpenSearch, or NAT).
+- **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
+- **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
+- Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `ghcr_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
+
+## 2. Configure variables
+
+From `deploy/infra/aws`:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` (gitignored) with your domain, GHCR image tags, `alert_email`, `budget_limit_usd`, and Cloudflare zone ID. Put sensitive values in `terraform.tfvars` or export `TF_VAR_groq_api_key`, `TF_VAR_cloudflare_api_token`, `TF_VAR_ghcr_token`, etc.
+
+## 3. First apply (`manage_dns_flip = false`)
+
+Keep **`manage_dns_flip = false`** while Hetzner is still serving production DNS. This creates the VPC, NAT, ALB, ACM validation records, RDS, OpenSearch, ECS services, EventBridge ingestion schedule, Secrets Manager entries, and a monthly cost budget — without repointing `app` / `api` / apex / `www`.
+
+```bash
+tofu init
+tofu apply
+```
+
+Wait for ACM validation (Cloudflare records from `dns.tf`) and for ECS services to pass ALB health checks. Note the ALB hostname:
+
+```bash
+tofu output -raw alb_dns_name
+```
+
+## 4. Bootstrap (one-shot RunTask)
 
 Run migrations and OpenSearch index setup before serving traffic. The bootstrap task uses the same private networking as ECS services (`assignPublicIp=DISABLED`).
 
@@ -19,8 +51,64 @@ aws ecs run-task \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}"
 ```
 
-Watch logs in CloudWatch under `/ecs/jobstrainer/bootstrap` (or `${project}/bootstrap` if you changed `var.project`). Re-run only when migrations or bootstrap logic change.
+Watch logs in CloudWatch under `/ecs/jobstrainer/bootstrap` (or `/ecs/${project}/bootstrap` if you changed `var.project`). Re-run only when migrations or bootstrap logic change.
+
+## 5. DNS flip to AWS
+
+**Stop or scale down Hetzner** so it is not still serving public traffic (Helm release scaled to zero, ingress removed, or node stopped — pick one; do not run both stacks publicly).
+
+Then either:
+
+**A. OpenTofu-managed flip** — set `manage_dns_flip = true` in `terraform.tfvars` and run `tofu apply`. Cloudflare `app`, `api`, apex, and `www` CNAME records point at the ALB.
+
+**B. Manual Cloudflare flip** — create DNS-only CNAME records for `app`, `api`, apex, and `www` to `$(tofu output -raw alb_dns_name)` (leave `manage_dns_flip = false` if you manage records by hand).
+
+Allow a few minutes for DNS TTL/propagation.
+
+## 6. Smoke test
+
+- Open **`https://app.jobsifty.com`** (or `https://app.<your-domain>`) and confirm the frontend loads.
+- Hit the API, e.g. `curl -sS https://api.jobsifty.com/health` — expect `200`.
+- Optional: register/login, run a job search, confirm worker reconcile logs in CloudWatch.
+
+## 7. Flip DNS back to Hetzner
+
+When the demo ends, repoint Cloudflare to the Hetzner ingress IP **before** or **as** you tear down AWS:
+
+- Set **`manage_dns_flip = false`** and `tofu apply`, **or** manually restore the previous Hetzner A/CNAME records.
+- Bring Hetzner back to serving traffic.
+
+## 8. Destroy checklist
+
+From `deploy/infra/aws` with DNS already pointing away from the ALB:
+
+```bash
+tofu destroy
+```
+
+Confirm removal of billable resources:
+
+| Resource | Notes |
+|----------|--------|
+| **NAT Gateway** | Largest idle cost if left running |
+| **ALB** | Requires two public subnets (two AZs) |
+| **ECS** | Cluster, services, task definitions, EventBridge schedule |
+| **RDS** | `skip_final_snapshot = true` for showcase — no final snapshot |
+| **OpenSearch** | Single-node domain |
+| **Elastic IP** | Attached to NAT |
+| **CloudWatch Logs** | Retention 7 days; small residual storage possible |
+
+Re-check the AWS console for stray ENIs, EIPs, or OpenSearch domains if destroy errors mid-run.
+
+## 9. Cost notes
+
+- Most resources bill **hourly** (pro-rated). **`tofu destroy` stops the meter** for NAT, ALB, Fargate, RDS, and OpenSearch; tiny charges may linger for logs or RDS snapshots if you keep them.
+- Expect roughly: NAT Gateway + ALB + Fargate tasks + small RDS + OpenSearch node — dominated by NAT and OpenSearch for short demos.
+- A monthly **AWS Budget** (`var.budget_limit_usd`, default `$10`) emails **`var.alert_email`** at **80%** and **100%** of **ACTUAL** spend. Confirm the subscription email from AWS Budgets after first apply.
+- Keep **`manage_dns_flip = false`** until you intentionally cut over; leaving the stack up without traffic still incurs infrastructure cost.
 
 ## Ingestion schedule
 
 EventBridge Scheduler runs the ingestion task definition every 2 hours (`cron(0 */2 * * ? *)`), mirroring the local Helm CronJob cadence. The task definition already passes `--hours 2` and reads `OFFER_QUERY` from Secrets Manager; no container overrides are applied at schedule time.
+
+**Operational risk:** unlike the Helm CronJob’s `concurrencyPolicy: Forbid`, EventBridge has **no overlap guard**. A new RunTask can start every 2 hours even if the previous ingestion task is still running. Long scrapes may overlap; watch ingestion logs and task counts in ECS if runs approach the 2-hour window.
