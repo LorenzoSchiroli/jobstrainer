@@ -62,3 +62,55 @@ resource "aws_iam_role" "ecs_task" {
   name               = "${var.project}-ecs-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
 }
+
+data "aws_iam_policy_document" "scheduler_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "scheduler" {
+  name               = "${var.project}-scheduler"
+  assume_role_policy = data.aws_iam_policy_document.scheduler_assume.json
+}
+
+data "aws_iam_policy_document" "scheduler_ecs" {
+  statement {
+    actions = ["ecs:RunTask"]
+    resources = [
+      aws_ecs_task_definition.ingestion.arn,
+      "${aws_ecs_task_definition.ingestion.arn_without_revision}:*",
+    ]
+
+    condition {
+      test     = "ArnLike"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.main.arn]
+    }
+  }
+
+  statement {
+    actions = ["iam:PassRole"]
+    resources = [
+      aws_iam_role.ecs_execution.arn,
+      aws_iam_role.ecs_task.arn,
+    ]
+
+    condition {
+      test     = "StringLike"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler_ecs" {
+  name   = "${var.project}-scheduler-ecs"
+  role   = aws_iam_role.scheduler.id
+  policy = data.aws_iam_policy_document.scheduler_ecs.json
+}
