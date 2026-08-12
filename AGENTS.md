@@ -16,7 +16,7 @@ This is a `uv` workspace with two packages:
 Other top-level directories:
 - `frontend/` — React (Vite) SPA, served by nginx in Docker/k8s
 - `extension/` — Chrome extension (Tailorer side panel; calls the backend directly)
-- `deploy/` — Helm chart (`deploy/helm/jobstrainer/`) + k8s runbook (`deploy/k8s/README.md`)
+- `deploy/` — Helm chart (`deploy/helm/jobstrainer/`) + k8s runbook (`deploy/k8s/README.md`); **AWS showcase** is the ECS managed path in `deploy/infra/aws/` (OpenTofu + Fargate/RDS/OpenSearch Service — not Helm on AWS)
 - `tailor/` — standalone CV-tailoring scripts (`tailor/tailor_cv.py`; `python -m tailor` generates a cover letter)
 
 Ad-hoc CLIs (run from `ingestion/`):

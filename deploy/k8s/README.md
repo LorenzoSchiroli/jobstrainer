@@ -7,6 +7,14 @@ took over; see git history and
 `loadtest-job.yaml` (a demo/ops tool, not part of the app deploy) remains as a
 plain manifest.
 
+## AWS (ECS, not Helm)
+
+This runbook covers Helm on Kubernetes (local kind, Hetzner, and other k8s
+clusters). The AWS showcase does **not** use Helm or EKS: it runs on ECS
+Fargate with RDS, OpenSearch Service, and an ALB, provisioned via OpenTofu in
+[`deploy/infra/aws/`](../infra/aws/). See that README for apply, bootstrap
+RunTask, and DNS flip from Hetzner.
+
 ## 1. Prerequisites
 
 ### Cluster + images
