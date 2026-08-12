@@ -70,7 +70,16 @@ async def get_existing_job_ids(
 async def init_opensearch() -> None:
     global _client
     url = os.environ["OPENSEARCH_URL"]
-    _client = AsyncOpenSearch(hosts=[url])
+    user = os.environ.get("OPENSEARCH_USER")
+    password = os.environ.get("OPENSEARCH_PASSWORD")
+    kwargs: dict = {"hosts": [url]}
+    if user and password:
+        kwargs["http_auth"] = (user, password)
+        kwargs["use_ssl"] = True
+        kwargs["verify_certs"] = True
+    elif user or password:
+        raise ValueError("OPENSEARCH_USER and OPENSEARCH_PASSWORD must both be set")
+    _client = AsyncOpenSearch(**kwargs)
     if not await _client.indices.exists(index=INDEX_NAME):
         await _client.indices.create(index=INDEX_NAME, body=_INDEX_BODY)
     await _client.indices.put_mapping(

@@ -55,3 +55,31 @@ async def test_get_existing_job_ids_chunks_large_input():
     ids = [str(i) for i in range(12000)]
     await get_existing_job_ids(os_client, ids, chunk_size=5000)
     assert os_client.mget.call_count == 3
+
+
+async def test_init_passes_basic_auth_when_user_password_set(monkeypatch):
+    monkeypatch.setenv("OPENSEARCH_URL", "https://search.example.com")
+    monkeypatch.setenv("OPENSEARCH_USER", "admin")
+    monkeypatch.setenv("OPENSEARCH_PASSWORD", "secret")
+    mock_client = AsyncMock()
+    mock_client.indices.exists.return_value = True
+    with patch("backend.opensearch_client.AsyncOpenSearch", return_value=mock_client) as ctor:
+        m._client = None
+        await m.init_opensearch()
+    kwargs = ctor.call_args.kwargs
+    assert kwargs.get("http_auth") == ("admin", "secret")
+    assert kwargs.get("use_ssl") is True
+    assert kwargs.get("verify_certs") is True
+
+
+async def test_init_plain_http_without_auth_env(monkeypatch):
+    monkeypatch.setenv("OPENSEARCH_URL", "http://localhost:9200")
+    monkeypatch.delenv("OPENSEARCH_USER", raising=False)
+    monkeypatch.delenv("OPENSEARCH_PASSWORD", raising=False)
+    mock_client = AsyncMock()
+    mock_client.indices.exists.return_value = True
+    with patch("backend.opensearch_client.AsyncOpenSearch", return_value=mock_client) as ctor:
+        m._client = None
+        await m.init_opensearch()
+    kwargs = ctor.call_args.kwargs
+    assert "http_auth" not in kwargs or kwargs.get("http_auth") is None
