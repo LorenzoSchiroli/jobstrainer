@@ -66,3 +66,47 @@ variable "opensearch_instance_type" {
   type    = string
   default = "t3.small.search"
 }
+
+variable "groq_api_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "groq_model_large" {
+  type    = string
+  default = "openai/gpt-oss-120b"
+}
+
+variable "groq_model_base" {
+  type    = string
+  default = "qwen/qwen3-32b"
+}
+
+variable "offer_query" {
+  type    = string
+  default = "machine learning engineer"
+}
+
+variable "adzuna_app_id" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "adzuna_app_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "serperdev_api_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "ddgs_proxy" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
