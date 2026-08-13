@@ -275,17 +275,21 @@ certificate works, delete the issued Certificate/Secret pair for each host,
 set `issuerName` to `letsencrypt-prod`, and run `helm upgrade`. Leaving the
 staging Secret in place prevents the production issuer from replacing it.
 
-## Demo dump lifecycle (Hetzner)
+## Demo dump lifecycle
 
-For bring-up / tear-down of the public Hetzner demo without losing Postgres
-data, use the single-file dump workflow documented in
-`deploy/infra/hetzner/README.md`:
+For bring-up / tear-down without losing Postgres, use the single-file dump
+`dumps/jobstrainer.current.dump` (shared across clouds):
 
-- `deploy/scripts/seed-dump` — create `dumps/jobstrainer.current.dump`
-- `deploy/scripts/demo-up` — tofu + helm + restore that dump
-- `deploy/scripts/demo-down` — dump cloud Postgres back to the file, then destroy
+**Hetzner** (`deploy/infra/hetzner/README.md`):
 
-Prefer `demo-down` over bare `tofu destroy` when the demo holds data.
+- `deploy/scripts/seed-dump` — create the current dump
+- `deploy/scripts/demo-up` / `demo-down` — Helm/k8s path
+
+**AWS** (`deploy/infra/aws/README.md`):
+
+- `deploy/scripts/demo-up-aws` / `demo-down-aws` — ECS/RDS via Fargate + S3
+
+Prefer the matching `demo-down*` over bare `tofu destroy` when the demo holds data.
 
 ## Backup and restore drill
 

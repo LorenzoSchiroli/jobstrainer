@@ -36,7 +36,8 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
 }
 
 resource "aws_secretsmanager_secret" "ghcr" {
-  name = "${var.project}/ghcr"
+  name                    = "${var.project}/ghcr"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "ghcr" {

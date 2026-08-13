@@ -30,6 +30,10 @@ jobs:
             dockerfile: frontend/Dockerfile
             context: ./frontend
             package: jobstrainer-frontend
+          - image: pgtools
+            dockerfile: deploy/infra/aws/docker/pgtools/Dockerfile
+            context: deploy/infra/aws/docker/pgtools
+            package: jobstrainer-pgtools
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,6 +100,7 @@ jobs:
           - jobstrainer-backend
           - jobstrainer-ingestion
           - jobstrainer-frontend
+          - jobstrainer-pgtools
     steps:
       - name: Keep latest + two newest SHA tags
         env:

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Bring up AWS ECS showcase and restore dumps/jobstrainer.current.dump into RDS.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/aws.sh
+source "${SCRIPT_DIR}/lib/aws.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: demo-up-aws [--yes]
+
+  --yes   Pass -auto-approve to tofu apply
+
+Requires dumps/jobstrainer.current.dump (run seed-dump first) and
+deploy/infra/aws/terraform.tfvars. Does not change Cloudflare/Hetzner DNS.
+
+EOF
+}
+
+auto_approve=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes)
+      auto_approve=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+aws_require_tools
+require_pg_client
+aws_require_tfvars
+
+if [[ ! -f "${CURRENT_DUMP}" ]]; then
+  echo "error: missing ${CURRENT_DUMP}" >&2
+  echo "hint: run deploy/scripts/seed-dump first" >&2
+  exit 1
+fi
+validate_dump "${CURRENT_DUMP}"
+
+tofu_args=(apply)
+if [[ "${auto_approve}" -eq 1 ]]; then
+  tofu_args+=(-auto-approve)
+fi
+
+echo "==> tofu apply (${AWS_DIR})"
+(
+  cd "${AWS_DIR}"
+  tofu "${tofu_args[@]}"
+)
+
+aws_run_bootstrap_task
+
+aws_pause_writers
+
+restore_ok=0
+if aws_upload_dump "${CURRENT_DUMP}" && aws_run_restore_task; then
+  restore_ok=1
+fi
+
+if [[ "${restore_ok}" -ne 1 ]]; then
+  cat >&2 <<EOF
+error: dump upload or pg_restore failed; leaving api/worker at 0 and ingestion disabled.
+recovery:
+  # fix dump / retry upload + restore, then:
+  # re-run helpers or manually scale services and re-enable the EventBridge schedule
+  # see deploy/infra/aws/README.md (Demo dump lifecycle)
+EOF
+  exit 1
+fi
+
+aws_resume_writers
+
+echo "demo-up-aws complete. OpenSearch will refill via worker reconcile."
+echo "DNS unchanged (manage_dns_flip / Cloudflare not touched)."

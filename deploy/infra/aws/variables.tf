@@ -48,6 +48,11 @@ variable "ingestion_image" {
   type = string
 }
 
+variable "pgtools_image" {
+  type        = string
+  description = "GHCR linux/amd64 image: postgres:16 + AWS CLI for demo dump/restore RunTask."
+}
+
 variable "alert_email" {
   type = string
 }

@@ -5,7 +5,7 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 ## 1. Prerequisites
 
 - **OpenTofu** ≥ 1.10.1 and the **AWS CLI** configured with credentials for a **Paid AWS account** (Free Tier alone may block RDS, OpenSearch, or NAT).
-- **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
+- **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobstrainer-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
 - **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
 - Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `ghcr_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
 
@@ -84,9 +84,37 @@ When the demo ends, repoint Cloudflare to the Hetzner ingress IP **before** or *
 - Set **`manage_dns_flip = false`** and `tofu apply`, **or** manually restore the previous Hetzner A/CNAME records.
 - Bring Hetzner back to serving traffic.
 
-## 8. Destroy checklist
+## 8. Demo dump lifecycle (preferred up/down)
 
-From `deploy/infra/aws` with DNS already pointing away from the ALB:
+Same Postgres dump file as Hetzner (`dumps/jobstrainer.current.dump`). Scripts
+use Fargate + S3 (RDS stays private). They **do not** touch Cloudflare or Hetzner.
+
+Also required: **`pgtools_image`** in `terraform.tfvars` — GHCR
+`linux/amd64` image from **Build and push images** (`jobstrainer-pgtools`), or:
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t ghcr.io/OWNER/jobstrainer-pgtools:TAG --push \
+  deploy/infra/aws/docker/pgtools
+```
+
+From the repo root:
+
+```bash
+deploy/scripts/seed-dump --from compose   # if you do not already have a current dump
+deploy/scripts/demo-up-aws                # tofu apply → bootstrap → restore dump
+# … use the demo (flip DNS separately if needed) …
+deploy/scripts/demo-down-aws              # dump → promote current → tofu destroy
+```
+
+`--yes` passes `-auto-approve` to tofu. Prefer `demo-down-aws` over bare
+`tofu destroy` when the demo holds data. Spec:
+`docs/superpowers/specs/2026-08-13-aws-demo-dump-lifecycle-design.md`.
+
+## 9. Destroy checklist
+
+With DNS already pointing away from the ALB (manual / `manage_dns_flip`), prefer
+`deploy/scripts/demo-down-aws`. Bare destroy from `deploy/infra/aws`:
 
 ```bash
 tofu destroy
@@ -102,11 +130,13 @@ Confirm removal of billable resources:
 | **RDS** | `skip_final_snapshot = true` for showcase — no final snapshot |
 | **OpenSearch** | Single-node domain |
 | **Elastic IP** | Attached to NAT |
+| **S3 dump bucket** | `force_destroy = true` (demo staging) |
+| **Secrets Manager** | `recovery_window_in_days = 0` — deleted immediately on destroy |
 | **CloudWatch Logs** | Retention 7 days; small residual storage possible |
 
 Re-check the AWS console for stray ENIs, EIPs, or OpenSearch domains if destroy errors mid-run.
 
-## 9. Cost notes
+## 10. Cost notes
 
 - Most resources bill **hourly** (pro-rated). **`tofu destroy` stops the meter** for NAT, ALB, Fargate, RDS, and OpenSearch; tiny charges may linger for logs or RDS snapshots if you keep them.
 - Expect roughly: NAT Gateway + ALB + Fargate tasks + small RDS + OpenSearch node — dominated by NAT and OpenSearch for short demos.

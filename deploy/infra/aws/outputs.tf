@@ -42,3 +42,23 @@ output "manage_dns_flip" {
   description = "Whether Cloudflare app/api/apex/www records point at the ALB."
   value       = var.manage_dns_flip
 }
+
+output "dump_bucket_name" {
+  description = "S3 bucket for demo dump staging (force_destroy)."
+  value       = aws_s3_bucket.dump.id
+}
+
+output "dump_s3_uri" {
+  description = "s3:// URI of the staging dump object."
+  value       = local.dump_s3_uri
+}
+
+output "dump_task_definition_arn" {
+  description = "Fargate task definition ARN for pg_dump / pg_restore via S3."
+  value       = aws_ecs_task_definition.dump.arn
+}
+
+output "ingestion_schedule_name" {
+  description = "EventBridge Scheduler name for ingestion (pause/resume in demo scripts)."
+  value       = aws_scheduler_schedule.ingestion.name
+}

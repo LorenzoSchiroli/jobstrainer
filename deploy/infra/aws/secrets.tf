@@ -14,7 +14,8 @@ resource "random_password" "app_secret_key" {
 }
 
 resource "aws_secretsmanager_secret" "app" {
-  name = "${var.project}/app"
+  name                    = "${var.project}/app"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "app" {

@@ -79,6 +79,10 @@ then PATH `pg_restore`, then Docker `postgres:16`/`17`, then the cluster
 Postgres pod. If PATH still has an old PostgreSQL 14 client, install/link
 `libpq` or leave the keg path at `/opt/homebrew/opt/libpq/bin`.
 
+For the **AWS** ECS showcase (same dump file, no kubectl), use
+`deploy/scripts/demo-up-aws` / `demo-down-aws` — see
+`deploy/infra/aws/README.md` (§ Demo dump lifecycle).
+
 Nightly Storage Box backups (worker) remain disaster recovery for a live demo;
 they are not this workflow’s source of truth. Details:
 `docs/superpowers/specs/2026-08-02-demo-dump-lifecycle-design.md`.
