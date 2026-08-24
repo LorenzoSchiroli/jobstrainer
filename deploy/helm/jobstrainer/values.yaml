@@ -83,8 +83,7 @@ ingestion:
     repository: jobstrainer-ingestion
     tag: latest
   schedule: "0 */2 * * *"
-  # Lookback window for `ingestion.pipeline --hours`. Local every-2h schedule
-  # keeps a short default; cloud profile (values-cloud.yaml) overrides daily.
+  # Lookback window for `ingestion.pipeline --hours` (matches compose --hours 2).
   hours: 2
   suspend: false
   activeDeadlineSeconds: 1800
