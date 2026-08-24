@@ -46,4 +46,66 @@ spec:
             name: api
             port:
               number: 8000
+{{- if .Values.ingress.apexRedirectHosts }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-apex-to-app
+spec:
+  redirectRegex:
+    permanent: true
+    regex: ^https?://[^/]+(.*)$
+    replacement: https://{{ .Values.ingress.frontendHost }}${1}
+---
+# HTTPS (and HTTP if not stolen by the global web→websecure redirect).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apex-redirect
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.issuerName | quote }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-redirect-apex-to-app@kubernetescrd
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+  - hosts:
+    {{- range .Values.ingress.apexRedirectHosts }}
+    - {{ . | quote }}
+    {{- end }}
+    secretName: {{ .Values.ingress.apexTlsSecretName | quote }}
+  rules:
+  {{- range .Values.ingress.apexRedirectHosts }}
+  - host: {{ . | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+  {{- end }}
+---
+# HTTP: send straight to the app host (skip Traefik's default http→https on apex).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: apex-http-redirect
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: {{ range $i, $h := .Values.ingress.apexRedirectHosts }}{{ if $i }} || {{ end }}Host(`{{ $h }}`){{ end }}
+      # Beat Traefik's entrypoint-level web→websecure redirect (default high priority).
+      priority: 2147483647
+      middlewares:
+        - name: redirect-apex-to-app
+      services:
+        - name: frontend
+          port: 80
+{{- end }}
 {{- end }}

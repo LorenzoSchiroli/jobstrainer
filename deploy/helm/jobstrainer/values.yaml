@@ -123,8 +123,11 @@ ingress:
   className: traefik
   frontendHost: ""
   apiHost: ""
+  # Optional apex/www hosts that Traefik redirects to frontendHost.
+  apexRedirectHosts: []
   frontendTlsSecretName: jobstrainer-frontend-tls
   apiTlsSecretName: jobstrainer-api-tls
+  apexTlsSecretName: jobstrainer-apex-tls
 
 certManager:
   createIssuers: false
