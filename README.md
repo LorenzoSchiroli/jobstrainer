@@ -76,4 +76,4 @@ Things to change:
 
 Infrastructure idea (cloud agnostic):
 - tools: terraform / opentofu + kubernates
-- 
+- strong scaling for aws: use fargate for containers (fronted and backend), aurora for postgres, aws managed opensearch, parallel workers for single job / company scraping (maybe lambda, use external api to scrape and llm)
