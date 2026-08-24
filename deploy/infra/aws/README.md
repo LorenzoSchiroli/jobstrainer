@@ -59,7 +59,7 @@ Watch logs in CloudWatch under `/ecs/jobstrainer/bootstrap` (or `/ecs/${project}
 
 ## 5. DNS flip to AWS
 
-**Hetzner DNS coexistence.** Before setting `manage_dns_flip = true`, stop Hetzner from serving traffic and ensure Hetzner-managed Cloudflare A records for `app`, `api`, apex, and `www` are removed or no longer applied (typically a separate Terraform state). If those A records remain, AWS CNAMEs from this stack will conflict and cutover will fail or flap.
+**Hetzner DNS coexistence.** Before setting `manage_dns_flip = true`, stop Hetzner from serving traffic and set `manage_dns = false` in `deploy/infra/hetzner/terraform.tfvars` (then `tofu apply` there) so its `app`/`api`/apex/`www` Cloudflare A records are removed. Only one stack's DNS flag should be `true` at a time — if both are, the two Terraform states fight over the same Cloudflare records and cutover will fail or flap.
 
 **Stop or scale down Hetzner** so it is not still serving public traffic (Helm release scaled to zero, ingress removed, or node stopped — pick one; do not run both stacks publicly).
 
@@ -81,7 +81,8 @@ Allow a few minutes for DNS TTL/propagation.
 
 When the demo ends, repoint Cloudflare to the Hetzner ingress IP **before** or **as** you tear down AWS:
 
-- Set **`manage_dns_flip = false`** and `tofu apply`, **or** manually restore the previous Hetzner A/CNAME records.
+- Set **`manage_dns_flip = false`** and `tofu apply` here.
+- Set **`manage_dns = true`** in `deploy/infra/hetzner/terraform.tfvars` and `tofu apply` there so it re-creates the A records.
 - Bring Hetzner back to serving traffic.
 
 ## 8. Demo dump lifecycle (preferred up/down)

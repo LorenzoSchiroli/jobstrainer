@@ -41,6 +41,12 @@ public IPv4, and Cloudflare DNS-only A records before applying. Do not apply if
 the permanent resources exceed the €20/month cost gate. Do not apply if the x86
 snapshot is missing.
 
+**Coexisting with AWS.** `manage_dns` (default `true`) gates the `app`/`api`/
+apex/`www` Cloudflare A records the same way AWS's `manage_dns_flip` gates its
+CNAMEs — only one side should own DNS at a time. Set `manage_dns = false` here
+before (or when) you set `manage_dns_flip = true` in `deploy/infra/aws`, and
+vice versa when flipping back.
+
 ## Apply and kubeconfig
 
     tofu apply

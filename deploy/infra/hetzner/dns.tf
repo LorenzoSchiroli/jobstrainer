@@ -1,4 +1,6 @@
 resource "cloudflare_dns_record" "frontend" {
+  count = var.manage_dns ? 1 : 0
+
   zone_id = var.cloudflare_zone_id
   name    = "app.${var.domain}"
   type    = "A"
@@ -8,6 +10,8 @@ resource "cloudflare_dns_record" "frontend" {
 }
 
 resource "cloudflare_dns_record" "api" {
+  count = var.manage_dns ? 1 : 0
+
   zone_id = var.cloudflare_zone_id
   name    = "api.${var.domain}"
   type    = "A"
@@ -19,6 +23,8 @@ resource "cloudflare_dns_record" "api" {
 # Apex + www DNS-only (same as app/api). Safari was unreliable via Cloudflare
 # proxy on the apex; Traefik HTTPS middleware redirects to app.<domain>.
 resource "cloudflare_dns_record" "apex" {
+  count = var.manage_dns ? 1 : 0
+
   zone_id = var.cloudflare_zone_id
   name    = var.domain
   type    = "A"
@@ -28,6 +34,8 @@ resource "cloudflare_dns_record" "apex" {
 }
 
 resource "cloudflare_dns_record" "www" {
+  count = var.manage_dns ? 1 : 0
+
   zone_id = var.cloudflare_zone_id
   name    = "www.${var.domain}"
   type    = "A"
