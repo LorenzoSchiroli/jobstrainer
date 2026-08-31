@@ -45,3 +45,6 @@ values-private.yaml
 
 # Canonical Postgres dump lifecycle (never commit binaries)
 dumps/
+
+# Personal scratchpad (old README draft, ideas backlog)
+IDEAS.md
