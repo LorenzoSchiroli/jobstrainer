@@ -80,11 +80,18 @@ async def node_map(state: TailorerState) -> TailorerState:
 
         groq_client = AsyncGroq(api_key=os.environ["GROQ_API_KEY"])
         try:
+            profile = state["profile"] or {}
+            applicant_name = " ".join(
+                part
+                for part in (profile.get("first_name"), profile.get("last_name"))
+                if part
+            )
             new_cv_bytes, new_cl_bytes, new_cl_text = await generate_tailored_documents(
                 cv_text=state["cv_text"],
                 cv_bytes=new_cv_bytes,
                 job_description=state["job_description"],
                 groq_client=groq_client,
+                applicant_name=applicant_name,
             )
         except Exception:
             _log.exception("[node_map] document generation failed — reusing existing bytes")

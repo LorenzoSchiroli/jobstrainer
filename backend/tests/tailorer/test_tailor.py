@@ -39,3 +39,15 @@ def test_build_cv_docx_with_no_modifications():
     result = _apply_cv_modifications(cv_bytes, [])
     assert isinstance(result, bytes)
     assert len(result) > 0
+
+
+def test_signoff_rule_uses_applicant_name():
+    from backend.tailorer.tailor import _signoff_rule
+    rule = _signoff_rule("Jane Doe")
+    assert "Kind regards,\\nJane Doe" in rule
+
+
+def test_signoff_rule_falls_back_to_cv_name():
+    from backend.tailorer.tailor import _signoff_rule
+    rule = _signoff_rule("")
+    assert "as it appears in the CV" in rule

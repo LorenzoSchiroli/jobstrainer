@@ -61,11 +61,22 @@ def _apply_cv_modifications(cv_bytes: bytes, modifications: list[dict]) -> bytes
     return buf.getvalue()
 
 
+def _signoff_rule(applicant_name: str) -> str:
+    """Sign with the applicant's profile name, falling back to the CV's own name."""
+    if applicant_name:
+        return f"- End with 'Kind regards,\\n{applicant_name}'\n"
+    return (
+        "- End with 'Kind regards,' then a newline and the candidate's full name "
+        "exactly as it appears in the CV\n"
+    )
+
+
 async def generate_tailored_documents(
     cv_text: str,
     cv_bytes: bytes,
     job_description: str,
     groq_client: AsyncGroq,
+    applicant_name: str = "",
 ) -> tuple[bytes, bytes, str]:
     """Returns: (tailored_cv_bytes, cover_letter_bytes, cover_letter_text)"""
     cl_prompt = (
@@ -79,8 +90,7 @@ async def generate_tailored_documents(
         "- Email body format only (no subject line)\n"
         "- Greeting: 'Dear Hiring Manager,' if no name is known\n"
         "- 2-3 short paragraphs in formal business English\n"
-        "- End with 'Kind regards,' then a newline and the candidate's full name "
-        "exactly as it appears in the CV\n"
+        f"{_signoff_rule(applicant_name)}"
         "- No bullet points, no bold text, no placeholders\n\n"
         f"CV:\n{cv_text}\n\nJob Description:\n{job_description}"
     )
