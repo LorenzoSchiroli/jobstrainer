@@ -11,8 +11,8 @@ def _make_state(**overrides):
         "user_id": "user1",
         "job_title": "ML Engineer",
         "job_description": "Build ML systems",
-        "profile": {"first_name": "Lorenzo", "email": "l@test.com"},
-        "cv_text": "Lorenzo Schiroli, ML Engineer",
+        "profile": {"first_name": "Jane", "email": "l@test.com"},
+        "cv_text": "Jane Doe, ML Engineer",
         "cv_bytes": b"",
         "cl_bytes": b"",
         "cl_text": "",
@@ -35,7 +35,7 @@ def test_fill_system_prompt_declarative_format():
 def test_node_map_returns_fill_commands():
     mock_resp = MagicMock()
     mock_resp.content = json.dumps([
-        {"index": 2, "value": "Lorenzo"},
+        {"index": 2, "value": "Jane"},
         {"index": 7, "value": "__CV__", "generate": False},
         {"index": 9, "value": "Senior", "uncertain": True},
     ])
@@ -108,10 +108,10 @@ def test_node_apply_returns_filled_on_clean_match():
     with patch.object(form_module, "interrupt") as mock_interrupt:
         mock_interrupt.return_value = {
             "snapshot": {"elements": "[2]<input />"},
-            "field_values": {"2": "Lorenzo"},
+            "field_values": {"2": "Jane"},
         }
         state = _make_state(
-            fill_commands=[{"index": 2, "value": "Lorenzo"}],
+            fill_commands=[{"index": 2, "value": "Jane"}],
             retry_count=0,
         )
         result = form_module.node_apply(state)
@@ -129,7 +129,7 @@ def test_node_apply_loops_on_mismatch_within_retry_cap():
             "field_values": {"2": ""},  # empty = mismatch
         }
         state = _make_state(
-            fill_commands=[{"index": 2, "value": "Lorenzo"}],
+            fill_commands=[{"index": 2, "value": "Jane"}],
             retry_count=0,
         )
         result = form_module.node_apply(state)
@@ -147,7 +147,7 @@ def test_node_apply_stops_looping_at_retry_cap():
             "field_values": {"2": ""},
         }
         state = _make_state(
-            fill_commands=[{"index": 2, "value": "Lorenzo"}],
+            fill_commands=[{"index": 2, "value": "Jane"}],
             retry_count=2,  # already at cap
         )
         result = form_module.node_apply(state)

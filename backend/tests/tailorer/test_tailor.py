@@ -14,7 +14,7 @@ def _mock_groq_response(text: str):
 
 def test_parse_cover_letter_response():
     from backend.tailorer.tailor import _parse_cover_letter_response
-    raw = "COMPANY: Stripe\nPOSITION: ML Engineer\n---\nDear Hiring Manager,\n\nTest letter.\n\nKind regards,\nLorenzo"
+    raw = "COMPANY: Stripe\nPOSITION: ML Engineer\n---\nDear Hiring Manager,\n\nTest letter.\n\nKind regards,\nJane"
     company, position, letter = _parse_cover_letter_response(raw)
     assert company == "Stripe"
     assert position == "ML Engineer"
@@ -23,7 +23,7 @@ def test_parse_cover_letter_response():
 
 def test_build_cover_letter_docx_returns_bytes():
     from backend.tailorer.tailor import _build_docx_bytes
-    data = _build_docx_bytes("Dear Hiring Manager,\n\nTest.\n\nKind regards,\nLorenzo")
+    data = _build_docx_bytes("Dear Hiring Manager,\n\nTest.\n\nKind regards,\nJane")
     assert isinstance(data, bytes)
     assert len(data) > 0
 

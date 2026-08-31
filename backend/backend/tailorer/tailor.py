@@ -79,7 +79,8 @@ async def generate_tailored_documents(
         "- Email body format only (no subject line)\n"
         "- Greeting: 'Dear Hiring Manager,' if no name is known\n"
         "- 2-3 short paragraphs in formal business English\n"
-        "- End with 'Kind regards,\\nLorenzo Schiroli'\n"
+        "- End with 'Kind regards,' then a newline and the candidate's full name "
+        "exactly as it appears in the CV\n"
         "- No bullet points, no bold text, no placeholders\n\n"
         f"CV:\n{cv_text}\n\nJob Description:\n{job_description}"
     )

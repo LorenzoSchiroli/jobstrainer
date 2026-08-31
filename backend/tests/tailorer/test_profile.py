@@ -25,8 +25,8 @@ async def test_get_profile_empty(client: AsyncClient, auth_headers):
 
 async def test_upsert_profile(client: AsyncClient, auth_headers):
     payload = {
-        "first_name": "Lorenzo",
-        "last_name": "Schiroli",
+        "first_name": "Jane",
+        "last_name": "Doe",
         "email": "l@example.com",
         "phone": "+39123",
         "city": "Milan",
@@ -38,8 +38,8 @@ async def test_upsert_profile(client: AsyncClient, auth_headers):
     r = await client.put("/tailorer/profile", headers=auth_headers, json=payload)
     assert r.status_code == 200
     data = r.json()
-    assert data["first_name"] == "Lorenzo"
-    assert data["last_name"] == "Schiroli"
+    assert data["first_name"] == "Jane"
+    assert data["last_name"] == "Doe"
     assert data["urls"]["linkedin"] == "https://linkedin.com/in/test"
 
     # Idempotent: second upsert updates

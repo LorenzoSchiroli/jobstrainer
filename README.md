@@ -55,7 +55,6 @@ flowchart LR
 | `frontend/` | React (Vite) SPA, served by nginx in Docker/k8s |
 | `extension/` | Chrome extension (Tailorer side panel; talks to the backend directly) |
 | `deploy/` | Helm chart, k8s runbook, OpenTofu stacks for Hetzner and AWS, demo scripts |
-| `tailor/` | Standalone CV / cover-letter scripts (not part of the service) |
 
 `backend/` and `ingestion/` are the two members of a `uv` workspace (Python 3.13).
 
@@ -142,15 +141,6 @@ uv run python -m ingestion.company "Stripe" "San Francisco" --debug
 ```
 
 Offer sources: `jobspy`, `adzuna`, `arbeitnow`, `remotive` (default: all).
-
-### Tailor scripts
-
-Standalone, operate on `data/` rather than the service:
-
-```bash
-uv run python tailor/tailor_cv.py    # writes data/..._cv_llm.docx and ..._cv_cv.docx
-uv run python -m tailor              # cover letter
-```
 
 ## How search works
 
