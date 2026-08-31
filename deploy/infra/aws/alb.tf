@@ -14,9 +14,16 @@ resource "aws_acm_certificate" "main" {
 
 resource "aws_acm_certificate_validation" "main" {
   certificate_arn = aws_acm_certificate.main.arn
+
+  # cloudflare_dns_record (provider v5) exposes no FQDN attribute, and dns.tf
+  # stores a domain-relative name, so take the FQDN from ACM itself and depend
+  # on the Cloudflare records for ordering.
   validation_record_fqdns = [
-    for record in cloudflare_dns_record.acm_validation : record.hostname
+    for dvo in aws_acm_certificate.main.domain_validation_options :
+    trimsuffix(dvo.resource_record_name, ".")
   ]
+
+  depends_on = [cloudflare_dns_record.acm_validation]
 }
 
 resource "aws_lb" "main" {
