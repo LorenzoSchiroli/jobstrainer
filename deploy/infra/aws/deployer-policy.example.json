@@ -54,16 +54,37 @@
         "iam:AttachRolePolicy",
         "iam:DetachRolePolicy",
         "iam:ListAttachedRolePolicies",
-        "iam:ListInstanceProfilesForRole",
-        "iam:CreateServiceLinkedRole"
+        "iam:ListInstanceProfilesForRole"
       ],
       "Resource": [
         "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-execution",
         "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-task",
         "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-scheduler",
-        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-dump-task",
-        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/*"
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-dump-task"
       ]
+    },
+    {
+      "Sid": "CreateServiceLinkedRolesThisStackTriggers",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/opensearchservice.amazonaws.com/AWSServiceRoleForAmazonOpenSearchService",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "ecs.amazonaws.com",
+            "ecs.application-autoscaling.amazonaws.com",
+            "opensearchservice.amazonaws.com",
+            "elasticloadbalancing.amazonaws.com",
+            "rds.amazonaws.com"
+          ]
+        }
+      }
     },
     {
       "Sid": "ReadAwsManagedPolicyAttachedToExecutionRole",

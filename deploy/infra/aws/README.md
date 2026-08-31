@@ -8,9 +8,12 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 - **Deployer IAM permissions.** `deployer-policy.example.json` is a least-privilege policy covering everything this stack creates. Fill in your account ID and attach it to a group (not directly to a user):
 
   ```bash
+  cd deploy/infra/aws
   sed 's/<AWS_ACCOUNT_ID>/123456789012/g' \
-    deploy/infra/aws/deployer-policy.example.json > /tmp/jobstrainer-deployer.json
+    deployer-policy.example.json > deployer-policy.json   # gitignored
   ```
+
+  `deployer-policy.json` is gitignored (same split as `terraform.tfvars.example` / `terraform.tfvars`), so your account ID never reaches the public repo. Keep the real ID out of the committed `.example` file.
 
   Then IAM → Policies → Create policy → JSON, and add the deploying user to a group carrying it. Replace `jobstrainer` in the ARNs too if you changed `var.project`. IAM and S3 are scoped to this stack's own roles and dump bucket; the remaining services offer no useful resource-level scoping for the create/describe actions used here. Verify with `aws sts get-caller-identity`.
 - **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobstrainer-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
