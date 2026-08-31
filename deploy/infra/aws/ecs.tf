@@ -32,9 +32,13 @@ locals {
     }
   ]
 
-  ghcr_repository_credentials = {
-    credentialsParameter = aws_secretsmanager_secret.ghcr.arn
-  }
+  # Public GHCR packages pull anonymously, matching the Helm path (the chart
+  # wires no imagePullSecrets). Set ghcr_token only if packages become private.
+  ghcr_repository_credentials = var.ghcr_token != "" ? {
+    repositoryCredentials = {
+      credentialsParameter = aws_secretsmanager_secret.ghcr[0].arn
+    }
+  } : {}
 
   ecs_network_configuration = {
     subnets          = aws_subnet.private[*].id
@@ -74,11 +78,10 @@ resource "aws_ecs_task_definition" "frontend" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "frontend"
       image     = var.frontend_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       portMappings = [
         {
           containerPort = 80
@@ -93,7 +96,7 @@ resource "aws_ecs_task_definition" "frontend" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }
 
@@ -112,11 +115,10 @@ resource "aws_ecs_task_definition" "api" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "api"
       image     = var.backend_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       command = [
         "uv", "run", "uvicorn", "backend.main:app",
         "--host", "0.0.0.0",
@@ -137,7 +139,7 @@ resource "aws_ecs_task_definition" "api" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }
 
@@ -156,11 +158,10 @@ resource "aws_ecs_task_definition" "worker" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "worker"
       image     = var.backend_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       command   = ["uv", "run", "python", "-m", "backend.worker"]
       secrets   = local.app_container_secrets
       logConfiguration = {
@@ -171,7 +172,7 @@ resource "aws_ecs_task_definition" "worker" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }
 
@@ -190,11 +191,10 @@ resource "aws_ecs_task_definition" "ingestion" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "ingestion"
       image     = var.ingestion_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       command = [
         "sh", "-c",
         "uv run python -m ingestion.pipeline \"$OFFER_QUERY\" --hours 2",
@@ -214,7 +214,7 @@ resource "aws_ecs_task_definition" "ingestion" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }
 
@@ -233,11 +233,10 @@ resource "aws_ecs_task_definition" "bootstrap" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "bootstrap"
       image     = var.backend_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       command = [
         "sh", "-c",
         "uv run alembic upgrade head && uv run python -m backend.bootstrap",
@@ -251,7 +250,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }
 

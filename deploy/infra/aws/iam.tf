@@ -22,10 +22,10 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
 data "aws_iam_policy_document" "ecs_execution_secrets" {
   statement {
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      aws_secretsmanager_secret.app.arn,
-      aws_secretsmanager_secret.ghcr.arn,
-    ]
+    resources = concat(
+      [aws_secretsmanager_secret.app.arn],
+      aws_secretsmanager_secret.ghcr[*].arn,
+    )
   }
 }
 
@@ -35,13 +35,18 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
   policy = data.aws_iam_policy_document.ecs_execution_secrets.json
 }
 
+# Only created for private GHCR packages; public packages pull anonymously.
 resource "aws_secretsmanager_secret" "ghcr" {
+  count = var.ghcr_token != "" ? 1 : 0
+
   name                    = "${var.project}/ghcr"
   recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "ghcr" {
-  secret_id = aws_secretsmanager_secret.ghcr.id
+  count = var.ghcr_token != "" ? 1 : 0
+
+  secret_id = aws_secretsmanager_secret.ghcr[0].id
   secret_string = jsonencode({
     username = var.ghcr_username
     password = var.ghcr_token

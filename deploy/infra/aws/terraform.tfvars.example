@@ -2,7 +2,7 @@ aws_region           = "eu-central-1"
 domain               = "jobsifty.com"
 cloudflare_zone_id   = "00000000000000000000000000000000"
 manage_dns_flip      = false
-ghcr_username        = "YOUR_GITHUB_USER"
+# ghcr_username / ghcr_token: leave unset for public packages (anonymous pull).
 frontend_image       = "ghcr.io/OWNER/jobstrainer-frontend:TAG"
 backend_image        = "ghcr.io/OWNER/jobstrainer-backend:TAG"
 ingestion_image      = "ghcr.io/OWNER/jobstrainer-ingestion:TAG"
@@ -11,4 +11,5 @@ alert_email          = "you@example.com"
 groq_model_large     = "openai/gpt-oss-120b"
 groq_model_base      = "qwen/qwen3-32b"
 offer_query          = "machine learning engineer"
-# groq_api_key / cloudflare_api_token / ghcr_token / adzuna_* / serperdev_api_key / ddgs_proxy via TF_VAR_ or terraform.tfvars (gitignored)
+# groq_api_key / cloudflare_api_token / adzuna_* / serperdev_api_key / ddgs_proxy via TF_VAR_ or terraform.tfvars (gitignored)
+# Private GHCR packages only: set ghcr_username + ghcr_token (PAT, read:packages).

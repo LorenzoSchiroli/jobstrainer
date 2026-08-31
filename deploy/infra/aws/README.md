@@ -7,7 +7,8 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 - **OpenTofu** ≥ 1.10.1 and the **AWS CLI** configured with credentials for a **Paid AWS account** (Free Tier alone may block RDS, OpenSearch, or NAT).
 - **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobstrainer-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
 - **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
-- Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `ghcr_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
+- Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
+- **GHCR pulls are anonymous by default**, matching the Helm path — public packages need no credentials. Only if the packages are private, set `ghcr_username` and `ghcr_token` (a PAT with `read:packages`); that wires `repositoryCredentials` and a Secrets Manager entry into every task definition.
 
 ## 2. Configure variables
 
@@ -17,7 +18,7 @@ From `deploy/infra/aws`:
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `terraform.tfvars` (gitignored) with your domain, GHCR image tags, `alert_email`, `budget_limit_usd`, and Cloudflare zone ID. Put sensitive values in `terraform.tfvars` or export `TF_VAR_groq_api_key`, `TF_VAR_cloudflare_api_token`, `TF_VAR_ghcr_token`, etc.
+Edit `terraform.tfvars` (gitignored) with your domain, GHCR image tags, `alert_email`, `budget_limit_usd`, and Cloudflare zone ID. Put sensitive values in `terraform.tfvars` or export `TF_VAR_groq_api_key`, `TF_VAR_cloudflare_api_token`, etc.
 
 ## 3. First apply (`manage_dns_flip = false`)
 

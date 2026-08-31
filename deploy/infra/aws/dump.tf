@@ -85,11 +85,10 @@ resource "aws_ecs_task_definition" "dump" {
   }
 
   container_definitions = jsonencode([
-    {
+    merge(local.ghcr_repository_credentials, {
       name      = "pgtools"
       image     = var.pgtools_image
       essential = true
-      repositoryCredentials = local.ghcr_repository_credentials
       # Override command to ["dump"] or ["restore"] at RunTask time.
       command = ["dump"]
       environment = [
@@ -116,6 +115,6 @@ resource "aws_ecs_task_definition" "dump" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    }
+    })
   ])
 }

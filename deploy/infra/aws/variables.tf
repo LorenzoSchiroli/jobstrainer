@@ -28,12 +28,16 @@ variable "manage_dns_flip" {
 }
 
 variable "ghcr_username" {
-  type = string
+  type        = string
+  default     = ""
+  description = "GitHub username for private GHCR packages. Unused when ghcr_token is empty."
 }
 
 variable "ghcr_token" {
-  type      = string
-  sensitive = true
+  type        = string
+  sensitive   = true
+  default     = ""
+  description = "Leave empty for public GHCR packages (anonymous pull, matching the Helm path). Set to a PAT with read:packages only if the packages are private."
 }
 
 variable "frontend_image" {
