@@ -54,6 +54,7 @@
         "iam:AttachRolePolicy",
         "iam:DetachRolePolicy",
         "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole",
         "iam:CreateServiceLinkedRole"
       ],
       "Resource": [
@@ -63,6 +64,15 @@
         "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-dump-task",
         "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/*"
       ]
+    },
+    {
+      "Sid": "ReadAwsManagedPolicyAttachedToExecutionRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion"
+      ],
+      "Resource": "arn:aws:iam::aws:policy/*"
     },
     {
       "Sid": "PassProjectRolesToServices",
