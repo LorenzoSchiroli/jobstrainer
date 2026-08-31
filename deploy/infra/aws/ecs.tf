@@ -199,10 +199,12 @@ resource "aws_ecs_task_definition" "ingestion" {
         "sh", "-c",
         "uv run python -m ingestion.pipeline \"$OFFER_QUERY\" --hours 2",
       ]
+      # Internal Cloud Map address, not the public hostname: ingestion must
+      # always reach THIS stack's API, whichever cloud currently owns DNS.
       environment = [
         {
           name  = "BACKEND_URL"
-          value = "https://api.${var.domain}"
+          value = "http://api.${var.project}.local:8000"
         }
       ]
       secrets = local.app_container_secrets
@@ -293,6 +295,10 @@ resource "aws_ecs_service" "api" {
     target_group_arn = aws_lb_target_group.api.arn
     container_name   = "api"
     container_port   = 8000
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.api.arn
   }
 
   depends_on = [aws_lb_listener.https]

@@ -37,7 +37,7 @@ tofu output -raw alb_dns_name
 
 **ALB health ≠ bootstrap done.** A green `/health` on the ALB only means the API container is up; migrations and OpenSearch index setup still require the one-shot bootstrap RunTask (section 4).
 
-**Ingestion starts immediately.** The EventBridge ingestion schedule is created on this apply and begins firing every 2 hours. While `manage_dns_flip = false`, ingestion posts to `https://api.<domain>` (see [Ingestion schedule](#ingestion-schedule)) — that hostname may still resolve to Hetzner. Disable the schedule in the EventBridge Scheduler console, or do not rely on scheduled ingestion until after DNS flip and bootstrap; use manual RunTask only after cutover if needed.
+**Ingestion starts immediately.** The EventBridge ingestion schedule is created on this apply and begins firing every 2 hours. It posts to the internal Cloud Map address `http://api.<project>.local:8000`, so it always reaches **this** stack's API regardless of where public DNS points — it cannot write into Hetzner. Runs before the bootstrap RunTask (section 4) will fail against an unmigrated database; that is harmless and self-corrects once bootstrap has run.
 
 ## 4. Bootstrap (one-shot RunTask)
 
@@ -147,8 +147,8 @@ Re-check the AWS console for stray ENIs, EIPs, or OpenSearch domains if destroy 
 
 ## Ingestion schedule
 
-EventBridge Scheduler runs the ingestion task definition every 2 hours (`cron(0 */2 * * ? *)`), mirroring the local Helm CronJob cadence. The task definition already passes `--hours 2` and reads `OFFER_QUERY` from Secrets Manager; no container overrides are applied at schedule time. Ingestion posts scraped jobs to `BACKEND_URL=https://api.<domain>` (set in `ecs.tf`).
+EventBridge Scheduler runs the ingestion task definition every 2 hours (`cron(0 */2 * * ? *)`), mirroring the local Helm CronJob cadence. The task definition already passes `--hours 2` and reads `OFFER_QUERY` from Secrets Manager; no container overrides are applied at schedule time.
 
-**Pre-flip risk:** the schedule is active from the first `tofu apply`. While `manage_dns_flip = false`, `api.<domain>` usually still points at Hetzner, so scheduled runs can POST jobs to the wrong backend. Before cutover, disable the schedule in the **EventBridge Scheduler** console (or leave it disabled until after DNS flip and bootstrap), or trigger ingestion manually with `aws ecs run-task` only after AWS is live.
+**Ingestion targets this stack, not public DNS.** `BACKEND_URL=http://api.<project>.local:8000` (set in `ecs.tf`) is an internal Cloud Map address backed by `service_discovery.tf`, resolving to the `api` service's own tasks inside the VPC. This mirrors the Helm path, where ingestion posts to the in-cluster Service `http://api:8000`. Both stacks therefore ingest into their own database, and running AWS pre-flip cannot pollute Hetzner.
 
 **Overlap risk:** unlike the Helm CronJob’s `concurrencyPolicy: Forbid`, EventBridge has **no overlap guard**. A new RunTask can start every 2 hours even if the previous ingestion task is still running. Long scrapes may overlap; watch ingestion logs and task counts in ECS if runs approach the 2-hour window.
