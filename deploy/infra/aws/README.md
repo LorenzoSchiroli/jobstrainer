@@ -5,6 +5,14 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 ## 1. Prerequisites
 
 - **OpenTofu** ≥ 1.10.1 and the **AWS CLI** configured with credentials for a **Paid AWS account** (Free Tier alone may block RDS, OpenSearch, or NAT).
+- **Deployer IAM permissions.** `deployer-policy.example.json` is a least-privilege policy covering everything this stack creates. Fill in your account ID and attach it to a group (not directly to a user):
+
+  ```bash
+  sed 's/<AWS_ACCOUNT_ID>/123456789012/g' \
+    deploy/infra/aws/deployer-policy.example.json > /tmp/jobstrainer-deployer.json
+  ```
+
+  Then IAM → Policies → Create policy → JSON, and add the deploying user to a group carrying it. Replace `jobstrainer` in the ARNs too if you changed `var.project`. IAM and S3 are scoped to this stack's own roles and dump bucket; the remaining services offer no useful resource-level scoping for the create/describe actions used here. Verify with `aws sts get-caller-identity`.
 - **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobstrainer-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
 - **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
 - Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.

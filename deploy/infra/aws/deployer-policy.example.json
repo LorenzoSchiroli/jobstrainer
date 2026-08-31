@@ -1,0 +1,110 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ServicesTheStackCreates",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*",
+        "elasticloadbalancing:*",
+        "acm:*",
+        "ecs:*",
+        "application-autoscaling:*",
+        "rds:*",
+        "es:*",
+        "scheduler:*",
+        "servicediscovery:*",
+        "route53:*",
+        "budgets:ViewBudget",
+        "budgets:ModifyBudget",
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "logs:ListTagsForResource",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IamRoleLifecycleForProjectRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:CreateServiceLinkedRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-execution",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-task",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-scheduler",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-dump-task",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/aws-service-role/*"
+      ]
+    },
+    {
+      "Sid": "PassProjectRolesToServices",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-execution",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-ecs-task",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-scheduler",
+        "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobstrainer-dump-task"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "ecs-tasks.amazonaws.com",
+            "scheduler.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DumpBucketOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:GetBucketTagging",
+        "s3:PutBucketTagging",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::jobstrainer-demo-dumps-<AWS_ACCOUNT_ID>",
+        "arn:aws:s3:::jobstrainer-demo-dumps-<AWS_ACCOUNT_ID>/*"
+      ]
+    }
+  ]
+}
