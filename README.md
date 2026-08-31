@@ -56,7 +56,6 @@ flowchart LR
 | `extension/` | Chrome extension (Tailorer side panel; talks to the backend directly) |
 | `deploy/` | Helm chart, k8s runbook, OpenTofu stacks for Hetzner and AWS, demo scripts |
 | `tailor/` | Standalone CV / cover-letter scripts (not part of the service) |
-| `docs/` | Design specs and implementation plans, by date |
 
 `backend/` and `ingestion/` are the two members of a `uv` workspace (Python 3.13).
 
@@ -264,5 +263,4 @@ seeded Postgres dump.
 ## Contributing / agents
 
 [`AGENTS.md`](AGENTS.md) is the working guide for AI coding agents (and a decent
-orientation for humans). Design specs and dated implementation plans live in
-`docs/superpowers/`.
+orientation for humans).
