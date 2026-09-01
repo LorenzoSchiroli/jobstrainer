@@ -28,11 +28,28 @@ Ad-hoc CLIs (run from `ingestion/`):
 
 Kubernetes (Helm, kind cluster locally) is the canonical deployment; docker-compose still works but is being phased out.
 
+`deploy/scripts/run` is the single entrypoint for every deploy target. The
+target is always explicit, so each stack configures itself — `local` is kind +
+Helm on this machine, `hetzner` is OpenTofu + Helm, `aws` is OpenTofu + ECS
+Fargate. Targets are independent and the script does **not** check whether
+another one is live; bring the previous one down first.
+
+```bash
+deploy/scripts/run local                   # kind + Helm here (up is the default action)
+deploy/scripts/run hetzner                 # tofu apply → helm → restore dump
+deploy/scripts/run aws down --yes          # dump → promote → tofu destroy, no prompt
+```
+
+The cloud targets restore from / capture into `dumps/jobstrainer.current.dump`
+(seed it with `deploy/scripts/seed-dump`). DNS is never touched by `run`: flip
+it via `manage_dns` (hetzner) and `manage_dns_flip` (aws) in each tfvars, and
+keep only one of them true.
+
 ```bash
 docker compose up -d postgres opensearch   # start dependencies only
 docker compose up --build                  # full stack (postgres + opensearch + backend + ingestion + frontend)
 
-# Kubernetes — full runbook (cluster/images/secret setup) in deploy/k8s/README.md
+# Full runbook (cluster/images/secret setup) in deploy/k8s/README.md
 helm install jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
 ```
 

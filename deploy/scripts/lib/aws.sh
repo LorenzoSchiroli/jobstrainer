@@ -259,3 +259,95 @@ aws_stack_reachable() {
     tofu output -raw ecs_cluster_name >/dev/null 2>&1
   )
 }
+
+aws_up() {
+  aws_require_tools
+  require_pg_client
+  aws_require_tfvars
+
+  if [[ ! -f "${CURRENT_DUMP}" ]]; then
+    echo "error: missing ${CURRENT_DUMP}" >&2
+    echo "hint: run deploy/scripts/seed-dump first" >&2
+    exit 1
+  fi
+  validate_dump "${CURRENT_DUMP}"
+
+  local -a tofu_args=(apply)
+  if [[ "${AUTO_APPROVE:-0}" -eq 1 ]]; then
+    tofu_args+=(-auto-approve)
+  fi
+
+  echo "==> tofu apply (${AWS_DIR})"
+  (
+    cd "${AWS_DIR}"
+    tofu "${tofu_args[@]}"
+  )
+
+  aws_run_bootstrap_task
+  aws_pause_writers
+
+  local restore_ok=0
+  if aws_upload_dump "${CURRENT_DUMP}" && aws_run_restore_task; then
+    restore_ok=1
+  fi
+
+  if [[ "${restore_ok}" -ne 1 ]]; then
+    cat >&2 <<'RECOVERY'
+error: dump upload or pg_restore failed; leaving api/worker at 0 and ingestion disabled.
+recovery:
+  # fix dump / retry upload + restore, then:
+  # re-run helpers or manually scale services and re-enable the EventBridge schedule
+  # see deploy/infra/aws/README.md (Demo dump lifecycle)
+RECOVERY
+    exit 1
+  fi
+
+  aws_resume_writers
+
+  echo "aws up complete. OpenSearch will refill via worker reconcile."
+  echo "DNS unchanged (manage_dns_flip / Cloudflare not touched)."
+}
+
+aws_down() {
+  aws_require_tools
+  require_pg_client
+  aws_require_tfvars
+
+  if ! aws_stack_reachable; then
+    echo "error: AWS stack outputs unavailable in ${AWS_DIR}" >&2
+    echo "hint: run tofu apply / 'run aws up' first" >&2
+    exit 1
+  fi
+
+  local tmp
+  tmp="$(mktemp_dump)"
+  trap 'rm -f "${tmp}"; aws_resume_writers 2>/dev/null || true' EXIT
+
+  aws_pause_writers
+
+  echo "==> dumping RDS → S3 → temp"
+  aws_run_dump_task
+  aws_download_dump "${tmp}"
+
+  echo "==> validating and promoting"
+  promote_dump "${tmp}"
+  trap 'aws_resume_writers 2>/dev/null || true' EXIT
+
+  local -a tofu_args=(destroy)
+  if [[ "${AUTO_APPROVE:-0}" -eq 1 ]]; then
+    tofu_args+=(-auto-approve)
+  fi
+
+  echo "==> tofu destroy (${AWS_DIR})"
+  (
+    cd "${AWS_DIR}"
+    tofu "${tofu_args[@]}"
+  )
+
+  trap - EXIT
+  # Stack is gone; skip resume.
+  _AWS_WRITERS_PAUSED=0
+
+  echo "aws down complete. Canonical dump: ${CURRENT_DUMP}"
+  echo "Spot-check AWS console: NAT, EIP, ALB, RDS, OpenSearch, S3 dump bucket."
+}

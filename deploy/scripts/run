@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Single entrypoint for running jobstrainer on a chosen target.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/local.sh
+source "${SCRIPT_DIR}/lib/local.sh"
+# shellcheck source=lib/hetzner.sh
+source "${SCRIPT_DIR}/lib/hetzner.sh"
+# shellcheck source=lib/aws.sh
+source "${SCRIPT_DIR}/lib/aws.sh"
+
+usage() {
+  cat <<'USAGE'
+Usage: run <local|hetzner|aws> [up|down] [--yes]
+
+  local     kind cluster + Helm on this machine
+  hetzner   OpenTofu + Helm on Hetzner Cloud
+  aws       OpenTofu + ECS Fargate on AWS
+
+  up        bring the target up (default)
+  down      tear the target down
+  --yes     pass -auto-approve to tofu (hetzner/aws only)
+
+Targets are independent and this command does not check whether another one
+is running — bring the previous target down yourself first.
+
+The cloud targets restore/capture dumps/jobstrainer.current.dump; run
+deploy/scripts/seed-dump first if you do not have one. DNS is never touched:
+flip it with manage_dns (hetzner) / manage_dns_flip (aws) in each tfvars.
+
+Examples:
+  deploy/scripts/run local            # run on this machine
+  deploy/scripts/run hetzner          # run on Hetzner
+  deploy/scripts/run aws down --yes   # tear AWS down, no prompt
+USAGE
+}
+
+TARGET=""
+ACTION="up"
+AUTO_APPROVE=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    local|hetzner|aws)
+      if [[ -n "${TARGET}" ]]; then
+        echo "error: target already set to ${TARGET}" >&2
+        usage >&2
+        exit 1
+      fi
+      TARGET="$1"
+      shift
+      ;;
+    up|down)
+      ACTION="$1"
+      shift
+      ;;
+    --yes)
+      AUTO_APPROVE=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "${TARGET}" ]]; then
+  echo "error: no target given (local|hetzner|aws)" >&2
+  usage >&2
+  exit 1
+fi
+
+if [[ "${TARGET}" == "local" && "${AUTO_APPROVE}" -eq 1 ]]; then
+  echo "note: --yes has no effect on the local target (no tofu apply)" >&2
+fi
+
+echo "==> target=${TARGET} action=${ACTION}"
+"${TARGET}_${ACTION}"

@@ -204,3 +204,39 @@ cluster_pg_restore_from() {
 mktemp_dump() {
   mktemp "${TMPDIR:-/tmp}/jobstrainer-dump.XXXXXX.dump"
 }
+
+# Empty means "whatever KUBECONFIG points at" (Hetzner). The local target sets
+# it to the kind context so a stray KUBECONFIG cannot aim local work at a cloud
+# cluster.
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-}"
+
+kctl() {
+  if [[ -n "${KUBECTL_CONTEXT:-}" ]]; then
+    kubectl --context "${KUBECTL_CONTEXT}" "$@"
+  else
+    kubectl "$@"
+  fi
+}
+
+# Both .env.public and .env, in that order: the chart's envFrom expects
+# GROQ_MODEL_*, OFFER_QUERY and CORS_ORIGINS (public) alongside the secrets.
+ensure_secret() {
+  if kctl get secret jobstrainer-secrets >/dev/null 2>&1; then
+    echo "secret jobstrainer-secrets already exists (leaving unchanged)"
+    return
+  fi
+  local env_public="${REPO_ROOT}/.env.public"
+  local env_secret="${REPO_ROOT}/.env"
+  if [[ ! -f "${env_public}" || ! -f "${env_secret}" ]]; then
+    echo "error: jobstrainer-secrets missing and .env.public/.env not both present" >&2
+    echo "hint: create the secret as documented in deploy/k8s/README.md" >&2
+    exit 1
+  fi
+  echo "==> creating jobstrainer-secrets from .env.public + .env"
+  kctl create secret generic jobstrainer-secrets \
+    --from-env-file="${env_public}" \
+    --from-env-file="${env_secret}"
+  kctl patch secret jobstrainer-secrets --type merge -p \
+    '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
+}
+

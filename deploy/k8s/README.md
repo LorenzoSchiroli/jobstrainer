@@ -15,6 +15,23 @@ Fargate with RDS, OpenSearch Service, and an ALB, provisioned via OpenTofu in
 [`deploy/infra/aws/`](../infra/aws/). See that README for apply, bootstrap
 RunTask, and DNS flip from Hetzner.
 
+## 0. One command
+
+`deploy/scripts/run local` does everything in sections 1–2 — creates the kind
+cluster, builds and side-loads the `:local` images, installs metrics-server,
+creates the secret, and runs `helm upgrade --install`. It is idempotent, so
+re-running it after a code change rebuilds and rolls out.
+
+    deploy/scripts/run local          # up (default action)
+    deploy/scripts/run local down     # helm uninstall; PVCs and data survive
+
+The same command targets the clouds: `run hetzner`, `run aws`. Targets are
+independent and nothing checks whether another one is live — bring the previous
+one down yourself.
+
+The rest of this section documents what `run local` does, for when you want to
+drive a step by hand.
+
 ## 1. Prerequisites
 
 ### Cluster + images
@@ -42,9 +59,12 @@ The chart does **not** create the secret — it references one by name
 > `GROQ_API_KEY=gsk_...` unquoted, or strip quotes before creating the secret.
 
 Due to kubectl version constraints, `--from-env-file` cannot be combined with
-`--from-literal` in a single invocation. Create the secret in two steps:
+`--from-literal` in a single invocation. Create the secret in two steps. Pass
+**both** env files: `.env.public` carries `GROQ_MODEL_*`, `OFFER_QUERY` and
+`CORS_ORIGINS`, which the chart's `envFrom` expects alongside the secrets.
 
     kubectl create secret generic jobstrainer-secrets \
+      --from-env-file=.env.public \
       --from-env-file=.env
 
     kubectl patch secret jobstrainer-secrets \
@@ -283,13 +303,13 @@ For bring-up / tear-down without losing Postgres, use the single-file dump
 **Hetzner** (`deploy/infra/hetzner/README.md`):
 
 - `deploy/scripts/seed-dump` — create the current dump
-- `deploy/scripts/demo-up` / `demo-down` — Helm/k8s path
+- `deploy/scripts/run hetzner` / `run hetzner down` — Helm/k8s path
 
 **AWS** (`deploy/infra/aws/README.md`):
 
-- `deploy/scripts/demo-up-aws` / `demo-down-aws` — ECS/RDS via Fargate + S3
+- `deploy/scripts/run aws` / `run aws down` — ECS/RDS via Fargate + S3
 
-Prefer the matching `demo-down*` over bare `tofu destroy` when the demo holds data.
+Prefer `run <target> down` over bare `tofu destroy` when the demo holds data.
 
 ## Backup and restore drill
 

@@ -66,7 +66,7 @@ dump at the repo root (gitignored):
     dumps/jobstrainer.current.dump
 
 Do **not** run bare `tofu destroy` while the demo holds data that is not yet in
-that file — use `demo-down` instead.
+that file — use `deploy/scripts/run hetzner down` instead.
 
 Typical flow from the repo root:
 
@@ -75,18 +75,19 @@ Typical flow from the repo root:
     # or: deploy/scripts/seed-dump --from file --file ~/jobstrainer-data/dumps/compose-base.dump
     # or: deploy/scripts/seed-dump --from cluster
 
-    deploy/scripts/demo-up          # tofu apply → helm → restore dump
+    deploy/scripts/run hetzner        # tofu apply → helm → restore dump
     # … use the demo …
-    deploy/scripts/demo-down        # dump → promote current → tofu destroy
+    deploy/scripts/run hetzner down   # dump → promote current → tofu destroy
 
-`demo-up` / `demo-down` accept `--yes` to pass `-auto-approve` to tofu.
+`up` is the default action, so `run hetzner` means `run hetzner up`. Both
+accept `--yes` to pass `-auto-approve` to tofu.
 Dump validation prefers Homebrew `libpq`’s `pg_restore` (even if keg-only),
 then PATH `pg_restore`, then Docker `postgres:16`/`17`, then the cluster
 Postgres pod. If PATH still has an old PostgreSQL 14 client, install/link
 `libpq` or leave the keg path at `/opt/homebrew/opt/libpq/bin`.
 
 For the **AWS** ECS showcase (same dump file, no kubectl), use
-`deploy/scripts/demo-up-aws` / `demo-down-aws` — see
+`deploy/scripts/run aws` / `run aws down` — see
 `deploy/infra/aws/README.md` (§ Demo dump lifecycle).
 
 Nightly Storage Box backups (worker) remain disaster recovery for a live demo;

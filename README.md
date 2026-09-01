@@ -232,8 +232,8 @@ creating one; build it from `.env.public` **then** `.env`.
 Images are published to GHCR by the **Build and push images** GitHub Actions
 workflow; set `VITE_API_URL` in `.env.public` before building the frontend image,
 since Vite bakes it in. `deploy/k8s/loadtest-job.yaml` is an in-cluster k6 job for
-the HPA demo, and `deploy/scripts/demo-up{,-aws}` bring a demo environment up from a
-seeded Postgres dump.
+the HPA demo, and `deploy/scripts/run <local|hetzner|aws>` brings the stack up on a
+chosen target (the cloud targets restore from a seeded Postgres dump).
 
 ## Key dependencies
 

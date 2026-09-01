@@ -115,19 +115,19 @@ From the repo root:
 
 ```bash
 deploy/scripts/seed-dump --from compose   # if you do not already have a current dump
-deploy/scripts/demo-up-aws                # tofu apply → bootstrap → restore dump
+deploy/scripts/run aws                    # tofu apply → bootstrap → restore dump
 # … use the demo (flip DNS separately if needed) …
-deploy/scripts/demo-down-aws              # dump → promote current → tofu destroy
+deploy/scripts/run aws down               # dump → promote current → tofu destroy
 ```
 
-`--yes` passes `-auto-approve` to tofu. Prefer `demo-down-aws` over bare
+`--yes` passes `-auto-approve` to tofu. Prefer `run aws down` over bare
 `tofu destroy` when the demo holds data. Spec:
 `docs/superpowers/specs/2026-08-13-aws-demo-dump-lifecycle-design.md`.
 
 ## 9. Destroy checklist
 
 With DNS already pointing away from the ALB (manual / `manage_dns_flip`), prefer
-`deploy/scripts/demo-down-aws`. Bare destroy from `deploy/infra/aws`:
+`deploy/scripts/run aws down`. Bare destroy from `deploy/infra/aws`:
 
 ```bash
 tofu destroy
