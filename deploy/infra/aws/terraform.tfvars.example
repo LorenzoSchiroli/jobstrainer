@@ -1,7 +1,7 @@
 aws_region           = "eu-central-1"
 domain               = "jobsifty.com"
 cloudflare_zone_id   = "00000000000000000000000000000000"
-manage_dns_flip      = false
+manage_dns      = false
 # ghcr_username / ghcr_token: leave unset for public packages (anonymous pull).
 frontend_image       = "ghcr.io/OWNER/jobstrainer-frontend:TAG"
 backend_image        = "ghcr.io/OWNER/jobstrainer-backend:TAG"

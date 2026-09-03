@@ -14,7 +14,7 @@ source "${SCRIPT_DIR}/lib/aws.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: run <local|hetzner|aws> [up|down] [--yes]
+Usage: run <local|hetzner|aws> [up|down] [--yes] [--no-dns]
 
   local     kind cluster + Helm on this machine
   hetzner   OpenTofu + Helm on Hetzner Cloud
@@ -23,24 +23,32 @@ Usage: run <local|hetzner|aws> [up|down] [--yes]
   up        bring the target up (default)
   down      tear the target down
   --yes     pass -auto-approve to tofu (hetzner/aws only)
+  --no-dns  deploy without pointing Cloudflare at this target (hetzner/aws only)
 
+Bringing a cloud target up points Cloudflare app/api/apex/www at it, and
+taking it down removes those records again — the target that is up owns DNS.
 Targets are independent and this command does not check whether another one
-is running — bring the previous target down yourself first.
+is running — bring the previous target down yourself first. Skipping that
+makes the second apply fail on a Cloudflare record conflict rather than
+silently stealing the domain.
 
 The cloud targets restore/capture dumps/jobstrainer.current.dump; run
-deploy/scripts/seed-dump first if you do not have one. DNS is never touched:
-flip it with manage_dns (hetzner) / manage_dns_flip (aws) in each tfvars.
+deploy/scripts/seed-dump first if you do not have one.
 
 Examples:
-  deploy/scripts/run local            # run on this machine
-  deploy/scripts/run hetzner          # run on Hetzner
-  deploy/scripts/run aws down --yes   # tear AWS down, no prompt
+  deploy/scripts/run local              # run on this machine
+  deploy/scripts/run hetzner up         # run on Hetzner, DNS follows
+  deploy/scripts/run aws up --no-dns    # run on AWS, reach it via the ALB name
+  deploy/scripts/run aws down --yes     # tear AWS down, no prompt
 USAGE
 }
 
 TARGET=""
 ACTION="up"
 AUTO_APPROVE=0
+# Whoever is up owns DNS; --no-dns opts out. The hetzner/aws libs read this
+# and pass it to tofu as -var manage_dns, so each tfvars value is not consulted.
+MANAGE_DNS=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --yes)
       AUTO_APPROVE=1
+      shift
+      ;;
+    --no-dns)
+      MANAGE_DNS=0
       shift
       ;;
     -h|--help)
@@ -83,5 +95,9 @@ if [[ "${TARGET}" == "local" && "${AUTO_APPROVE}" -eq 1 ]]; then
   echo "note: --yes has no effect on the local target (no tofu apply)" >&2
 fi
 
-echo "==> target=${TARGET} action=${ACTION}"
+if [[ "${TARGET}" == "local" && "${MANAGE_DNS}" -eq 0 ]]; then
+  echo "note: --no-dns has no effect on the local target (no Cloudflare records)" >&2
+fi
+
+echo "==> target=${TARGET} action=${ACTION} dns=$([[ "${MANAGE_DNS}" -eq 1 ]] && echo claim || echo skip)"
 "${TARGET}_${ACTION}"

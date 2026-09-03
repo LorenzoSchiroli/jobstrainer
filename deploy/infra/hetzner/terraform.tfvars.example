@@ -4,4 +4,4 @@ letsencrypt_email   = "ops@example.com"
 location            = "nbg1"
 cluster_name        = "jobstrainer"
 ssh_public_key_path = "~/.ssh/id_ed25519.pub"
-# manage_dns        = false  # set false while AWS is the live stack (see deploy/infra/aws manage_dns_flip)
+# manage_dns is set by deploy/scripts/run (-var); do not set it here.

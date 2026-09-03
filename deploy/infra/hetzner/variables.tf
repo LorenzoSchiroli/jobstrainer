@@ -36,6 +36,6 @@ variable "ssh_public_key_path" {
 
 variable "manage_dns" {
   type        = bool
-  default     = true
-  description = "When true, Cloudflare app/api/apex/www point at this cluster. Set false while AWS (manage_dns_flip) is live."
+  default     = false
+  description = "When true, Cloudflare app/api/apex/www point at this cluster. Set by deploy/scripts/run; do not edit by hand."
 }

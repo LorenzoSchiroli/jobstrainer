@@ -36,14 +36,19 @@ another one is live; bring the previous one down first.
 
 ```bash
 deploy/scripts/run local                   # kind + Helm here (up is the default action)
-deploy/scripts/run hetzner                 # tofu apply → helm → restore dump
+deploy/scripts/run hetzner up              # tofu apply → helm → restore dump, DNS follows
+deploy/scripts/run aws up --no-dns         # tofu apply → ECS, domain left where it is
 deploy/scripts/run aws down --yes          # dump → promote → tofu destroy, no prompt
 ```
 
 The cloud targets restore from / capture into `dumps/jobstrainer.current.dump`
-(seed it with `deploy/scripts/seed-dump`). DNS is never touched by `run`: flip
-it via `manage_dns` (hetzner) and `manage_dns_flip` (aws) in each tfvars, and
-keep only one of them true.
+(seed it with `deploy/scripts/seed-dump`). DNS follows the deploy: bringing a
+cloud target up points Cloudflare `app`/`api`/apex/`www` at it, and taking it
+down removes those records, so the target that is up owns the domain. `run`
+passes `manage_dns` to tofu as a `-var`, so the value in each tfvars is not
+consulted — pass `--no-dns` to bring a stack up without claiming DNS (reach it
+via the ALB hostname instead). Bring the previous target down first; otherwise
+the second apply fails on a Cloudflare record conflict.
 
 ```bash
 docker compose up -d postgres opensearch   # start dependencies only

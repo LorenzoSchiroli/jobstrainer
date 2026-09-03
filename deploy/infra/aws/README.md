@@ -31,9 +31,9 @@ cp terraform.tfvars.example terraform.tfvars
 
 Edit `terraform.tfvars` (gitignored) with your domain, GHCR image tags, `alert_email`, `budget_limit_usd`, and Cloudflare zone ID. Put sensitive values in `terraform.tfvars` or export `TF_VAR_groq_api_key`, `TF_VAR_cloudflare_api_token`, etc.
 
-## 3. First apply (`manage_dns_flip = false`)
+## 3. First apply (`--no-dns`)
 
-Keep **`manage_dns_flip = false`** while Hetzner is still serving production DNS. This creates the VPC, NAT, ALB, ACM validation records, RDS, OpenSearch, ECS services, EventBridge ingestion schedule, Secrets Manager entries, and a monthly cost budget — without repointing `app` / `api` / apex / `www`.
+Use **`deploy/scripts/run aws up --no-dns`** for a trial apply while Hetzner is still serving production DNS. This creates the VPC, NAT, ALB, ACM validation records, RDS, OpenSearch, ECS services, EventBridge ingestion schedule, Secrets Manager entries, and a monthly cost budget — without repointing `app` / `api` / apex / `www`. Drop the flag once you want AWS to own the domain.
 
 ```bash
 tofu init
@@ -71,15 +71,15 @@ Watch logs in CloudWatch under `/ecs/jobstrainer/bootstrap` (or `/ecs/${project}
 
 ## 5. DNS flip to AWS
 
-**Hetzner DNS coexistence.** Before setting `manage_dns_flip = true`, stop Hetzner from serving traffic and set `manage_dns = false` in `deploy/infra/hetzner/terraform.tfvars` (then `tofu apply` there) so its `app`/`api`/apex/`www` Cloudflare A records are removed. Only one stack's DNS flag should be `true` at a time — if both are, the two Terraform states fight over the same Cloudflare records and cutover will fail or flap.
+**Hetzner DNS coexistence.** Only one stack may own the records. `deploy/scripts/run hetzner down` destroys Hetzner's `app`/`api`/apex/`www` A records, which frees the names — do that before `run aws up`. If both stacks hold them, the second apply fails on a Cloudflare conflict (a CNAME cannot coexist with an A record at the same name) rather than flapping. `manage_dns` is passed by `run` as a `-var` in both stacks; the tfvars value is ignored.
 
 **Stop or scale down Hetzner** so it is not still serving public traffic (Helm release scaled to zero, ingress removed, or node stopped — pick one; do not run both stacks publicly).
 
 Then either:
 
-**A. OpenTofu-managed flip** — set `manage_dns_flip = true` in `terraform.tfvars` and run `tofu apply`. Cloudflare `app`, `api`, apex, and `www` CNAME records point at the ALB.
+**A. Script-managed flip (default)** — `deploy/scripts/run aws up`. Cloudflare `app`, `api`, apex, and `www` CNAME records point at the ALB.
 
-**B. Manual Cloudflare flip** — create DNS-only CNAME records for `app`, `api`, apex, and `www` to `$(tofu output -raw alb_dns_name)` (leave `manage_dns_flip = false` if you manage records by hand).
+**B. Manual Cloudflare flip** — bring the stack up with `run aws up --no-dns`, then create DNS-only CNAME records for `app`, `api`, apex, and `www` to `$(tofu output -raw alb_dns_name)` by hand.
 
 Allow a few minutes for DNS TTL/propagation.
 
@@ -93,9 +93,8 @@ Allow a few minutes for DNS TTL/propagation.
 
 When the demo ends, repoint Cloudflare to the Hetzner ingress IP **before** or **as** you tear down AWS:
 
-- Set **`manage_dns_flip = false`** and `tofu apply` here.
-- Set **`manage_dns = true`** in `deploy/infra/hetzner/terraform.tfvars` and `tofu apply` there so it re-creates the A records.
-- Bring Hetzner back to serving traffic.
+- `deploy/scripts/run aws down` here — this removes the ALB CNAMEs along with the stack.
+- `deploy/scripts/run hetzner up` there — this re-creates the A records and brings Hetzner back to serving traffic.
 
 ## 8. Demo dump lifecycle (preferred up/down)
 
@@ -126,8 +125,8 @@ deploy/scripts/run aws down               # dump → promote current → tofu de
 
 ## 9. Destroy checklist
 
-With DNS already pointing away from the ALB (manual / `manage_dns_flip`), prefer
-`deploy/scripts/run aws down`. Bare destroy from `deploy/infra/aws`:
+Prefer `deploy/scripts/run aws down`, which captures the dump and removes the
+Cloudflare records with the stack. Bare destroy from `deploy/infra/aws`:
 
 ```bash
 tofu destroy
@@ -154,7 +153,7 @@ Re-check the AWS console for stray ENIs, EIPs, or OpenSearch domains if destroy 
 - Most resources bill **hourly** (pro-rated). **`tofu destroy` stops the meter** for NAT, ALB, Fargate, RDS, and OpenSearch; tiny charges may linger for logs or RDS snapshots if you keep them.
 - Expect roughly: NAT Gateway + ALB + Fargate tasks + small RDS + OpenSearch node — dominated by NAT and OpenSearch for short demos.
 - A monthly **AWS Budget** (`var.budget_limit_usd`, default `$10`) emails **`var.alert_email`** at **80%** and **100%** of **ACTUAL** spend. Confirm the subscription email from AWS Budgets after first apply.
-- Keep **`manage_dns_flip = false`** until you intentionally cut over; leaving the stack up without traffic still incurs infrastructure cost.
+- Use **`run aws up --no-dns`** until you intentionally cut over; leaving the stack up without traffic still incurs infrastructure cost.
 
 ## Ingestion schedule
 

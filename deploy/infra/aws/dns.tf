@@ -16,7 +16,7 @@ resource "cloudflare_dns_record" "acm_validation" {
 }
 
 resource "cloudflare_dns_record" "app" {
-  count = var.manage_dns_flip ? 1 : 0
+  count = var.manage_dns ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = "app.${var.domain}"
@@ -27,7 +27,7 @@ resource "cloudflare_dns_record" "app" {
 }
 
 resource "cloudflare_dns_record" "api" {
-  count = var.manage_dns_flip ? 1 : 0
+  count = var.manage_dns ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = "api.${var.domain}"
@@ -39,7 +39,7 @@ resource "cloudflare_dns_record" "api" {
 
 # Apex CNAME flattening: Cloudflare resolves the ALB hostname at the zone apex.
 resource "cloudflare_dns_record" "apex" {
-  count = var.manage_dns_flip ? 1 : 0
+  count = var.manage_dns ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = var.domain
@@ -50,7 +50,7 @@ resource "cloudflare_dns_record" "apex" {
 }
 
 resource "cloudflare_dns_record" "www" {
-  count = var.manage_dns_flip ? 1 : 0
+  count = var.manage_dns ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = "www.${var.domain}"

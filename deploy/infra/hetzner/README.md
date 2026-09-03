@@ -41,11 +41,14 @@ public IPv4, and Cloudflare DNS-only A records before applying. Do not apply if
 the permanent resources exceed the €20/month cost gate. Do not apply if the x86
 snapshot is missing.
 
-**Coexisting with AWS.** `manage_dns` (default `true`) gates the `app`/`api`/
-apex/`www` Cloudflare A records the same way AWS's `manage_dns_flip` gates its
-CNAMEs — only one side should own DNS at a time. Set `manage_dns = false` here
-before (or when) you set `manage_dns_flip = true` in `deploy/infra/aws`, and
-vice versa when flipping back.
+**Coexisting with AWS.** `manage_dns` gates the `app`/`api`/apex/`www`
+Cloudflare A records, and the AWS stack has a variable of the same name gating
+its CNAMEs — only one side may own DNS at a time. You do not set it by hand:
+`deploy/scripts/run` passes it as a `-var` (`true` on `up`, `false` with
+`--no-dns`), so the tfvars value is ignored and the variable defaults to
+`false`. `run hetzner down` destroys these records, which is what frees the
+names for `run aws up`. Running one target up while the other still holds the
+records fails the apply on a Cloudflare conflict rather than stealing them.
 
 ## Apply and kubeconfig
 

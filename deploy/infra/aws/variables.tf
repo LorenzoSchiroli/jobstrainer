@@ -21,10 +21,10 @@ variable "cloudflare_zone_id" {
   type = string
 }
 
-variable "manage_dns_flip" {
+variable "manage_dns" {
   type        = bool
   default     = false
-  description = "When true, Cloudflare app/api/apex/www point at the ALB. Keep false while Hetzner is live."
+  description = "When true, Cloudflare app/api/apex/www point at the ALB. Set by deploy/scripts/run; do not edit by hand."
 }
 
 variable "ghcr_username" {

@@ -272,7 +272,15 @@ aws_up() {
   fi
   validate_dump "${CURRENT_DUMP}"
 
-  local -a tofu_args=(apply)
+  # The target that is up owns DNS, so the flag is driven by the command line
+  # rather than each tfvars: --no-dns is the only way to bring a stack up
+  # without repointing Cloudflare at it.
+  local dns_flag=false
+  if [[ "${MANAGE_DNS:-1}" -eq 1 ]]; then
+    dns_flag=true
+  fi
+
+  local -a tofu_args=(apply -var "manage_dns=${dns_flag}")
   if [[ "${AUTO_APPROVE:-0}" -eq 1 ]]; then
     tofu_args+=(-auto-approve)
   fi
@@ -305,7 +313,11 @@ RECOVERY
   aws_resume_writers
 
   echo "aws up complete. OpenSearch will refill via worker reconcile."
-  echo "DNS unchanged (manage_dns_flip / Cloudflare not touched)."
+  if [[ "${MANAGE_DNS:-1}" -eq 1 ]]; then
+    echo "DNS: Cloudflare app/api/apex/www now point at the ALB."
+  else
+    echo "DNS untouched (--no-dns). Reach it via: tofu output alb_dns_name"
+  fi
 }
 
 aws_down() {

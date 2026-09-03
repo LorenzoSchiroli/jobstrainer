@@ -38,9 +38,9 @@ output "opensearch_endpoint" {
   value       = aws_opensearch_domain.main.endpoint
 }
 
-output "manage_dns_flip" {
+output "manage_dns" {
   description = "Whether Cloudflare app/api/apex/www records point at the ALB."
-  value       = var.manage_dns_flip
+  value       = var.manage_dns
 }
 
 output "dump_bucket_name" {
