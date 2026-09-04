@@ -20,6 +20,13 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 - **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
 - Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
 - **GHCR pulls are anonymous by default**, matching the Helm path — public packages need no credentials. Only if the packages are private, set `ghcr_username` and `ghcr_token` (a PAT with `read:packages`); that wires `repositoryCredentials` and a Secrets Manager entry into every task definition.
+- **OpenSearch service-linked role** — a VPC domain needs `AWSServiceRoleForAmazonOpenSearchService` in the account. On a fresh account the first apply fails with `ValidationException: Before you can proceed, you must enable a service-linked role`; AWS creates the role as a side effect of that failed call, so simply re-running the apply succeeds. To avoid the wasted cycle, create it up front:
+
+  ```bash
+  aws iam create-service-linked-role --aws-service-name opensearchservice.amazonaws.com
+  ```
+
+  It already exists if any OpenSearch domain has ever been created in the account. This is account-wide, not per-stack, so it is deliberately not managed by OpenTofu — `run aws down` leaves it in place.
 
 ## 2. Configure variables
 
