@@ -4,8 +4,17 @@ resource "random_password" "db" {
 }
 
 resource "random_password" "opensearch" {
-  length  = 32
-  special = false
+  length = 32
+  # AWS rejects the domain unless the master password has an uppercase, a
+  # lowercase, a digit and a special character. The value is sent to OpenSearch
+  # as an http_auth tuple rather than inside a URL, so specials are safe; the
+  # set below still excludes quotes, backslash, slash, @ and space so it stays
+  # painless in shells, JSON and connection strings.
+  min_upper        = 1
+  min_lower        = 1
+  min_numeric      = 1
+  min_special      = 1
+  override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
 resource "random_password" "app_secret_key" {
