@@ -44,16 +44,21 @@ resource "aws_opensearch_domain" "main" {
     }
   }
 
+  # Fine-grained access control above is what authorizes requests: the backend
+  # connects as the internal-database master user over HTTP basic auth, which is
+  # not an IAM principal, so an IAM-scoped domain policy rejects it with a bare
+  # 403 before FGAC ever sees the credentials. Allowing all principals here is
+  # the documented pairing for FGAC, and the domain stays closed off because it
+  # has no public endpoint (vpc_options) and its security group only admits the
+  # ECS tasks.
   access_policies = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "es:ESHttp*"
-        Resource = "arn:aws:es:${var.aws_region}:${data.aws_caller_identity.current.account_id}:domain/${var.project}-search/*"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "es:ESHttp*"
+        Resource  = "arn:aws:es:${var.aws_region}:${data.aws_caller_identity.current.account_id}:domain/${var.project}-search/*"
       },
     ]
   })
