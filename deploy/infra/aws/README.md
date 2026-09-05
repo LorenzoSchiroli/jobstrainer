@@ -1,6 +1,6 @@
 # AWS ECS showcase (OpenTofu)
 
-Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this path uses ECS Fargate, RDS Postgres, OpenSearch Service, and an ALB. Only one public stack should serve `jobsifty.com` at a time — flip Cloudflare DNS between Hetzner and AWS.
+Managed Fargate stack for the Jobsifty demo. Hetzner stays on Helm/k8s; this path uses ECS Fargate, RDS Postgres, OpenSearch Service, and an ALB. Only one public stack should serve `jobsifty.com` at a time — flip Cloudflare DNS between Hetzner and AWS.
 
 ## 1. Prerequisites
 
@@ -15,8 +15,8 @@ Managed Fargate stack for the jobstrainer demo. Hetzner stays on Helm/k8s; this 
 
   `deployer-policy.json` is gitignored (same split as `terraform.tfvars.example` / `terraform.tfvars`), so your account ID never reaches the public repo. Keep the real ID out of the committed `.example` file.
 
-  Then IAM → Policies → Create policy → JSON, and add the deploying user to a group carrying it. Replace `jobstrainer` in the ARNs too if you changed `var.project`. IAM and S3 are scoped to this stack's own roles and dump bucket; the remaining services offer no useful resource-level scoping for the create/describe actions used here. Verify with `aws sts get-caller-identity`.
-- **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobstrainer-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
+  Then IAM → Policies → Create policy → JSON, and add the deploying user to a group carrying it. Replace `jobsifty` in the ARNs too if you changed `var.project`. IAM and S3 are scoped to this stack's own roles and dump bucket; the remaining services offer no useful resource-level scoping for the create/describe actions used here. Verify with `aws sts get-caller-identity`.
+- **GHCR images** built for **`linux/amd64`** (GitHub Actions **Build and push images** workflow, or local `docker buildx build --platform linux/amd64`): frontend, backend, ingestion, and **`jobsifty-pgtools`** (demo dump/restore). Set `VITE_API_URL=https://api.<domain>` in `.env.public` before publishing the frontend image.
 - **Cloudflare** API token with DNS edit access to the zone, plus the zone ID.
 - Secrets ready for `terraform.tfvars` / `TF_VAR_*`: `cloudflare_api_token`, `groq_api_key`, and optional Adzuna/Serper/DDGS keys.
 - **GHCR pulls are anonymous by default**, matching the Helm path — public packages need no credentials. Only if the packages are private, set `ghcr_username` and `ghcr_token` (a PAT with `read:packages`); that wires `repositoryCredentials` and a Secrets Manager entry into every task definition.
@@ -74,7 +74,7 @@ aws ecs run-task \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}"
 ```
 
-Watch logs in CloudWatch under `/ecs/jobstrainer/bootstrap` (or `/ecs/${project}/bootstrap` if you changed `var.project`). Re-run only when migrations or bootstrap logic change.
+Watch logs in CloudWatch under `/ecs/jobsifty/bootstrap` (or `/ecs/${project}/bootstrap` if you changed `var.project`). Re-run only when migrations or bootstrap logic change.
 
 ## 5. DNS flip to AWS
 
@@ -105,15 +105,15 @@ When the demo ends, repoint Cloudflare to the Hetzner ingress IP **before** or *
 
 ## 8. Demo dump lifecycle (preferred up/down)
 
-Same Postgres dump file as Hetzner (`dumps/jobstrainer.current.dump`). Scripts
+Same Postgres dump file as Hetzner (`dumps/jobsifty.current.dump`). Scripts
 use Fargate + S3 (RDS stays private). They **do not** touch Cloudflare or Hetzner.
 
 Also required: **`pgtools_image`** in `terraform.tfvars` — GHCR
-`linux/amd64` image from **Build and push images** (`jobstrainer-pgtools`), or:
+`linux/amd64` image from **Build and push images** (`jobsifty-pgtools`), or:
 
 ```bash
 docker buildx build --platform linux/amd64 \
-  -t ghcr.io/OWNER/jobstrainer-pgtools:TAG --push \
+  -t ghcr.io/OWNER/jobsifty-pgtools:TAG --push \
   deploy/infra/aws/docker/pgtools
 ```
 

@@ -8,14 +8,14 @@ SCRIPTS_DIR="$(cd "${_scripts_lib_dir}/.." && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_DIR}/../.." && pwd)"
 
 DUMPS_DIR="${REPO_ROOT}/dumps"
-CURRENT_DUMP="${DUMPS_DIR}/jobstrainer.current.dump"
+CURRENT_DUMP="${DUMPS_DIR}/jobsifty.current.dump"
 ARCHIVE_DIR="${DUMPS_DIR}/archive"
 HETZNER_DIR="${REPO_ROOT}/deploy/infra/hetzner"
-CLUSTER_NAME="${CLUSTER_NAME:-jobstrainer}"
+CLUSTER_NAME="${CLUSTER_NAME:-jobsifty}"
 POSTGRES_POD="${POSTGRES_POD:-postgres-0}"
-POSTGRES_DB="${POSTGRES_DB:-jobstrainer}"
+POSTGRES_DB="${POSTGRES_DB:-jobsifty}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
-POD_DUMP_PATH="/tmp/jobstrainer.dump"
+POD_DUMP_PATH="/tmp/jobsifty.dump"
 
 require_cmd() {
   local cmd="$1"
@@ -202,7 +202,7 @@ cluster_pg_restore_from() {
 }
 
 mktemp_dump() {
-  mktemp "${TMPDIR:-/tmp}/jobstrainer-dump.XXXXXX.dump"
+  mktemp "${TMPDIR:-/tmp}/jobsifty-dump.XXXXXX.dump"
 }
 
 # Empty means "whatever KUBECONFIG points at" (Hetzner). The local target sets
@@ -221,22 +221,22 @@ kctl() {
 # Both .env.public and .env, in that order: the chart's envFrom expects
 # GROQ_MODEL_*, OFFER_QUERY and CORS_ORIGINS (public) alongside the secrets.
 ensure_secret() {
-  if kctl get secret jobstrainer-secrets >/dev/null 2>&1; then
-    echo "secret jobstrainer-secrets already exists (leaving unchanged)"
+  if kctl get secret jobsifty-secrets >/dev/null 2>&1; then
+    echo "secret jobsifty-secrets already exists (leaving unchanged)"
     return
   fi
   local env_public="${REPO_ROOT}/.env.public"
   local env_secret="${REPO_ROOT}/.env"
   if [[ ! -f "${env_public}" || ! -f "${env_secret}" ]]; then
-    echo "error: jobstrainer-secrets missing and .env.public/.env not both present" >&2
+    echo "error: jobsifty-secrets missing and .env.public/.env not both present" >&2
     echo "hint: create the secret as documented in deploy/k8s/README.md" >&2
     exit 1
   fi
-  echo "==> creating jobstrainer-secrets from .env.public + .env"
-  kctl create secret generic jobstrainer-secrets \
+  echo "==> creating jobsifty-secrets from .env.public + .env"
+  kctl create secret generic jobsifty-secrets \
     --from-env-file="${env_public}" \
     --from-env-file="${env_secret}"
-  kctl patch secret jobstrainer-secrets --type merge -p \
-    '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
+  kctl patch secret jobsifty-secrets --type merge -p \
+    '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobsifty","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
 }
 

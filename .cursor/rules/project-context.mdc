@@ -9,5 +9,5 @@ Read and follow [AGENTS.md](../../AGENTS.md) for architecture, commands, environ
 
 Critical constraints:
 - `uv` workspace: run backend/ingestion commands from their package directories with `uv run`.
-- Backend tests need live Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test`.
+- Backend tests need live Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test`.
 - Keep `.env` values unquoted (k8s secrets store quotes verbatim).

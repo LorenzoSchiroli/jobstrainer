@@ -1,5 +1,5 @@
 apiVersion: v2
-name: jobstrainer
+name: jobsifty
 description: Job search ranking system - API, worker, ingestion, frontend, Postgres, OpenSearch
 type: application
 version: 0.1.0

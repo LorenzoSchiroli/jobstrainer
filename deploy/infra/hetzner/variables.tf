@@ -27,7 +27,7 @@ variable "location" {
 
 variable "cluster_name" {
   type    = string
-  default = "jobstrainer"
+  default = "jobsifty"
 }
 
 variable "ssh_public_key_path" {

@@ -4,10 +4,10 @@ imagePullPolicy: Always
 
 nodePools:
   permanent:
-    labelKey: jobstrainer.io/node-pool
+    labelKey: jobsifty.io/node-pool
     labelValue: permanent
   burst:
-    labelKey: jobstrainer.io/node-pool
+    labelKey: jobsifty.io/node-pool
     labelValue: burst
 
 scheduling:
@@ -26,27 +26,27 @@ opensearch:
 
 bootstrap:
   image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    repository: ghcr.io/lorenzoschiroli/jobsifty-backend
     tag: latest
 
 api:
   image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    repository: ghcr.io/lorenzoschiroli/jobsifty-backend
     tag: latest
 
 worker:
   image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-backend
+    repository: ghcr.io/lorenzoschiroli/jobsifty-backend
     tag: latest
 
 ingestion:
   image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-ingestion
+    repository: ghcr.io/lorenzoschiroli/jobsifty-ingestion
     tag: latest
 
 frontend:
   image:
-    repository: ghcr.io/jobstrainer-demo/jobstrainer-frontend
+    repository: ghcr.io/lorenzoschiroli/jobsifty-frontend
     tag: latest
 
 ingress:

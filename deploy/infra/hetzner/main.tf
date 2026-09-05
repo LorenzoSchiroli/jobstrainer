@@ -21,7 +21,7 @@ module "kube_hetzner" {
       count       = 1
       # v3.0.1 types control-plane labels/taints as list(string), not maps.
       labels = [
-        "jobstrainer.io/node-pool=permanent",
+        "jobsifty.io/node-pool=permanent",
       ]
       taints = []
       extra_write_files = [
@@ -48,7 +48,7 @@ module "kube_hetzner" {
       max_nodes   = 2
       # Autoscaler labels are map(string) in v3.0.1.
       labels = {
-        "jobstrainer.io/node-pool" = "burst"
+        "jobsifty.io/node-pool" = "burst"
       }
       taints = []
     },

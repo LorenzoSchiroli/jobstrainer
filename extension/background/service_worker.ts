@@ -92,7 +92,7 @@ chrome.runtime.onConnect.addListener((port) => {
       const token: string = session?.token ?? (msg.token as string) ?? '';
 
       if (!job_id || !token) {
-        sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job in jobstrainer first.' });
+        sessionManager.sendToPanel(tabId, { type: 'error_toast', message: 'No active job — open a job in Jobsifty first.' });
         return;
       }
 

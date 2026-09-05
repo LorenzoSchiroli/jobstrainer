@@ -21,19 +21,19 @@ jobs:
           - image: backend
             dockerfile: backend/Dockerfile
             context: .
-            package: jobstrainer-backend
+            package: jobsifty-backend
           - image: ingestion
             dockerfile: ingestion/Dockerfile
             context: .
-            package: jobstrainer-ingestion
+            package: jobsifty-ingestion
           - image: frontend
             dockerfile: frontend/Dockerfile
             context: ./frontend
-            package: jobstrainer-frontend
+            package: jobsifty-frontend
           - image: pgtools
             dockerfile: deploy/infra/aws/docker/pgtools/Dockerfile
             context: deploy/infra/aws/docker/pgtools
-            package: jobstrainer-pgtools
+            package: jobsifty-pgtools
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,10 +97,10 @@ jobs:
     strategy:
       matrix:
         package:
-          - jobstrainer-backend
-          - jobstrainer-ingestion
-          - jobstrainer-frontend
-          - jobstrainer-pgtools
+          - jobsifty-backend
+          - jobsifty-ingestion
+          - jobsifty-frontend
+          - jobsifty-pgtools
     steps:
       - name: Keep latest + two newest SHA tags
         env:

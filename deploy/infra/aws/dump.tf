@@ -1,5 +1,5 @@
 locals {
-  dump_s3_key = "demo/jobstrainer.dump"
+  dump_s3_key = "demo/jobsifty.dump"
   dump_s3_uri = "s3://${aws_s3_bucket.dump.id}/${local.dump_s3_key}"
 }
 

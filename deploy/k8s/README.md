@@ -1,6 +1,6 @@
-# jobstrainer on Kubernetes (Helm)
+# Jobsifty on Kubernetes (Helm)
 
-The stack deploys as a single Helm chart: `deploy/helm/jobstrainer/`. The plain
+The stack deploys as a single Helm chart: `deploy/helm/jobsifty/`. The plain
 manifests that previously lived here (Phase 1) were retired after the chart
 took over; see git history and
 `docs/superpowers/specs/2026-07-18-k8s-phase3-helm-design.md`. Only
@@ -36,19 +36,19 @@ drive a step by hand.
 
 ### Cluster + images
 
-    kind create cluster --name jobstrainer
+    kind create cluster --name jobsifty
 
-    docker build -f backend/Dockerfile -t jobstrainer-backend:local .
-    docker build -f ingestion/Dockerfile -t jobstrainer-ingestion:local .
+    docker build -f backend/Dockerfile -t jobsifty-backend:local .
+    docker build -f ingestion/Dockerfile -t jobsifty-ingestion:local .
     docker build -f frontend/Dockerfile \
       --build-arg VITE_API_URL=http://localhost:8000 \
-      -t jobstrainer-frontend:local ./frontend
-    kind load docker-image jobstrainer-backend:local jobstrainer-ingestion:local jobstrainer-frontend:local --name jobstrainer
+      -t jobsifty-frontend:local ./frontend
+    kind load docker-image jobsifty-backend:local jobsifty-ingestion:local jobsifty-frontend:local --name jobsifty
 
 ### Secret
 
 The chart does **not** create the secret — it references one by name
-(`existingSecret`, default `jobstrainer-secrets`). Create it from the repo's
+(`existingSecret`, default `jobsifty-secrets`). Create it from the repo's
 `.env` before installing.
 
 > **Warning — no quotes in `.env` values.** `kubectl create secret
@@ -63,15 +63,15 @@ Due to kubectl version constraints, `--from-env-file` cannot be combined with
 **both** env files: `.env.public` carries `GROQ_MODEL_*`, `OFFER_QUERY` and
 `CORS_ORIGINS`, which the chart's `envFrom` expects alongside the secrets.
 
-    kubectl create secret generic jobstrainer-secrets \
+    kubectl create secret generic jobsifty-secrets \
       --from-env-file=.env.public \
       --from-env-file=.env
 
-    kubectl patch secret jobstrainer-secrets \
+    kubectl patch secret jobsifty-secrets \
       --type merge \
-      -p '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
+      -p '{"stringData":{"DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobsifty","OPENSEARCH_URL":"http://opensearch:9200","BACKEND_URL":"http://api:8000"}}'
 
-To pick up `.env` changes: `kubectl delete secret jobstrainer-secrets`, re-run
+To pick up `.env` changes: `kubectl delete secret jobsifty-secrets`, re-run
 both commands, then `kubectl rollout restart deployment api worker`.
 
 ### metrics-server (required by the API HPA)
@@ -87,9 +87,9 @@ NOT use it.
 
 ## 2. Deploy
 
-    helm install jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
+    helm install jobsifty deploy/helm/jobsifty -f deploy/helm/jobsifty/values-local.yaml
 
-The `jobstrainer-bootstrap` post-install hook runs migrations, creates the
+The `jobsifty-bootstrap` post-install hook runs migrations, creates the
 OpenSearch index, and sets up checkpointer tables automatically. On a fresh
 cluster its first attempts may crash while Postgres/OpenSearch are still
 starting — that is the `backoffLimit: 6` retry budget working, not a problem.
@@ -97,11 +97,11 @@ starting — that is the `backoffLimit: 6` retry budget working, not a problem.
 Upgrade after chart/values changes (the bootstrap hook re-runs pre-upgrade, so
 migrations apply before new code rolls out):
 
-    helm upgrade jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
+    helm upgrade jobsifty deploy/helm/jobsifty -f deploy/helm/jobsifty/values-local.yaml
 
 Uninstall (PVCs — and therefore all Postgres/OpenSearch data — survive):
 
-    helm uninstall jobstrainer
+    helm uninstall jobsifty
 
 ## 3. Access
 
@@ -117,12 +117,12 @@ Edit `values.yaml` / `values-local.yaml` (or use `--set`) and `helm upgrade`.
 Examples:
 
     # pause ingestion
-    helm upgrade jobstrainer deploy/helm/jobstrainer \
-      -f deploy/helm/jobstrainer/values-local.yaml --set ingestion.suspend=true
+    helm upgrade jobsifty deploy/helm/jobsifty \
+      -f deploy/helm/jobsifty/values-local.yaml --set ingestion.suspend=true
 
     # widen the HPA ceiling
-    helm upgrade jobstrainer deploy/helm/jobstrainer \
-      -f deploy/helm/jobstrainer/values-local.yaml --set hpa.maxReplicas=6
+    helm upgrade jobsifty deploy/helm/jobsifty \
+      -f deploy/helm/jobsifty/values-local.yaml --set hpa.maxReplicas=6
 
 Notable values: `existingSecret`, `hpa.minReplicas/maxReplicas/targetCPUUtilization`,
 `ingestion.schedule/suspend/activeDeadlineSeconds`, per-service `image.repository/tag`
@@ -184,16 +184,16 @@ Replace `OWNER`, `TAG`, and `api.example.com`:
 
     docker buildx build --platform linux/amd64 \
       -f backend/Dockerfile \
-      -t ghcr.io/OWNER/jobstrainer-backend:TAG --push .
+      -t ghcr.io/OWNER/jobsifty-backend:TAG --push .
 
     docker buildx build --platform linux/amd64 \
       -f ingestion/Dockerfile \
-      -t ghcr.io/OWNER/jobstrainer-ingestion:TAG --push .
+      -t ghcr.io/OWNER/jobsifty-ingestion:TAG --push .
 
     docker buildx build --platform linux/amd64 \
       -f frontend/Dockerfile \
       --build-arg VITE_API_URL=https://api.example.com \
-      -t ghcr.io/OWNER/jobstrainer-frontend:TAG --push ./frontend
+      -t ghcr.io/OWNER/jobsifty-frontend:TAG --push ./frontend
 
 The backend image includes `postgresql-client` and `rclone` for the worker's
 nightly Postgres backup loop. No separate postgres-backup image is required.
@@ -212,9 +212,9 @@ Create the application secret after OpenTofu has produced a kubeconfig. Merge
 committed `.env.public` with local secrets `.env`. Values must remain unquoted
 because `kubectl --from-env-file` preserves quotes.
 
-    export KUBECONFIG=/path/to/jobstrainer-kubeconfig
+    export KUBECONFIG=/path/to/jobsifty-kubeconfig
     # Later file wins on duplicate keys; keep secrets in `.env`.
-    kubectl create secret generic jobstrainer-secrets \
+    kubectl create secret generic jobsifty-secrets \
       --from-env-file=.env.public \
       --from-env-file=.env
 
@@ -226,16 +226,16 @@ Patch the cluster-local URLs, public CORS origin, and Storage Box values.
 `BACKUP_SBOX_PATH` is relative (no leading slash). `BACKUP_SBOX_RCLONE_PASS` is
 the obscured value, not the raw password:
 
-    kubectl patch secret jobstrainer-secrets --type merge -p \
+    kubectl patch secret jobsifty-secrets --type merge -p \
       '{"stringData":{
-        "DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer",
+        "DATABASE_URL":"postgresql+asyncpg://postgres:postgres@postgres:5432/jobsifty",
         "OPENSEARCH_URL":"http://opensearch:9200",
         "BACKEND_URL":"http://api:8000",
         "CORS_ORIGINS":"https://app.example.com",
         "BACKUP_SBOX_HOST":"uXXXXX.your-storagebox.de",
         "BACKUP_SBOX_USER":"uXXXXX",
         "BACKUP_SBOX_RCLONE_PASS":"rclone-obscured-password-goes-here",
-        "BACKUP_SBOX_PATH":"backups/jobstrainer"
+        "BACKUP_SBOX_PATH":"backups/jobsifty"
       }}'
 
 ## Hetzner Helm deployment
@@ -255,15 +255,15 @@ image repository, image tag (`latest`, or a retained short SHA for rollback), ho
 
 ```yaml
 bootstrap:
-  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobsifty-backend, tag: latest }
 api:
-  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobsifty-backend, tag: latest }
 worker:
-  image: { repository: ghcr.io/OWNER/jobstrainer-backend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobsifty-backend, tag: latest }
 ingestion:
-  image: { repository: ghcr.io/OWNER/jobstrainer-ingestion, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobsifty-ingestion, tag: latest }
 frontend:
-  image: { repository: ghcr.io/OWNER/jobstrainer-frontend, tag: latest }
+  image: { repository: ghcr.io/OWNER/jobsifty-frontend, tag: latest }
 ingress:
   frontendHost: app.example.com
   apiHost: api.example.com
@@ -273,16 +273,16 @@ certManager:
 
 Then deploy:
 
-    helm lint deploy/helm/jobstrainer \
-      -f deploy/helm/jobstrainer/values.yaml \
-      -f deploy/helm/jobstrainer/values-cloud.yaml \
-      -f deploy/helm/jobstrainer/values-hetzner.yaml \
+    helm lint deploy/helm/jobsifty \
+      -f deploy/helm/jobsifty/values.yaml \
+      -f deploy/helm/jobsifty/values-cloud.yaml \
+      -f deploy/helm/jobsifty/values-hetzner.yaml \
       -f values-private.yaml
 
-    helm upgrade --install jobstrainer deploy/helm/jobstrainer \
-      -f deploy/helm/jobstrainer/values.yaml \
-      -f deploy/helm/jobstrainer/values-cloud.yaml \
-      -f deploy/helm/jobstrainer/values-hetzner.yaml \
+    helm upgrade --install jobsifty deploy/helm/jobsifty \
+      -f deploy/helm/jobsifty/values.yaml \
+      -f deploy/helm/jobsifty/values-cloud.yaml \
+      -f deploy/helm/jobsifty/values-hetzner.yaml \
       -f values-private.yaml
 
     kubectl get pods -o wide
@@ -298,7 +298,7 @@ staging Secret in place prevents the production issuer from replacing it.
 ## Demo dump lifecycle
 
 For bring-up / tear-down without losing Postgres, use the single-file dump
-`dumps/jobstrainer.current.dump` (shared across clouds):
+`dumps/jobsifty.current.dump` (shared across clouds):
 
 **Hetzner** (`deploy/infra/hetzner/README.md`):
 
@@ -327,11 +327,11 @@ a freshly recreated Postgres PVC only:
     kubectl wait --for=condition=Ready pod/postgres-0 --timeout=180s
     kubectl cp selected.dump postgres-0:/tmp/restore.dump
     kubectl exec postgres-0 -- \
-      pg_restore -U postgres -d jobstrainer --clean --if-exists --no-owner /tmp/restore.dump
+      pg_restore -U postgres -d jobsifty --clean --if-exists --no-owner /tmp/restore.dump
 
 Verify row counts and foreign keys after restoring:
 
-    kubectl exec postgres-0 -- psql -U postgres -d jobstrainer -c \
+    kubectl exec postgres-0 -- psql -U postgres -d jobsifty -c \
       "SELECT count(*) AS orphaned_jobs
        FROM jobs j LEFT JOIN companies c ON c.id = j.company_id
        WHERE c.id IS NULL;"

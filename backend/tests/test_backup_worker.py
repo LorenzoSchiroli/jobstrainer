@@ -7,8 +7,8 @@ from backend import backup as backup_mod
 
 def test_to_libpq_url_strips_asyncpg_dialect():
     assert (
-        backup_mod.to_libpq_url("postgresql+asyncpg://postgres:postgres@postgres:5432/jobstrainer")
-        == "postgresql://postgres:postgres@postgres:5432/jobstrainer"
+        backup_mod.to_libpq_url("postgresql+asyncpg://postgres:postgres@postgres:5432/jobsifty")
+        == "postgresql://postgres:postgres@postgres:5432/jobsifty"
     )
 
 
@@ -21,28 +21,28 @@ def test_to_libpq_url_leaves_plain_postgresql():
 
 def test_validate_sbox_path_rejects_absolute():
     with pytest.raises(ValueError, match="relative"):
-        backup_mod.validate_sbox_path("/backups/jobstrainer")
+        backup_mod.validate_sbox_path("/backups/jobsifty")
 
 
 def test_validate_sbox_path_accepts_relative():
-    backup_mod.validate_sbox_path("backups/jobstrainer")
+    backup_mod.validate_sbox_path("backups/jobsifty")
 
 
 def test_expired_backup_filenames_keeps_seven_newest():
     names = [
-        f"jobstrainer-202607{day:02d}T020000Z.dump"
+        f"jobsifty-202607{day:02d}T020000Z.dump"
         for day in range(1, 11)
     ]
     expired = backup_mod.expired_backup_filenames(names, retain=7)
     assert expired == [
-        "jobstrainer-20260703T020000Z.dump",
-        "jobstrainer-20260702T020000Z.dump",
-        "jobstrainer-20260701T020000Z.dump",
+        "jobsifty-20260703T020000Z.dump",
+        "jobsifty-20260702T020000Z.dump",
+        "jobsifty-20260701T020000Z.dump",
     ]
 
 
 def test_expired_backup_filenames_ignores_non_matching():
-    names = ["readme.txt", "jobstrainer-20260728T020000Z.dump"]
+    names = ["readme.txt", "jobsifty-20260728T020000Z.dump"]
     assert backup_mod.expired_backup_filenames(names, retain=7) == []
 
 
@@ -61,7 +61,7 @@ def test_backup_configured_requires_all_sbox_env(monkeypatch):
     monkeypatch.setenv("BACKUP_SBOX_HOST", "u.your-storagebox.de")
     monkeypatch.setenv("BACKUP_SBOX_USER", "u")
     monkeypatch.setenv("BACKUP_SBOX_RCLONE_PASS", "obscured")
-    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobstrainer")
+    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobsifty")
     assert backup_mod.backup_configured() is True
 
 
@@ -76,7 +76,7 @@ async def test_run_backup_invokes_script_via_bash_when_configured(monkeypatch, t
     monkeypatch.setenv("BACKUP_SBOX_HOST", "u.your-storagebox.de")
     monkeypatch.setenv("BACKUP_SBOX_USER", "u")
     monkeypatch.setenv("BACKUP_SBOX_RCLONE_PASS", "obscured")
-    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobstrainer")
+    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobsifty")
 
     mock_proc = AsyncMock()
     mock_proc.returncode = 0
@@ -101,7 +101,7 @@ async def test_run_backup_raises_when_script_fails(monkeypatch, tmp_path):
     monkeypatch.setenv("BACKUP_SBOX_HOST", "u.your-storagebox.de")
     monkeypatch.setenv("BACKUP_SBOX_USER", "u")
     monkeypatch.setenv("BACKUP_SBOX_RCLONE_PASS", "obscured")
-    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobstrainer")
+    monkeypatch.setenv("BACKUP_SBOX_PATH", "backups/jobsifty")
 
     mock_proc = AsyncMock()
     mock_proc.returncode = 1

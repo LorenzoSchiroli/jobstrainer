@@ -5,7 +5,7 @@ variable "aws_region" {
 
 variable "project" {
   type    = string
-  default = "jobstrainer"
+  default = "jobsifty"
 }
 
 variable "domain" {

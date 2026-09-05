@@ -120,7 +120,7 @@ export default function App() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {status === 'idle' && log.length === 0 && (
           <div style={{ color: '#475569', textAlign: 'center', marginTop: 40, lineHeight: 1.6 }}>
-            {hasJob ? 'Navigate to the application form, then click Fill.' : 'No active job — browse to a job listing in jobstrainer.'}
+            {hasJob ? 'Navigate to the application form, then click Fill.' : 'No active job — browse to a job listing in Jobsifty.'}
           </div>
         )}
 
@@ -201,10 +201,10 @@ function LinkBanner({ state, username, job }: { state: LinkState; username: stri
   };
 
   if (state === 'unlinked') {
-    return <div style={{ ...base, color: '#64748b' }}>Not linked — open a job in jobstrainer.</div>;
+    return <div style={{ ...base, color: '#64748b' }}>Not linked — open a job in Jobsifty.</div>;
   }
   if (state === 'expired') {
-    return <div style={{ ...base, color: '#fca5a5' }}>Session expired — re-open the job in jobstrainer.</div>;
+    return <div style={{ ...base, color: '#fca5a5' }}>Session expired — re-open the job in Jobsifty.</div>;
   }
   return (
     <div style={base}>

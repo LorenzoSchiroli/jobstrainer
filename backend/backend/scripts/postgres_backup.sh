@@ -22,7 +22,7 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-filename="jobstrainer-${timestamp}.dump"
+filename="jobsifty-${timestamp}.dump"
 dump_path="${work_dir}/${filename}"
 config_path="${work_dir}/rclone.conf"
 listing_path="${work_dir}/listing.txt"
@@ -49,7 +49,7 @@ rclone --config "${config_path}" lsf --files-only --format p \
   "storagebox:${BACKUP_SBOX_PATH}" > "${listing_path}"
 
 # grep exits 1 when nothing matches (fewer than eight dumps); that is not a failure.
-grep -E '^jobstrainer-[0-9]{8}T[0-9]{6}Z\.dump$' "${listing_path}" \
+grep -E '^jobsifty-[0-9]{8}T[0-9]{6}Z\.dump$' "${listing_path}" \
   | sort -r \
   | awk 'NR > 7 { print }' \
   > "${work_dir}/expired.txt" || true

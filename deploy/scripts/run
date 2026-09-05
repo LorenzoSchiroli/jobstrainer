@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single entrypoint for running jobstrainer on a chosen target.
+# Single entrypoint for running Jobsifty on a chosen target.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +32,7 @@ is running — bring the previous target down yourself first. Skipping that
 makes the second apply fail on a Cloudflare record conflict rather than
 silently stealing the domain.
 
-The cloud targets restore/capture dumps/jobstrainer.current.dump; run
+The cloud targets restore/capture dumps/jobsifty.current.dump; run
 deploy/scripts/seed-dump first if you do not have one.
 
 Examples:

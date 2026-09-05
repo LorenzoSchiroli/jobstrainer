@@ -13,7 +13,7 @@ fi
 
 # App secret uses SQLAlchemy async URL; libpq wants postgresql://
 PGURL="${DATABASE_URL/+asyncpg/}"
-LOCAL_DUMP="/tmp/jobstrainer.dump"
+LOCAL_DUMP="/tmp/jobsifty.dump"
 
 if [[ "${mode}" == "dump" ]]; then
   echo "==> pg_dump -Fc → ${LOCAL_DUMP}"

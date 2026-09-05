@@ -16,7 +16,7 @@ from uuid import UUID
 
 import asyncpg
 
-PG_DSN = "postgresql://postgres:postgres@localhost:5432/jobstrainer"
+PG_DSN = "postgresql://postgres:postgres@localhost:5432/jobsifty"
 OS_URL = "http://localhost:9200"
 DESCRIPTION_MAX = 300
 

@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test")
 os.environ.setdefault("GROQ_MODEL_LARGE", "test-model")
 os.environ.setdefault("GROQ_MODEL_BASE", "test-model")
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -18,7 +18,7 @@ import backend.search.advanced.models  # noqa: F401
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test",
 )
 
 

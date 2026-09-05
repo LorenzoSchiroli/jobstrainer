@@ -1,8 +1,8 @@
-# jobstrainer
+# Jobsifty
 
 **A job search engine that ranks openings against *you*, not against a keyword.**
 
-jobstrainer continuously scrapes job offers from several sources, has an LLM
+Jobsifty continuously scrapes job offers from several sources, has an LLM
 distil each posting into structured metadata, embeds it, and serves a hybrid
 **BM25 + k-NN** search endpoint with **cross-encoder reranking**. On top of that
 sit two LangGraph agents: an **advanced search** that asks clarifying questions
@@ -216,7 +216,7 @@ deploy/scripts/run aws up --no-dns         # tofu apply → ECS, domain left whe
 deploy/scripts/run aws down --yes          # dump → promote → tofu destroy, no prompt
 ```
 
-Cloud targets restore from and capture into `dumps/jobstrainer.current.dump`
+Cloud targets restore from and capture into `dumps/jobsifty.current.dump`
 (seed it with `deploy/scripts/seed-dump`), so the demo database follows the
 stack between providers. Bringing a cloud target up points Cloudflare
 `app` / `api` / apex / `www` at it; taking it down removes those records.
@@ -228,7 +228,7 @@ domain.
 ### Hetzner — self-hosted Kubernetes
 
 OpenTofu drives the [`kube-hetzner`](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner)
-module (k3s), then Helm installs the whole stack from `deploy/helm/jobstrainer/`.
+module (k3s), then Helm installs the whole stack from `deploy/helm/jobsifty/`.
 
 ```mermaid
 flowchart TB
@@ -316,7 +316,7 @@ worker's own writes to OpenSearch.
 | **ECS Fargate, not EKS** | Running Kubernetes on both providers would have proven nothing twice. The interesting exercise is porting the same containers and the same environment contract onto a genuinely different substrate — managed services, IAM, task definitions — and seeing which assumptions were really Kubernetes assumptions. It is also far cheaper: no control-plane fee, no node fleet. |
 | **Every task in private subnets, egress via one NAT gateway** | Nothing but the ALB is reachable from the internet, and the RDS and OpenSearch security groups admit *only* the ECS task security group. One NAT instead of one per AZ is an explicit availability-for-cost trade, appropriate for a demo. |
 | **OpenSearch with fine-grained access control inside the VPC** | The backend authenticates as an internal-database user over HTTP basic auth, which is not an IAM principal — so an IAM-scoped domain policy would reject it with a bare 403 before FGAC ever sees the credentials. The domain policy is therefore permissive by design, and the domain stays closed because it has no public endpoint and its security group admits only the ECS tasks. |
-| **Ingestion posts to a Cloud Map address, never the public hostname** | Public DNS may be pointing at the *other* provider. `http://api.jobstrainer.local:8000` resolves inside this VPC, so a scrape run can only ever write into its own stack — the mistake it prevents is silently ingesting into Hetzner while testing AWS. |
+| **Ingestion posts to a Cloud Map address, never the public hostname** | Public DNS may be pointing at the *other* provider. `http://api.jobsifty.local:8000` resolves inside this VPC, so a scrape run can only ever write into its own stack — the mistake it prevents is silently ingesting into Hetzner while testing AWS. |
 | **EventBridge Scheduler → `RunTask` instead of a long-running scheduler** | Ingestion is a batch job; paying for an idle container 23 hours a day to run it twice would be the Kubernetes CronJob's job, and Fargate's equivalent is a scheduled task with a retry policy. |
 | **Target-tracking autoscaling that mirrors the Helm HPA** | Same signal, same 70% threshold, same 1→4 range, so a load test tells you something comparable on either provider rather than comparing two different tuning exercises. |
 | **The database rides in an S3 dump across `up` / `down`** | A cloud demo that cannot be destroyed is a subscription. `run aws down` captures the database, promotes the dump, then destroys everything; `run aws up` restores it. State survives, the bill does not. |
@@ -384,7 +384,7 @@ uv run pytest tests/search/test_filters.py::test_build_clauses_empty_when_all_no
 ```
 
 Tests need a live Postgres at
-`postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test`
+`postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test`
 (override with `TEST_DATABASE_URL`). OpenSearch and the ML models are mocked.
 
 ### Ingestion

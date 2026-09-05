@@ -1,10 +1,10 @@
-{{- define "jobstrainer.storageClass" -}}
+{{- define "jobsifty.storageClass" -}}
 {{- if .Values.storageClass }}
 storageClassName: {{ .Values.storageClass | quote }}
 {{- end }}
 {{- end }}
 
-{{- define "jobstrainer.nodeAffinity" -}}
+{{- define "jobsifty.nodeAffinity" -}}
 {{- $poolName := .pool -}}
 {{- $pool := index .root.Values.nodePools $poolName -}}
 {{- if and $poolName $pool }}

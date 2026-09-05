@@ -28,7 +28,7 @@ export default function Login() {
 
   return (
     <div style={{ maxWidth: 360, margin: '10vh auto', padding: '2rem' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '2rem', fontSize: '1.5rem' }}>jobstrainer</h1>
+      <h1 style={{ textAlign: 'center', marginBottom: '2rem', fontSize: '1.5rem' }}>Jobsifty</h1>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <input
           value={username}

@@ -1,4 +1,4 @@
-# jobstrainer Hetzner infrastructure
+# Jobsifty Hetzner infrastructure
 
 ## Prerequisites
 
@@ -56,17 +56,17 @@ records fails the apply on a Cloudflare conflict rather than stealing them.
 
 kube-hetzner writes a local kubeconfig next to this module:
 
-    export KUBECONFIG=$PWD/jobstrainer_kubeconfig.yaml
+    export KUBECONFIG=$PWD/jobsifty_kubeconfig.yaml
 
-(Default `cluster_name` is `jobstrainer`, so the file is
-`jobstrainer_kubeconfig.yaml`. Keep it out of Git; `kubeconfig*` is gitignored.)
+(Default `cluster_name` is `jobsifty`, so the file is
+`jobsifty_kubeconfig.yaml`. Keep it out of Git; `kubeconfig*` is gitignored.)
 
 ## Demo dump lifecycle
 
 Hetzner is disposable. The operator source of truth is a single custom-format
 dump at the repo root (gitignored):
 
-    dumps/jobstrainer.current.dump
+    dumps/jobsifty.current.dump
 
 Do **not** run bare `tofu destroy` while the demo holds data that is not yet in
 that file — use `deploy/scripts/run hetzner down` instead.
@@ -75,7 +75,7 @@ Typical flow from the repo root:
 
     # One-time (or rare): create the canonical dump
     deploy/scripts/seed-dump --from compose
-    # or: deploy/scripts/seed-dump --from file --file ~/jobstrainer-data/dumps/compose-base.dump
+    # or: deploy/scripts/seed-dump --from file --file ~/jobsifty-data/dumps/compose-base.dump
     # or: deploy/scripts/seed-dump --from cluster
 
     deploy/scripts/run hetzner        # tofu apply → helm → restore dump

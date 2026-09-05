@@ -16,8 +16,8 @@ resource "aws_db_instance" "main" {
   allocated_storage    = 20
   max_allocated_storage = 100
 
-  db_name  = "jobstrainer"
-  username = "jobstrainer"
+  db_name  = "jobsifty"
+  username = "jobsifty"
   password = random_password.db.result
 
   db_subnet_group_name   = aws_db_subnet_group.main.name

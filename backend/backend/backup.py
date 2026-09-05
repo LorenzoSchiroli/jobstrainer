@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 BACKUP_INTERVAL_SECONDS = int(os.environ.get("BACKUP_INTERVAL_SECONDS", "86400"))
 BACKUP_RETENTION_COUNT = 7
 BACKUP_SCRIPT = Path(__file__).resolve().parent / "scripts" / "postgres_backup.sh"
-_DUMP_NAME_RE = re.compile(r"^jobstrainer-\d{8}T\d{6}Z\.dump$")
+_DUMP_NAME_RE = re.compile(r"^jobsifty-\d{8}T\d{6}Z\.dump$")
 
 _REQUIRED_ENV = (
     "DATABASE_URL",

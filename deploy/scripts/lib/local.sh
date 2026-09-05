@@ -1,9 +1,9 @@
 # Local kind + Helm target. Source after lib/common.sh.
 # shellcheck shell=bash
 
-KIND_CLUSTER="${KIND_CLUSTER:-jobstrainer}"
-HELM_RELEASE="${HELM_RELEASE:-jobstrainer}"
-CHART_DIR="${REPO_ROOT}/deploy/helm/jobstrainer"
+KIND_CLUSTER="${KIND_CLUSTER:-jobsifty}"
+HELM_RELEASE="${HELM_RELEASE:-jobsifty}"
+CHART_DIR="${REPO_ROOT}/deploy/helm/jobsifty"
 
 _local_use_kind_context() {
   # kind writes into KUBECONFIG when it is set; unsetting it keeps local work
@@ -34,19 +34,19 @@ _local_ensure_cluster() {
 _local_build_images() {
   echo "==> building :local images"
   docker build -f "${REPO_ROOT}/backend/Dockerfile" \
-    -t jobstrainer-backend:local "${REPO_ROOT}"
+    -t jobsifty-backend:local "${REPO_ROOT}"
   docker build -f "${REPO_ROOT}/ingestion/Dockerfile" \
-    -t jobstrainer-ingestion:local "${REPO_ROOT}"
+    -t jobsifty-ingestion:local "${REPO_ROOT}"
   # localhost:8000 matches the port-forward below and compose's CORS allow-list.
   docker build -f "${REPO_ROOT}/frontend/Dockerfile" \
     --build-arg VITE_API_URL=http://localhost:8000 \
-    -t jobstrainer-frontend:local "${REPO_ROOT}/frontend"
+    -t jobsifty-frontend:local "${REPO_ROOT}/frontend"
 
   echo "==> kind load docker-image"
   kind load docker-image \
-    jobstrainer-backend:local \
-    jobstrainer-ingestion:local \
-    jobstrainer-frontend:local \
+    jobsifty-backend:local \
+    jobsifty-ingestion:local \
+    jobsifty-frontend:local \
     --name "${KIND_CLUSTER}"
 }
 

@@ -15,7 +15,7 @@ spec:
         app: worker
     spec:
       {{- $nodeContext := dict "root" . "pool" .Values.scheduling.worker }}
-      {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+      {{- with include "jobsifty.nodeAffinity" $nodeContext }}
       affinity:
         {{- . | nindent 8 }}
       {{- end }}

@@ -39,7 +39,7 @@ resource "aws_opensearch_domain" "main" {
     internal_user_database_enabled = true
 
     master_user_options {
-      master_user_name     = "jobstrainer"
+      master_user_name     = "jobsifty"
       master_user_password = random_password.opensearch.result
     }
   }

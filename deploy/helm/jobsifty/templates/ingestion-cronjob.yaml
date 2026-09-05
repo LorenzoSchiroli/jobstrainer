@@ -13,7 +13,7 @@ spec:
       template:
         spec:
           {{- $nodeContext := dict "root" . "pool" .Values.scheduling.ingestion }}
-          {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+          {{- with include "jobsifty.nodeAffinity" $nodeContext }}
           affinity:
             {{- . | nindent 12 }}
           {{- end }}

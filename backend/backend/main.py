@@ -50,7 +50,7 @@ def cors_origins() -> list[str]:
     return origins
 
 
-app = FastAPI(title="jobstrainer backend", lifespan=lifespan)
+app = FastAPI(title="Jobsifty backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

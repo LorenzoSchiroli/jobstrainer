@@ -46,10 +46,10 @@ hetzner_up() {
   ensure_secret
 
   echo "==> helm upgrade --install"
-  helm upgrade --install jobstrainer "${REPO_ROOT}/deploy/helm/jobstrainer" \
-    -f "${REPO_ROOT}/deploy/helm/jobstrainer/values.yaml" \
-    -f "${REPO_ROOT}/deploy/helm/jobstrainer/values-cloud.yaml" \
-    -f "${REPO_ROOT}/deploy/helm/jobstrainer/values-hetzner.yaml" \
+  helm upgrade --install jobsifty "${REPO_ROOT}/deploy/helm/jobsifty" \
+    -f "${REPO_ROOT}/deploy/helm/jobsifty/values.yaml" \
+    -f "${REPO_ROOT}/deploy/helm/jobsifty/values-cloud.yaml" \
+    -f "${REPO_ROOT}/deploy/helm/jobsifty/values-hetzner.yaml" \
     -f "${private_values}"
 
   echo "==> waiting for postgres-0"
@@ -57,8 +57,8 @@ hetzner_up() {
 
   echo "==> waiting for bootstrap Job"
   # Helm post-install usually finishes the hook first; verify for re-runs / races.
-  if kubectl get job jobstrainer-bootstrap >/dev/null 2>&1; then
-    kubectl wait --for=condition=complete job/jobstrainer-bootstrap --timeout=600s
+  if kubectl get job jobsifty-bootstrap >/dev/null 2>&1; then
+    kubectl wait --for=condition=complete job/jobsifty-bootstrap --timeout=600s
   fi
 
   local api_replicas worker_replicas ingestion_suspend
@@ -88,7 +88,7 @@ error: pg_restore failed; leaving api/worker scaled to 0 and ingestion suspended
 recovery:
   # fix dump / retry:
   kubectl cp ${CURRENT_DUMP} ${POSTGRES_POD}:${POD_DUMP_PATH}
-  kubectl exec ${POSTGRES_POD} -- pg_restore -U postgres -d jobstrainer --clean --if-exists --no-owner ${POD_DUMP_PATH}
+  kubectl exec ${POSTGRES_POD} -- pg_restore -U postgres -d jobsifty --clean --if-exists --no-owner ${POD_DUMP_PATH}
   # then resume:
   kubectl scale deploy/api --replicas=${api_replicas}
   kubectl scale deploy/worker --replicas=${worker_replicas}

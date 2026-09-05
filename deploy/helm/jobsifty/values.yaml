@@ -1,6 +1,6 @@
 # Name of a pre-created Secret consumed via envFrom by api, worker, bootstrap,
 # and ingestion. The chart never creates or manages it (see design §4).
-existingSecret: jobstrainer-secrets
+existingSecret: jobsifty-secrets
 
 imagePullPolicy: IfNotPresent
 
@@ -9,7 +9,7 @@ postgres:
   storage: 1Gi
   user: postgres
   password: postgres
-  db: jobstrainer
+  db: jobsifty
   # Empty keeps the image default PGDATA. Set only for CSI volumes that
   # ship a non-empty root (lost+found); never set this on an already
   # initialized kind volume.
@@ -39,7 +39,7 @@ opensearch:
 
 bootstrap:
   image:
-    repository: jobstrainer-backend
+    repository: jobsifty-backend
     tag: latest
   resources:
     requests:
@@ -51,7 +51,7 @@ bootstrap:
 
 api:
   image:
-    repository: jobstrainer-backend
+    repository: jobsifty-backend
     tag: latest
   resources:
     requests:
@@ -68,7 +68,7 @@ hpa:
 
 worker:
   image:
-    repository: jobstrainer-backend
+    repository: jobsifty-backend
     tag: latest
   resources:
     requests:
@@ -80,7 +80,7 @@ worker:
 
 ingestion:
   image:
-    repository: jobstrainer-ingestion
+    repository: jobsifty-ingestion
     tag: latest
   schedule: "0 */2 * * *"
   # Lookback window for `ingestion.pipeline --hours` (matches compose --hours 2).
@@ -97,7 +97,7 @@ ingestion:
 
 frontend:
   image:
-    repository: jobstrainer-frontend
+    repository: jobsifty-frontend
     tag: latest
   resources:
     requests:
@@ -125,9 +125,9 @@ ingress:
   apiHost: ""
   # Optional apex/www hosts that Traefik redirects to frontendHost.
   apexRedirectHosts: []
-  frontendTlsSecretName: jobstrainer-frontend-tls
-  apiTlsSecretName: jobstrainer-api-tls
-  apexTlsSecretName: jobstrainer-apex-tls
+  frontendTlsSecretName: jobsifty-frontend-tls
+  apiTlsSecretName: jobsifty-api-tls
+  apexTlsSecretName: jobsifty-apex-tls
 
 certManager:
   createIssuers: false
@@ -135,6 +135,6 @@ certManager:
   issuerName: letsencrypt-prod
 
 # Nightly Postgres backup runs inside the singleton worker when BACKUP_SBOX_*
-# are present on jobstrainer-secrets (no separate image or CronJob).
+# are present on jobsifty-secrets (no separate image or CronJob).
 backup:
   intervalSeconds: 86400

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: jobstrainer-bootstrap
+  name: jobsifty-bootstrap
   annotations:
     # post-install (not pre-): on a fresh install the chart itself deploys
     # postgres/opensearch, and a pre-install hook would run before they exist.

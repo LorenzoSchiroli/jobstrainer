@@ -14,7 +14,7 @@ spec:
         app: postgres
     spec:
       {{- $nodeContext := dict "root" . "pool" .Values.scheduling.postgres }}
-      {{- with include "jobstrainer.nodeAffinity" $nodeContext }}
+      {{- with include "jobsifty.nodeAffinity" $nodeContext }}
       affinity:
         {{- . | nindent 8 }}
       {{- end }}
@@ -49,7 +49,7 @@ spec:
       name: data
     spec:
       accessModes: ["ReadWriteOnce"]
-      {{- with include "jobstrainer.storageClass" . }}
+      {{- with include "jobsifty.storageClass" . }}
       {{- . | nindent 6 }}
       {{- end }}
       resources:

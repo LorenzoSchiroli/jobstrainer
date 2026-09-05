@@ -1,4 +1,4 @@
-// Runs only on the jobstrainer frontend (localhost:3000). It is the single bridge
+// Runs only on the Jobsifty frontend (localhost:3000). It is the single bridge
 // between the web app and the extension: it writes the user's auth token and the
 // selected job to chrome.storage.local, which the side panel treats as the one
 // source of truth for "which user / which job."

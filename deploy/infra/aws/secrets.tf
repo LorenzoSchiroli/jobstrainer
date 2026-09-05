@@ -30,9 +30,9 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    DATABASE_URL             = "postgresql+asyncpg://jobstrainer:${random_password.db.result}@${aws_db_instance.main.address}:5432/jobstrainer"
+    DATABASE_URL             = "postgresql+asyncpg://jobsifty:${random_password.db.result}@${aws_db_instance.main.address}:5432/jobsifty"
     OPENSEARCH_URL           = "https://${aws_opensearch_domain.main.endpoint}"
-    OPENSEARCH_USER          = "jobstrainer"
+    OPENSEARCH_USER          = "jobsifty"
     OPENSEARCH_PASSWORD      = random_password.opensearch.result
     SECRET_KEY               = random_password.app_secret_key.result
     GROQ_API_KEY             = var.groq_api_key

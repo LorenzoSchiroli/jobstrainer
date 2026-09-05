@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create or replace dumps/jobstrainer.current.dump from compose, a file, or a cluster.
+# Create or replace dumps/jobsifty.current.dump from compose, a file, or a cluster.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -65,7 +65,7 @@ case "${from}" in
       fi
     fi
     docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T postgres \
-      pg_dump -U postgres -Fc jobstrainer > "${tmp}"
+      pg_dump -U postgres -Fc jobsifty > "${tmp}"
     ;;
   file)
     if [[ -z "${file_path}" ]]; then

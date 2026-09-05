@@ -12,7 +12,7 @@ from backend.auth.jwt import create_access_token
 
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test",
 )
 
 

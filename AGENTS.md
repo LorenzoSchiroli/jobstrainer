@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-**jobstrainer** is a job search ranking system. It scrapes job offers from multiple sources, enriches them with LLM-parsed metadata and dense embeddings, stores them in Postgres + OpenSearch, and serves a hybrid BM25 + k-NN search endpoint with cross-encoder reranking.
+**Jobsifty** is a job search ranking system. It scrapes job offers from multiple sources, enriches them with LLM-parsed metadata and dense embeddings, stores them in Postgres + OpenSearch, and serves a hybrid BM25 + k-NN search endpoint with cross-encoder reranking.
 
 ## Repository Structure
 
@@ -16,8 +16,8 @@ This is a `uv` workspace with two packages:
 Other top-level directories:
 - `frontend/` — React (Vite) SPA, served by nginx in Docker/k8s
 - `extension/` — Chrome extension (Tailorer side panel; calls the backend directly)
-- `deploy/` — Helm chart (`deploy/helm/jobstrainer/`) + k8s runbook (`deploy/k8s/README.md`); **AWS showcase** is the ECS managed path in `deploy/infra/aws/` (OpenTofu + Fargate/RDS/OpenSearch Service — not Helm on AWS)
-- `dumps/` — `jobstrainer.current.dump` is the demo database the cloud targets restore from / capture into (gitignored; seed with `deploy/scripts/seed-dump`)
+- `deploy/` — Helm chart (`deploy/helm/jobsifty/`) + k8s runbook (`deploy/k8s/README.md`); **AWS showcase** is the ECS managed path in `deploy/infra/aws/` (OpenTofu + Fargate/RDS/OpenSearch Service — not Helm on AWS)
+- `dumps/` — `jobsifty.current.dump` is the demo database the cloud targets restore from / capture into (gitignored; seed with `deploy/scripts/seed-dump`)
 - `tailor/` — standalone CLI predecessor of the tailorer agent (local docx/cover-letter scripts; **not** imported by `backend/` or `ingestion/`, do not wire new code to it)
 
 [`README.md`](./README.md) is the human-facing counterpart: same architecture, with diagrams and the reasoning behind each choice. Keep the two consistent when behaviour changes.
@@ -45,7 +45,7 @@ deploy/scripts/run aws up --no-dns         # tofu apply → ECS, domain left whe
 deploy/scripts/run aws down --yes          # dump → promote → tofu destroy, no prompt
 ```
 
-The cloud targets restore from / capture into `dumps/jobstrainer.current.dump`
+The cloud targets restore from / capture into `dumps/jobsifty.current.dump`
 (seed it with `deploy/scripts/seed-dump`). DNS follows the deploy: bringing a
 cloud target up points Cloudflare `app`/`api`/apex/`www` at it, and taking it
 down removes those records, so the target that is up owns the domain. `run`
@@ -59,10 +59,10 @@ docker compose up -d postgres opensearch   # start dependencies only
 docker compose up --build                  # full stack (postgres + opensearch + backend + ingestion + frontend)
 
 # Full runbook (cluster/images/secret setup) in deploy/k8s/README.md
-helm install jobstrainer deploy/helm/jobstrainer -f deploy/helm/jobstrainer/values-local.yaml
+helm install jobsifty deploy/helm/jobsifty -f deploy/helm/jobsifty/values-local.yaml
 ```
 
-The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, ingestion CronJob, frontend, and a bootstrap hook Job (migrations + OpenSearch index + checkpointer setup). It references a pre-created `jobstrainer-secrets` secret. `deploy/k8s/loadtest-job.yaml` is an in-cluster k6 load-test Job for the HPA demo.
+The chart deploys the whole stack: postgres, opensearch, api (+ HPA), worker, ingestion CronJob, frontend, and a bootstrap hook Job (migrations + OpenSearch index + checkpointer setup). It references a pre-created `jobsifty-secrets` secret. `deploy/k8s/loadtest-job.yaml` is an in-cluster k6 load-test Job for the HPA demo.
 
 ### Hetzner image gate (x86)
 
@@ -83,7 +83,7 @@ Full runbook in `deploy/infra/aws/README.md`. Things that differ from the Helm p
 - **Ingestion is an EventBridge Scheduler `RunTask`** (every 2h), and it posts to the internal Cloud Map address `http://api.<project>.local:8000` — never the public hostname, so a run cannot write into whichever stack currently owns DNS.
 - **Secrets** live in one Secrets Manager entry; each key is injected per container via `secrets[].valueFrom` (`local.app_secret_keys` in `ecs.tf`). Adding an env var means adding it there.
 - **OpenSearch** is VPC-only with fine-grained access control; the backend authenticates as the internal-database master user over basic auth, so the domain policy is deliberately principal-`*` (an IAM-scoped policy 403s basic auth before FGAC sees it). Access is closed by the security group instead.
-- **The demo dump rides in S3** (`dump.tf`, `pgtools` image): `run aws up` restores it, `run aws down` captures and promotes it before destroying. A 4th image, `jobstrainer-pgtools`, must be published alongside the other three.
+- **The demo dump rides in S3** (`dump.tf`, `pgtools` image): `run aws up` restores it, `run aws down` captures and promotes it before destroying. A 4th image, `jobsifty-pgtools`, must be published alongside the other three.
 - **Cost guards are part of the stack**: AWS Budgets (80%/100% email), 7-day CloudWatch retention, 7-day S3 dump lifecycle, single NAT, single-AZ RDS, one-node OpenSearch. Do not "fix" these silently — they are deliberate demo-scale choices.
 - **Deployer IAM**: `deployer-policy.example.json` is committed, the filled-in `deployer-policy.json` (real account ID) is gitignored. New AWS resources usually mean new actions in the example policy.
 
@@ -98,7 +98,7 @@ uv run pytest tests/test_jobs.py           # run a single test file
 uv run pytest tests/search/test_filters.py::test_build_clauses_empty_when_all_none  # single test
 ```
 
-Tests require a live Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobstrainer_test` (override via `TEST_DATABASE_URL`). OpenSearch and ML models are mocked in the test suite.
+Tests require a live Postgres at `postgresql+asyncpg://postgres:postgres@localhost:5432/jobsifty_test` (override via `TEST_DATABASE_URL`). OpenSearch and ML models are mocked in the test suite.
 
 ### Ingestion
 
@@ -132,7 +132,7 @@ GROQ_MODEL_BASE=...                     # offer/company parsing
 OFFER_QUERY=...                         # ingestion Docker / CronJob query
 ACCESS_TOKEN_EXPIRE_DAYS=7
 CORS_ORIGINS=...                        # extra API browser origins (optional)
-BACKUP_SBOX_PATH=backups/jobstrainer
+BACKUP_SBOX_PATH=backups/jobsifty
 VITE_API_URL=https://api.example.com    # baked into frontend GHCR images
 ```
 
