@@ -17,6 +17,10 @@ Other top-level directories:
 - `frontend/` — React (Vite) SPA, served by nginx in Docker/k8s
 - `extension/` — Chrome extension (Tailorer side panel; calls the backend directly)
 - `deploy/` — Helm chart (`deploy/helm/jobstrainer/`) + k8s runbook (`deploy/k8s/README.md`); **AWS showcase** is the ECS managed path in `deploy/infra/aws/` (OpenTofu + Fargate/RDS/OpenSearch Service — not Helm on AWS)
+- `dumps/` — `jobstrainer.current.dump` is the demo database the cloud targets restore from / capture into (gitignored; seed with `deploy/scripts/seed-dump`)
+- `tailor/` — standalone CLI predecessor of the tailorer agent (local docx/cover-letter scripts; **not** imported by `backend/` or `ingestion/`, do not wire new code to it)
+
+[`README.md`](./README.md) is the human-facing counterpart: same architecture, with diagrams and the reasoning behind each choice. Keep the two consistent when behaviour changes.
 
 Ad-hoc CLIs (run from `ingestion/`):
 - `uv run python -m ingestion.offer "<query>"` — offer scraping
@@ -70,6 +74,18 @@ The backend image includes `pg_dump` and `rclone` for the worker's nightly
 Postgres backup loop. The ingestion image is the highest-risk component because
 it includes Playwright and python-jobspy/tls-client. Nodes are CX33 (x86);
 do not pull arm64-only images onto them.
+
+### AWS ECS specifics
+
+Full runbook in `deploy/infra/aws/README.md`. Things that differ from the Helm path:
+
+- **Migrations run as a one-shot RunTask, not a hook Job.** `deploy/scripts/run aws up` fires it (`aws_run_bootstrap_task`) between apply and dump restore; a bare `tofu apply` does not, so after a manual apply you must `aws ecs run-task` the `bootstrap` task definition yourself. A green ALB `/health` does **not** mean the DB is migrated.
+- **Ingestion is an EventBridge Scheduler `RunTask`** (every 2h), and it posts to the internal Cloud Map address `http://api.<project>.local:8000` — never the public hostname, so a run cannot write into whichever stack currently owns DNS.
+- **Secrets** live in one Secrets Manager entry; each key is injected per container via `secrets[].valueFrom` (`local.app_secret_keys` in `ecs.tf`). Adding an env var means adding it there.
+- **OpenSearch** is VPC-only with fine-grained access control; the backend authenticates as the internal-database master user over basic auth, so the domain policy is deliberately principal-`*` (an IAM-scoped policy 403s basic auth before FGAC sees it). Access is closed by the security group instead.
+- **The demo dump rides in S3** (`dump.tf`, `pgtools` image): `run aws up` restores it, `run aws down` captures and promotes it before destroying. A 4th image, `jobstrainer-pgtools`, must be published alongside the other three.
+- **Cost guards are part of the stack**: AWS Budgets (80%/100% email), 7-day CloudWatch retention, 7-day S3 dump lifecycle, single NAT, single-AZ RDS, one-node OpenSearch. Do not "fix" these silently — they are deliberate demo-scale choices.
+- **Deployer IAM**: `deployer-policy.example.json` is committed, the filled-in `deployer-policy.json` (real account ID) is gitignored. New AWS resources usually mean new actions in the example policy.
 
 ### Backend
 
@@ -167,6 +183,7 @@ Jobs and companies are written atomically to Postgres with an `outbox` row. Ever
 - **`Job`** — unique by `url`; stores parsed fields (employment_type, location_type, seniority, languages_required) and `summary` JSONB
 - **`Outbox`** — transient sync table; `processed_at` is NULL until worker drains it
 - **`User`** (`models.py`), **`ApplicantProfile`** / **`Application`** (`tailorer/models.py`) — auth accounts and per-user CV/profile data
+- **`PreferenceMemory`** (`search/advanced/models.py`) — one row per user; `memory_text` is LLM-distilled from advanced-search sessions in a background task, and `user_edited` marks a hand-written summary the distiller may only append to
 
 ### OpenSearch Index (`jobs`)
 
