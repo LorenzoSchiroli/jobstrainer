@@ -28,45 +28,22 @@ Fargate**, from one command.
 ## System overview
 
 ```mermaid
-flowchart LR
-    subgraph sources["Job sources"]
-        S["jobspy · adzuna<br/>arbeitnow · remotive"]
-    end
-
-    subgraph ing["ingestion (batch, every 2h)"]
-        I["scrape → LLM parse<br/>→ embed 384-d"]
-    end
-
-    subgraph clients["Clients"]
-        FE["frontend<br/>React SPA"]
-        EXT["extension<br/>Chrome side panel"]
-    end
-
-    subgraph be["backend (FastAPI)"]
-        API["REST API<br/>JWT auth"]
-        SEARCH["search<br/>hybrid → rerank"]
-        AGENTS["LangGraph agents<br/>advanced search · tailorer"]
-        WORKER["worker<br/>reconcile · retention · backup"]
-    end
-
-    PG[("Postgres<br/>source of truth<br/>+ outbox + checkpoints")]
+flowchart TB
+    SRC["Job sources<br/>jobspy · adzuna · arbeitnow · remotive"]
+    ING["ingestion · every 2h<br/>scrape → LLM parse → embed"]
+    CLI["Clients<br/>React SPA · Chrome extension"]
+    API["backend API<br/>FastAPI · JWT · search · agents"]
+    PG[("Postgres<br/>source of truth + outbox")]
+    WK["worker<br/>reconcile every 5 min"]
     OS[("OpenSearch<br/>derived index")]
-    LLM{{"Groq LLM API"}}
 
-    S --> I
-    I -->|"POST /jobs, /companies"| API
-    I -.-> LLM
-    FE --> API
-    EXT --> API
-    API --> PG
-    PG -->|"unprocessed outbox rows"| WORKER
-    WORKER -->|"bulk re-index<br/>every 5 min"| OS
-    API --> SEARCH
-    API --> AGENTS
-    AGENTS -.-> LLM
-    AGENTS --> SEARCH
-    SEARCH -->|"retrieve"| OS
-    SEARCH -->|"hydrate by id"| PG
+    SRC --> ING
+    ING -->|"POST /jobs, /companies"| API
+    CLI --> API
+    API <--> PG
+    PG -->|"unprocessed outbox rows"| WK
+    WK -->|"bulk re-index"| OS
+    API <-->|"retrieve"| OS
 ```
 
 Three processes, split so they scale and fail independently:
@@ -105,27 +82,36 @@ every query, and an agentic one for when you want the system to think.
 `POST /jobs/search`, body `{"query": "..."}`, JWT-protected.
 
 ```mermaid
-flowchart LR
-    Q["raw query text"] --> P["1 · parse_query<br/>regex → SearchFilters<br/>+ semantic_query"]
-    P --> EMB["2a · bi-encoder<br/>bge-small-en-v1.5<br/>→ 384-d vector"]
-    P --> CL["2b · build_clauses<br/>soft: should + boost 2.0<br/>strict: hard post_filter"]
+flowchart TB
+    Q["query text"]
+    P["1 · parse_query<br/>regex → SearchFilters + semantic_query"]
+    E["2 · embed<br/>bge-small-en-v1.5 → 384-d"]
+    H["3 · hybrid retrieve<br/>OpenSearch: BM25 + k-NN, fused"]
+    R["4 · rerank<br/>cross-encoder → top 20"]
+    D["5 · hydrate<br/>Postgres, by job_id"]
 
-    subgraph OSB["OpenSearch · search pipeline 'hybrid-pipeline'"]
-        BM["BM25 leg<br/>match on description"]
+    Q --> P --> E --> H --> R --> D
+```
+
+Step 3 is where the interesting decisions live, so zoomed in:
+
+```mermaid
+flowchart TB
+    F["SearchFilters<br/>seniority · location_type · languages · …"]
+
+    subgraph LEGS["hybrid query"]
+        BM["BM25 leg<br/>on description"]
         KNN["k-NN leg<br/>HNSW cosine, k=100"]
-        NORM["min-max normalise<br/>arithmetic mean, 50/50"]
-        BM --> NORM
-        KNN --> NORM
     end
 
-    EMB --> KNN
-    CL --> BM
-    CL --> KNN
-    P --> BM
+    N["min-max normalise<br/>arithmetic mean 50 / 50"]
+    OUT["ranked hits → rerank"]
 
-    NORM --> RR["3 · cross-encoder rerank<br/>ms-marco-MiniLM-L-6-v2<br/>on summary_text → top 20"]
-    RR --> HY["4 · hydrate by job_id<br/>Postgres, selectinload company"]
-    HY --> OUT["ranked jobs + companies"]
+    F -->|"default: scored should, boost 2.0"| LEGS
+    BM --> N
+    KNN --> N
+    N --> OUT
+    F -.->|"strict: hard post_filter,<br/>prefetch 200"| OUT
 ```
 
 | Choice | Motivation |
@@ -144,20 +130,22 @@ flowchart LR
 uploaded CV.
 
 ```mermaid
-flowchart TD
-    START(["POST /jobs/search/advanced"]) --> LOAD["load CV + preference memory"]
-    LOAD --> GQ["generate_questions<br/>LLM · at most 2 questions"]
-    GQ --> CLAR["clarify<br/>interrupt() — the graph pauses"]
-    CLAR -->|"state persisted"| CK[("Postgres checkpointer<br/>thread_id")]
-    CK -.->|"POST /resume<br/>thread_id + answers"| SEARCH
-    CLAR --> SEARCH["search<br/>LLM filter extraction →<br/>hybrid retrieve → rerank"]
-    SEARCH --> CRIT{"critique<br/>do the hits match intent?"}
-    CRIT -->|"need_refine · once at most"| SEARCH
-    CRIT -->|"good enough"| FIT["fit_score<br/>LLM · 0-100 + rationale + gaps"]
-    FIT --> RES["results sorted by fit_score<br/>hydrated from Postgres"]
-    RES --> BGT["background task:<br/>distil preference memory"]
-    BGT --> MEM[("PreferenceMemory<br/>per user")]
-    MEM -.->|"next search"| LOAD
+flowchart TB
+    A["POST /jobs/search/advanced<br/>query + CV + preference memory"]
+    B["generate_questions · at most 2"]
+    C["clarify — interrupt()<br/>state saved by thread_id, request returns"]
+    E["search<br/>retrieve + rerank"]
+    F{"critique"}
+    G["fit_score<br/>0-100 + rationale + gaps"]
+    M[("preference memory")]
+
+    A --> B --> C
+    C -->|"POST /resume<br/>thread_id + answers"| E
+    E --> F
+    F -->|"refine · once at most"| E
+    F -->|"good enough"| G
+    G -->|"background: distil"| M
+    M -.->|"next search"| A
 ```
 
 | Choice | Motivation |
@@ -182,6 +170,20 @@ DOM.
 ---
 
 ## Data plane
+
+```mermaid
+flowchart TB
+    W["POST /jobs, /companies"]
+    TX["one transaction:<br/>row + outbox row"]
+    PG[("Postgres")]
+    RC["reconcile · every 5 min<br/>unprocessed outbox rows +<br/>live jobs missing from the index"]
+    OS[("OpenSearch")]
+
+    W --> TX --> PG
+    PG --> RC
+    RC -->|"bulk index"| OS
+    RC -->|"set processed_at"| PG
+```
 
 Jobs and companies are written to Postgres together with an `outbox` row in the
 same transaction. Every 5 minutes the reconcile worker bulk re-indexes: jobs
@@ -230,35 +232,35 @@ module (k3s), then Helm installs the whole stack from `deploy/helm/jobstrainer/`
 
 ```mermaid
 flowchart TB
-    U(["users"]) --> CF["Cloudflare DNS<br/>A records, unproxied"]
-    CF --> TR["Traefik ingress<br/>+ cert-manager / Let's Encrypt"]
+    U(["users"]) --> CF["Cloudflare DNS"]
+    CF --> TR["Traefik ingress<br/>+ cert-manager"]
 
-    subgraph K3S["k3s cluster (kube-hetzner, OpenTofu)"]
-        direction TB
-        subgraph PERM["node pool 'permanent' — 1× CX33, schedulable control plane"]
-            FEP["frontend<br/>nginx"]
-            APIP["api Deployment<br/>HPA 1→4 @ 70% CPU"]
-            WK["worker<br/>singleton"]
-            PGS[("postgres<br/>StatefulSet")]
-            OSS[("opensearch<br/>StatefulSet")]
+    subgraph K3S["k3s · kube-hetzner + OpenTofu"]
+        subgraph PERM["permanent pool · 1× CX33"]
+            FE["frontend"]
+            AP["api<br/>HPA 1→4 @ 70% CPU"]
+            WK["worker"]
+            PGS[("postgres")]
+            OSS[("opensearch")]
         end
-        subgraph BURST["node pool 'burst' — autoscaler 0→2× CX33"]
-            CJ["ingestion CronJob<br/>every 2h"]
+        subgraph BURST["burst pool · autoscaler 0→2× CX33"]
+            CJ["ingestion<br/>CronJob, every 2h"]
         end
-        BOOT["bootstrap Job (helm hook)<br/>alembic + index + checkpointer"]
     end
 
-    TR --> FEP
-    TR --> APIP
-    APIP --> PGS
-    APIP --> OSS
+    TR --> FE
+    TR --> AP
+    AP --> PGS
+    AP --> OSS
     WK --> PGS
-    WK --> OSS
-    CJ -->|"http://api:8000"| APIP
-    PGS --> HV[("hcloud-volumes CSI")]
-    OSS --> HV
-    WK -.->|"nightly pg_dump + rclone"| SBOX[("Hetzner Storage Box")]
+    CJ -->|"http://api:8000"| AP
+    FE ~~~ AP
+    PGS ~~~ OSS
 ```
+
+*Not drawn:* the bootstrap Helm hook Job (migrations, index, checkpointer), the
+`hcloud-volumes` CSI claims behind the two StatefulSets, the worker's own writes
+to OpenSearch, and its nightly `pg_dump` + rclone push to a Hetzner Storage Box.
 
 | Choice | Motivation |
 |--------|------------|
@@ -276,41 +278,38 @@ A second, independent implementation of the same system in `deploy/infra/aws/`
 
 ```mermaid
 flowchart TB
-    U(["users"]) --> CF["Cloudflare DNS → CNAME"]
-    CF --> ALB["Application Load Balancer<br/>ACM cert · HTTP→HTTPS<br/>host rules: app / api / apex+www redirect"]
+    U(["users"]) --> CF["Cloudflare DNS"]
+    CF --> ALB["ALB · ACM<br/>host rules: app / api"]
 
-    subgraph VPC["VPC 10.40.0.0/16 · 2 AZs"]
+    subgraph VPC["VPC · 2 AZs"]
         subgraph PUB["public subnets"]
             ALB
-            NAT["NAT gateway"]
+            NAT["NAT gateway<br/>egress for private tasks"]
         end
-        subgraph PRIV["private subnets — no public IPs"]
-            FEP["ECS service: frontend<br/>Fargate 256/512"]
-            APIP["ECS service: api<br/>Fargate 1024/2048<br/>target-tracking 1→4 @ 70% CPU"]
-            WK["ECS service: worker<br/>singleton, 100%/0% deploy"]
-            ING["ingestion task<br/>EventBridge Scheduler, every 2h"]
-            BOOT["bootstrap task<br/>one-shot RunTask"]
-            RDS[("RDS Postgres 16<br/>db.t4g.micro, single-AZ")]
-            OSD[("OpenSearch Service 2.11<br/>t3.small.search, VPC-only")]
+        subgraph PRIV["private subnets · no public IPs"]
+            FE["frontend"]
+            AP["api<br/>autoscale 1→4"]
+            ING["ingestion<br/>EventBridge, 2h"]
+            WK["worker"]
+            RDS[("RDS<br/>Postgres 16")]
+            OSD[("OpenSearch<br/>Service")]
         end
     end
 
-    ALB --> FEP
-    ALB --> APIP
-    APIP --> RDS
-    APIP --> OSD
+    ALB --> FE
+    ALB --> AP
+    ING -->|"Cloud Map"| AP
+    AP --> RDS
+    AP --> OSD
     WK --> RDS
-    WK --> OSD
-    ING -->|"http://api.jobstrainer.local:8000<br/>Cloud Map"| APIP
-    ING --> NAT
-    NAT --> INET(["job sources · Groq · GHCR"])
-    SM[["Secrets Manager<br/>one secret, keys injected per container"]] -.-> APIP
-    SM -.-> WK
-    SM -.-> ING
-    S3[("S3 demo dumps<br/>7-day lifecycle")] -.->|"restore on up<br/>capture on down"| RDS
-    CW["CloudWatch Logs · 7d"] -.- APIP
-    BUD["AWS Budgets<br/>80% / 100% email alerts"]
+    FE ~~~ AP
+    RDS ~~~ OSD
 ```
+
+*Not drawn:* the one-shot bootstrap RunTask, the single Secrets Manager entry
+injected key-by-key into every task, CloudWatch log groups (7-day retention), the
+S3 dump bucket the demo database rides in, the AWS Budgets alarm, and the
+worker's own writes to OpenSearch.
 
 | Choice | Motivation |
 |--------|------------|
